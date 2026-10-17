@@ -1,0 +1,228 @@
+import { useEffect, useState } from "react";
+
+const THINKING_VERBS = [
+  "Accomplishing",
+  "Actioning",
+  "Actualizing",
+  "Architecting",
+  "Baking",
+  "Beaming",
+  "Beboppin'",
+  "Befuddling",
+  "Billowing",
+  "Blanching",
+  "Bloviating",
+  "Boogieing",
+  "Boondoggling",
+  "Booping",
+  "Bootstrapping",
+  "Brewing",
+  "Burrowing",
+  "Calculating",
+  "Canoodling",
+  "Caramelizing",
+  "Cascading",
+  "Catapulting",
+  "Cerebrating",
+  "Channeling",
+  "Channelling",
+  "Choreographing",
+  "Churning",
+  "Clauding",
+  "Coalescing",
+  "Cogitating",
+  "Combobulating",
+  "Composing",
+  "Computing",
+  "Concocting",
+  "Considering",
+  "Contemplating",
+  "Cooking",
+  "Crafting",
+  "Creating",
+  "Crunching",
+  "Crystallizing",
+  "Cultivating",
+  "Deciphering",
+  "Deliberating",
+  "Determining",
+  "Dilly-dallying",
+  "Discombobulating",
+  "Doing",
+  "Doodling",
+  "Drizzling",
+  "Ebbing",
+  "Effecting",
+  "Elucidating",
+  "Embellishing",
+  "Enchanting",
+  "Envisioning",
+  "Evaporating",
+  "Fermenting",
+  "Fiddle-faddling",
+  "Finagling",
+  "Flambéing",
+  "Flibbertigibbeting",
+  "Flowing",
+  "Flummoxing",
+  "Fluttering",
+  "Forging",
+  "Forming",
+  "Frolicking",
+  "Frosting",
+  "Gallivanting",
+  "Galloping",
+  "Garnishing",
+  "Generating",
+  "Germinating",
+  "Gitifying",
+  "Grooving",
+  "Gusting",
+  "Harmonizing",
+  "Hashing",
+  "Hatching",
+  "Herding",
+  "Honking",
+  "Hullaballooing",
+  "Hyperspacing",
+  "Ideating",
+  "Imagining",
+  "Improvising",
+  "Incubating",
+  "Inferring",
+  "Infusing",
+  "Ionizing",
+  "Jitterbugging",
+  "Julienning",
+  "Kneading",
+  "Leavening",
+  "Levitating",
+  "Lollygagging",
+  "Manifesting",
+  "Marinating",
+  "Meandering",
+  "Metamorphosing",
+  "Misting",
+  "Moonwalking",
+  "Moseying",
+  "Mulling",
+  "Mustering",
+  "Musing",
+  "Nebulizing",
+  "Nesting",
+  "Noodling",
+  "Nucleating",
+  "Orbiting",
+  "Orchestrating",
+  "Osmosing",
+  "Perambulating",
+  "Percolating",
+  "Perusing",
+  "Philosophising",
+  "Photosynthesizing",
+  "Pollinating",
+  "Pondering",
+  "Pontificating",
+  "Pouncing",
+  "Precipitating",
+  "Prestidigitating",
+  "Processing",
+  "Proofing",
+  "Propagating",
+  "Puttering",
+  "Puzzling",
+  "Quantumizing",
+  "Razzle-dazzling",
+  "Razzmatazzing",
+  "Recombobulating",
+  "Reticulating",
+  "Roosting",
+  "Ruminating",
+  "Sautéing",
+  "Scampering",
+  "Schlepping",
+  "Scurrying",
+  "Seasoning",
+  "Shenaniganing",
+  "Shimmying",
+  "Simmering",
+  "Skedaddling",
+  "Sketching",
+  "Slithering",
+  "Smooshing",
+  "Sock-hopping",
+  "Spelunking",
+  "Spinning",
+  "Sprouting",
+  "Stewing",
+  "Sublimating",
+  "Swirling",
+  "Swooping",
+  "Symbioting",
+  "Synthesizing",
+  "Tempering",
+  "Thinking",
+  "Thundering",
+  "Tinkering",
+  "Tomfoolering",
+  "Topsy-turvying",
+  "Transfiguring",
+  "Transmuting",
+  "Twisting",
+  "Undulating",
+  "Unfurling",
+  "Unravelling",
+  "Vibing",
+  "Waddling",
+  "Wandering",
+  "Warping",
+  "Whatchamacalliting",
+  "Whirlpooling",
+  "Whirring",
+  "Whisking",
+  "Wibbling",
+  "Working",
+  "Wrangling",
+  "Zesting",
+  "Zigzagging",
+];
+
+interface ClaudeThinkingProps {
+  className?: string;
+  duration?: number | null;
+}
+
+export function ClaudeThinkingIndicator({ className = "", duration }: ClaudeThinkingProps) {
+  const [verbIndex, setVerbIndex] = useState(() => Math.floor(Math.random() * THINKING_VERBS.length));
+  const [fade, setFade] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFade(false);
+      setTimeout(() => {
+        setVerbIndex((prev) => (prev + 1 + Math.floor(Math.random() * 7)) % THINKING_VERBS.length);
+        setFade(true);
+      }, 250);
+    }, 3200);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const verb = THINKING_VERBS[verbIndex];
+
+  return (
+    <div className={`claude-thinking-indicator ${className}`} role="status" aria-live="polite">
+      <span className="claude-sparkle-wrapper" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor" className="claude-sparkle-svg">
+          <path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" />
+        </svg>
+      </span>
+      <span className={`claude-thinking-text ${fade ? "fade-in" : "fade-out"}`}>
+        {verb}…
+      </span>
+      {duration !== undefined && duration !== null ? (
+        <span className="claude-thinking-duration">({duration}s)</span>
+      ) : null}
+    </div>
+  );
+}

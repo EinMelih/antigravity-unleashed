@@ -1,0 +1,46 @@
+[Unit]
+Description=Anti-Gravity Hub - API Bridge (Port 8001)
+Documentation=file:/opt/antigravity-web/deploy/DEPLOY.md
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=antigravity
+Group=antigravity
+WorkingDirectory=/opt/antigravity-web
+ExecStart=/opt/antigravity-web/venv/bin/python3 /opt/antigravity-web/api_bridge.py
+Restart=always
+RestartSec=5
+
+# Durable shared Hub state. systemd creates /var/lib/antigravity before start.
+StateDirectory=antigravity
+StateDirectoryMode=0750
+UMask=0027
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=antigravity-bridge
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+# Anti-Gravity conversations, project settings and managed repositories live
+# below this service account's home. ProtectHome cannot be enabled honestly.
+ProtectHome=false
+ReadWritePaths=/var/lib/antigravity /opt/antigravity-web/logs /home/antigravity/.gemini /home/antigravity/Projects
+PrivateTmp=true
+LockPersonality=true
+RestrictSUIDSGID=true
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/home/antigravity
+Environment=ANTIGRAVITY_HUB_CONFIG=/opt/antigravity-web/config.json
+Environment=ANTIGRAVITY_HUB_DB=/var/lib/antigravity/dashboard.db
+
+[Install]
+WantedBy=multi-user.target

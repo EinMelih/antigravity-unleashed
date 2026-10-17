@@ -1,0 +1,166 @@
+[
+  {
+    "version": "2.24.0",
+    "upstream_status": "compatible",
+    "diff_summary": {
+      "dist/main.js": "identisch zu v2.23.0 (SHA-256 unverändert)",
+      "dist/ipcHandlers.js": "identisch zu v2.23.0 (SHA-256 unverändert)",
+      "dist/updater.js": "identisch zu v2.23.0 (SHA-256 unverändert)",
+      "dist/utils.js": "identisch zu v2.23.0 (SHA-256 unverändert)",
+      "dist/preload.js": "identisch zu v2.23.0 (SHA-256 unverändert)"
+    },
+    "findings": [
+      "Alle 738 Archivdateien und alle 5 Core-Dateien (main.js, ipcHandlers.js, updater.js, utils.js, preload.js) in v2.24.0 sind byte-identisch mit v2.23.0.",
+      "Ursache für das graue Fenster: Nach dem Update auf v2.24.0 blockierte der Guard den Repack; die ungepatchte v2.24.0 scheiterte beim Portwechsel an ERR_NETWORK_CHANGED ohne amsWindowNavigation-Retry.",
+      "amsWindowNavigation.js (ERR_NETWORK_CHANGED-Retry mit 500/1500/3000ms Backoff) dauerhaft in src/main.js und src/utils.js verdrahtet.",
+      "notification_popup.py stellt graue chrome-error-Fenster bei Upstream-Updates via CDP Page.navigate wieder her; auto_repack_guard.py ignoriert verwaiste agy-node Sidecar-Prozesse."
+    ],
+    "from_version": "2.23.0",
+    "date": "2026-10-17",
+    "time": "01:39",
+    "result": "success",
+    "attempts": 1,
+    "duration_s": 936.4,
+    "steps": [
+      {
+        "id": "detected",
+        "label": "Update erkannt",
+        "status": "done",
+        "duration_s": 0.0
+      },
+      {
+        "id": "analysis",
+        "label": "Agent analysiert die Änderungen",
+        "status": "done",
+        "duration_s": 2.0
+      },
+      {
+        "id": "adapt",
+        "label": "Agent passt den Injector an",
+        "status": "done",
+        "duration_s": 588.9
+      },
+      {
+        "id": "tests",
+        "label": "Tests & Kompatibilitätsprüfung",
+        "status": "done",
+        "duration_s": 14.8
+      },
+      {
+        "id": "repack",
+        "label": "Backup, Packen & Installieren",
+        "status": "done",
+        "duration_s": 16.2
+      },
+      {
+        "id": "restart",
+        "label": "Neustart & Live-Verifikation",
+        "status": "done",
+        "duration_s": 10.7
+      },
+      {
+        "id": "restore",
+        "label": "Chat wiederherstellen",
+        "status": "done",
+        "duration_s": 0.2
+      }
+    ]
+  },
+  {
+    "version": "2.23.0",
+    "upstream_status": "compatible",
+    "diff_summary": {
+      "dist/main.js": "identisch zu v2.22.0 (SHA-256 unverändert)",
+      "dist/ipcHandlers.js": "identisch zu v2.22.0 (SHA-256 unverändert)",
+      "dist/updater.js": "identisch zu v2.22.0 (SHA-256 unverändert)",
+      "dist/utils.js": "identisch zu v2.22.0 (SHA-256 unverändert)",
+      "dist/preload.js": "identisch zu v2.22.0 (SHA-256 unverändert)"
+    },
+    "findings": [
+      "Alle 5 Core-Dateien (main.js, ipcHandlers.js, updater.js, utils.js, preload.js) in v2.23.0 sind byte-identisch mit der freigegebenen v2.22.0-Basis (SHA-256 unverändert).",
+      "Alle vom Overlay importierten Upstream-Module und Exporte (languageServer, wsl, tray, menu, paths, settingsService, ideInstall u. a.) existieren in v2.23.0 weiterhin.",
+      "Versionsvertrag auf 2.23.0 gehoben; Core-Hashes in UPSTREAM_COMPATIBILITY.json bleiben unverändert, Overlay-Quellen brauchen keinen Rebase.",
+      "Hartcodierte Versionsstrings (Patch-Log-Statuszeile, Neustart-Chatnachricht) werden jetzt dynamisch aus History bzw. SUPPORTED_UPSTREAM_VERSION gelesen."
+    ],
+    "from_version": "2.22.0",
+    "date": "2026-10-13",
+    "time": "07:43",
+    "result": "success",
+    "attempts": 1,
+    "duration_s": 352.5,
+    "steps": [
+      {
+        "id": "detected",
+        "label": "Update erkannt",
+        "status": "done",
+        "duration_s": 0.0
+      },
+      {
+        "id": "analysis",
+        "label": "Agent analysiert die Änderungen",
+        "status": "done",
+        "duration_s": 139.9
+      },
+      {
+        "id": "adapt",
+        "label": "Agent passt den Injector an",
+        "status": "done",
+        "duration_s": 86.3
+      },
+      {
+        "id": "tests",
+        "label": "Tests & Kompatibilitätsprüfung",
+        "status": "done",
+        "duration_s": 5.4
+      },
+      {
+        "id": "repack",
+        "label": "Backup, Packen & Installieren",
+        "status": "done",
+        "duration_s": 17.2
+      },
+      {
+        "id": "restart",
+        "label": "Neustart & Live-Verifikation",
+        "status": "done",
+        "duration_s": 8.3
+      },
+      {
+        "id": "restore",
+        "label": "Chat wiederherstellen",
+        "status": "done",
+        "duration_s": 0.1
+      }
+    ]
+  },
+  {
+    "version": "2.22.0",
+    "date": "2026-10-11",
+    "upstream_status": "compatible",
+    "diff_summary": {
+      "dist/main.js": "identisch (adf9f814ce...)",
+      "dist/ipcHandlers.js": "identisch (0a58fe6eba...)",
+      "dist/updater.js": "identisch (d8f44a0bb4...)",
+      "dist/utils.js": "identisch (6f01d74696...)",
+      "dist/preload.js": "getPathForFile: (file) => electron_1.webUtils.getPathForFile(file) hinzugefuegt"
+    },
+    "findings": [
+      "Offizielle Google-Aktualisierung auf Anti-Gravity v2.22.0",
+      "dist/preload.js um webUtils.getPathForFile erweitert",
+      "Alle 4 weiteren Core-Dateien sind 1:1 identisch mit v2.19.1",
+      "Automatischer Selbstreparatur-Dialog bei kuenftigen Versionskonflikten",
+      "Update- & Patch-Log im AMS Quick-Menu verfuegbar"
+    ]
+  },
+  {
+    "version": "2.19.1",
+    "date": "2026-10-02",
+    "upstream_status": "compatible",
+    "diff_summary": {
+      "all_core": "kompatibel"
+    },
+    "findings": [
+      "Stabiler Rebase auf v2.19.1 mit atomarem Staging und Rollback-Schutz"
+    ]
+  }
+]

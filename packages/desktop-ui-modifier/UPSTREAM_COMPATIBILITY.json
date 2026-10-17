@@ -1,0 +1,10 @@
+{
+  "version": "2.24.0",
+  "files": {
+    "dist/ipcHandlers.js": "0a58fe6eba5b985702d5f81ec18e8efd71a9aa017e250cc9446055d8040e9524",
+    "dist/main.js": "adf9f814ce9a7df067d7c226354f5b5c160797ed6aefc3e45c343d2f91af52f8",
+    "dist/preload.js": "81d220de63447d27db95adf67d9711b59ee317b2338ba538f419b354a54b1f60",
+    "dist/updater.js": "d8f44a0bb440c3f20ce0564bf46de80defe709d7f088f00b738726c7b9120e1b",
+    "dist/utils.js": "6f01d746963c0cd964dbcb057ed34374c129c4381b5ebddd2509ca37b12519a7"
+  }
+}

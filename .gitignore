@@ -1,0 +1,131 @@
+# Antigravity Unleashed - Monorepo Git Ignore
+# Comprehensive Privacy, Security, Environment & Build Artifact Exclusion
+
+# ==============================================================================
+# Agent Workspaces & Orchestration Metadata
+# ==============================================================================
+.agents/
+
+# ==============================================================================
+# Privacy: Live User Configurations & AI Persona Memory
+# (Templates provided in *.example.* files)
+# ==============================================================================
+USER.md
+USER.pc.md
+USER.server.md
+MEMORY.md
+MEMORY.pc.md
+MEMORY.server.md
+config.json
+mcp_config.json
+openclaw_config.json5
+.conflict
+*.conflict
+*.conflict*
+*.conflict.*
+user_persona*.md
+
+# ==============================================================================
+# Security: Environment Files, Secrets & API Tokens
+# ==============================================================================
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+!config.example.json
+!USER.example.md
+!MEMORY.example.md
+
+# ==============================================================================
+# Databases, Session Stores & SQLite Write-Ahead Logs
+# ==============================================================================
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+dashboard.db
+uptime.db
+session.db
+
+# ==============================================================================
+# Logs, Diagnostic Dumps & Scraping Artifacts
+# ==============================================================================
+logs/
+*.log
+*.log.*
+*.jsonl
+*.harvester_progress.json
+scratch_dom_dump.json
+scratch_footer.html
+scratch_user_status.txt
+repack_log.txt
+test_results.txt
+test_out*.txt
+
+# ==============================================================================
+# Ephemeral Runtime, Scratch Workspaces & Electron Backups
+# ==============================================================================
+.runtime/
+backups/
+scratch/
+artifacts/
+.test-artifacts/
+.codex-diagnostics/
+.codex-tmp/
+explorer_e2e_3/
+*.bak
+*.backup
+*.orig
+app.asar.backup
+app.asar.unpacked.bak
+preload.js.orig
+
+# ==============================================================================
+# Python Virtual Environments, Bytecode & Test Caches
+# ==============================================================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+env/
+.env/
+
+# ==============================================================================
+# Node.js, Frontend Build Outputs & Package Managers
+# ==============================================================================
+node_modules/
+dist/
+build/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+*.tsbuildinfo
+
+# ==============================================================================
+# Operating System & IDE Specific Files
+# ==============================================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.tmp
+*.temp

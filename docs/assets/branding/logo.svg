@@ -1,0 +1,232 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradients -->
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e1b4b" stop-opacity="0.8"/>
+      <stop offset="45%" stop-color="#0f172a" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#0B0F19" stop-opacity="1"/>
+    </radialGradient>
+    <radialGradient id="coreNebula" cx="50%" cy="50%" r="40%">
+      <stop offset="0%" stop-color="#00F0FF" stop-opacity="0.35"/>
+      <stop offset="40%" stop-color="#7928CA" stop-opacity="0.3"/>
+      <stop offset="70%" stop-color="#10B981" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0B0F19" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="innerSingularity" cx="50%" cy="50%" r="30%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="25%" stop-color="#A5F3FC" stop-opacity="0.9"/>
+      <stop offset="60%" stop-color="#00F0FF" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#7928CA" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Ring Gradients -->
+    <linearGradient id="ringGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="50%" stop-color="#7928CA"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+    <linearGradient id="ringGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="50%" stop-color="#00F0FF"/>
+      <stop offset="100%" stop-color="#7928CA"/>
+    </linearGradient>
+    <linearGradient id="equatorGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#00F0FF" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#7928CA" stop-opacity="0.8"/>
+    </linearGradient>
+
+    <!-- Facet Gradients -->
+    <!-- Top-Left Facet -->
+    <linearGradient id="facetTL" x1="256" y1="120" x2="176" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#A5F3FC" stop-opacity="0.95"/>
+      <stop offset="50%" stop-color="#00F0FF" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#1E1B4B" stop-opacity="0.75"/>
+    </linearGradient>
+    <!-- Top-Center/Right Front Facet -->
+    <linearGradient id="facetTR" x1="256" y1="120" x2="336" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="40%" stop-color="#C084FC" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#7928CA" stop-opacity="0.8"/>
+    </linearGradient>
+    <!-- Top-Center Face (Refractive Peak) -->
+    <linearGradient id="facetTC" x1="256" y1="120" x2="256" y2="276" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E0F2FE" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#38BDF8" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#6366F1" stop-opacity="0.5"/>
+    </linearGradient>
+
+    <!-- Bottom-Left Facet -->
+    <linearGradient id="facetBL" x1="176" y1="256" x2="256" y2="392" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00F0FF" stop-opacity="0.85"/>
+      <stop offset="60%" stop-color="#10B981" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#064E3B" stop-opacity="0.9"/>
+    </linearGradient>
+    <!-- Bottom-Right Facet -->
+    <linearGradient id="facetBR" x1="336" y1="256" x2="256" y2="392" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7928CA" stop-opacity="0.85"/>
+      <stop offset="50%" stop-color="#6D28D9" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#047857" stop-opacity="0.9"/>
+    </linearGradient>
+    <!-- Bottom-Center Face (Refractive Base) -->
+    <linearGradient id="facetBC" x1="256" y1="276" x2="256" y2="392" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#818CF8" stop-opacity="0.7"/>
+      <stop offset="50%" stop-color="#34D399" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.95"/>
+    </linearGradient>
+
+    <!-- Specular Highlight -->
+    <linearGradient id="specularGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#00F0FF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Glow Filters -->
+    <filter id="neonGlowCyan" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur1"/>
+      <feGaussianBlur stdDeviation="20" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="neonGlowViolet" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10" result="blur1"/>
+      <feGaussianBlur stdDeviation="24" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="coreGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Deep Cosmic Canvas Backdrop -->
+  <rect width="512" height="512" rx="96" fill="#0B0F19"/>
+  <rect width="512" height="512" rx="96" fill="url(#bgGlow)"/>
+
+  <!-- Subtle Quantum Grid Texture -->
+  <g opacity="0.12" stroke="#64748B" stroke-width="0.8">
+    <line x1="64" y1="0" x2="64" y2="512" stroke-dasharray="2 6"/>
+    <line x1="128" y1="0" x2="128" y2="512" stroke-dasharray="2 6"/>
+    <line x1="192" y1="0" x2="192" y2="512" stroke-dasharray="2 6"/>
+    <line x1="256" y1="0" x2="256" y2="512" stroke-dasharray="4 8"/>
+    <line x1="320" y1="0" x2="320" y2="512" stroke-dasharray="2 6"/>
+    <line x1="384" y1="0" x2="384" y2="512" stroke-dasharray="2 6"/>
+    <line x1="448" y1="0" x2="448" y2="512" stroke-dasharray="2 6"/>
+
+    <line x1="0" y1="64" x2="512" y2="64" stroke-dasharray="2 6"/>
+    <line x1="0" y1="128" x2="512" y2="128" stroke-dasharray="2 6"/>
+    <line x1="0" y1="192" x2="512" y2="192" stroke-dasharray="2 6"/>
+    <line x1="0" y1="256" x2="512" y2="256" stroke-dasharray="4 8"/>
+    <line x1="0" y1="320" x2="512" y2="320" stroke-dasharray="2 6"/>
+    <line x1="0" y1="384" x2="512" y2="384" stroke-dasharray="2 6"/>
+    <line x1="0" y1="448" x2="512" y2="448" stroke-dasharray="2 6"/>
+  </g>
+
+  <!-- Ambient Light Diffusions -->
+  <circle cx="256" cy="256" r="210" fill="url(#coreNebula)"/>
+  <circle cx="256" cy="256" r="80" fill="url(#innerSingularity)" filter="url(#coreGlow)"/>
+
+  <!-- Back Portion of Gyroscopic Orbital Ring 1 (Tilted -28 deg) -->
+  <g transform="rotate(-28 256 256)">
+    <ellipse cx="256" cy="256" rx="205" ry="65" fill="none" stroke="url(#ringGrad1)" stroke-width="2.5" opacity="0.45" stroke-dasharray="6 8"/>
+  </g>
+
+  <!-- Back Portion of Gyroscopic Orbital Ring 2 (Tilted +62 deg) -->
+  <g transform="rotate(62 256 256)">
+    <ellipse cx="256" cy="256" rx="195" ry="58" fill="none" stroke="url(#ringGrad2)" stroke-width="2.5" opacity="0.4" stroke-dasharray="4 6"/>
+  </g>
+
+  <!-- Concentric Magnetic Resonator Rings -->
+  <circle cx="256" cy="256" r="160" fill="none" stroke="#7928CA" stroke-width="1.2" opacity="0.25" stroke-dasharray="1 5"/>
+  <circle cx="256" cy="256" r="130" fill="none" stroke="#00F0FF" stroke-width="1.2" opacity="0.3" stroke-dasharray="2 4"/>
+
+  <!-- Anti-Gravity Refractive Prism Core (Octahedron Geometry) -->
+  <g id="orbital-prism-core" filter="url(#coreGlow)">
+    <!-- Back Interior Caustics -->
+    <polygon points="256,120 176,256 256,276" fill="#00F0FF" opacity="0.15"/>
+    <polygon points="256,120 336,256 256,276" fill="#7928CA" opacity="0.18"/>
+    <polygon points="256,392 176,256 256,276" fill="#10B981" opacity="0.15"/>
+    <polygon points="256,392 336,256 256,276" fill="#7928CA" opacity="0.15"/>
+
+    <!-- Bottom Pyramidal Facets (Refractive Density) -->
+    <!-- Bottom-Left Facet -->
+    <polygon points="256,392 176,256 256,276" fill="url(#facetBL)"/>
+    <!-- Bottom-Right Facet -->
+    <polygon points="256,392 336,256 256,276" fill="url(#facetBR)"/>
+    <!-- Bottom-Front Center Facet -->
+    <polygon points="256,276 216,266 256,392" fill="url(#facetBC)" opacity="0.85"/>
+    <polygon points="256,276 296,266 256,392" fill="url(#facetBC)" opacity="0.95"/>
+
+    <!-- Top Pyramidal Facets (Luminous Apex) -->
+    <!-- Top-Left Facet -->
+    <polygon points="256,120 176,256 256,276" fill="url(#facetTL)"/>
+    <!-- Top-Right Facet -->
+    <polygon points="256,120 336,256 256,276" fill="url(#facetTR)"/>
+    <!-- Top-Front Center Refraction Plate -->
+    <polygon points="256,120 216,266 256,276" fill="url(#facetTC)" opacity="0.8"/>
+    <polygon points="256,120 296,266 256,276" fill="#FFFFFF" opacity="0.35"/>
+
+    <!-- Specular Facet Edges & Crystalline Ridges -->
+    <line x1="256" y1="120" x2="256" y2="392" stroke="#FFFFFF" stroke-width="2.4" opacity="0.9" stroke-linecap="round"/>
+    <line x1="256" y1="120" x2="176" y2="256" stroke="#A5F3FC" stroke-width="1.8" opacity="0.85"/>
+    <line x1="256" y1="120" x2="336" y2="256" stroke="#E9D5FF" stroke-width="1.8" opacity="0.85"/>
+    <line x1="256" y1="392" x2="176" y2="256" stroke="#6EE7B7" stroke-width="1.8" opacity="0.85"/>
+    <line x1="256" y1="392" x2="336" y2="256" stroke="#C084FC" stroke-width="1.8" opacity="0.85"/>
+    <line x1="176" y1="256" x2="256" y2="276" stroke="#FFFFFF" stroke-width="1.5" opacity="0.75"/>
+    <line x1="336" y1="256" x2="256" y2="276" stroke="#FFFFFF" stroke-width="1.5" opacity="0.75"/>
+    <line x1="256" y1="120" x2="256" y2="276" stroke="#FFFFFF" stroke-width="1.2" opacity="0.95"/>
+
+    <!-- Central Singularity Emitter Node -->
+    <circle cx="256" cy="266" r="14" fill="#FFFFFF" opacity="0.95"/>
+    <circle cx="256" cy="266" r="24" fill="#00F0FF" opacity="0.4" filter="url(#coreGlow)"/>
+    <circle cx="256" cy="266" r="5" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Front Foreground Portions of Orbital Gyroscopic Rings -->
+  <!-- Ring 1 (Electric Cyan & Violet Dominant) -->
+  <g transform="rotate(-28 256 256)">
+    <path d="M 51 256 A 205 65 0 0 0 461 256" fill="none" stroke="url(#ringGrad1)" stroke-width="4.5" stroke-linecap="round" filter="url(#neonGlowCyan)"/>
+    <path d="M 51 256 A 205 65 0 0 0 461 256" fill="none" stroke="#FFFFFF" stroke-width="1.5" opacity="0.8" stroke-linecap="round"/>
+    <!-- Orbital Nodes / Telemetry Markers -->
+    <circle cx="120" cy="298" r="4.5" fill="#00F0FF" filter="url(#coreGlow)"/>
+    <circle cx="120" cy="298" r="2" fill="#FFFFFF"/>
+    <circle cx="390" cy="298" r="5" fill="#7928CA" filter="url(#coreGlow)"/>
+    <circle cx="390" cy="298" r="2.2" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Ring 2 (Emerald & Cyan Counter-Orbital) -->
+  <g transform="rotate(62 256 256)">
+    <path d="M 61 256 A 195 58 0 0 0 451 256" fill="none" stroke="url(#ringGrad2)" stroke-width="3.8" stroke-linecap="round" filter="url(#neonGlowViolet)"/>
+    <path d="M 61 256 A 195 58 0 0 0 451 256" fill="none" stroke="#FFFFFF" stroke-width="1.2" opacity="0.75" stroke-linecap="round"/>
+    <!-- Counter-Orbital Satellites -->
+    <circle cx="350" cy="296" r="4" fill="#10B981" filter="url(#coreGlow)"/>
+    <circle cx="350" cy="296" r="1.8" fill="#FFFFFF"/>
+    <circle cx="160" cy="296" r="3.5" fill="#00F0FF"/>
+  </g>
+
+  <!-- Horizontal Levitation Equator Bar / Energy Beam -->
+  <ellipse cx="256" cy="266" rx="95" ry="14" fill="none" stroke="url(#equatorGrad)" stroke-width="1.8" opacity="0.85"/>
+
+  <!-- Energy Sparkles & Quantum Particles -->
+  <circle cx="256" cy="115" r="4" fill="#FFFFFF" filter="url(#coreGlow)"/>
+  <circle cx="256" cy="397" r="3.5" fill="#10B981" filter="url(#coreGlow)"/>
+  <circle cx="170" cy="254" r="3" fill="#00F0FF" filter="url(#coreGlow)"/>
+  <circle cx="342" cy="254" r="3" fill="#C084FC" filter="url(#coreGlow)"/>
+  <circle cx="140" cy="160" r="1.8" fill="#67E8F9" opacity="0.8"/>
+  <circle cx="370" cy="150" r="2.2" fill="#E879F9" opacity="0.75"/>
+  <circle cx="390" cy="360" r="1.8" fill="#34D399" opacity="0.8"/>
+  <circle cx="120" cy="370" r="2" fill="#38BDF8" opacity="0.7"/>
+
+  <!-- Outer Border Stroke -->
+  <rect width="508" height="508" x="2" y="2" rx="94" fill="none" stroke="rgba(255, 255, 255, 0.08)" stroke-width="2"/>
+</svg>

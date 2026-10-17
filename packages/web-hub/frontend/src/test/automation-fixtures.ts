@@ -1,0 +1,220 @@
+import type {
+  ControlOverviewResponse,
+  ControlPlanningJob,
+  ControlPrCandidate,
+  ControlTask,
+  HubProject,
+} from "@/api/contracts";
+
+export const automationProject: HubProject = {
+  id: 52,
+  name: "Cat Search",
+  path: "D:\\Projects\\cat-search",
+  github_url: "https://github.com/example/cat-search",
+  github_owner: "example",
+  github_repo: "cat-search",
+  default_branch: "main",
+  git_branch: "main",
+  source_kind: "github",
+  github_bootstrap_required: false,
+  github_bootstrap_status: "ready",
+  antigravity_linked: true,
+  antigravity_project_name: "Cat Search",
+};
+
+export function automationTask(status = "waiting_review"): ControlTask {
+  return {
+    id: `TASK-${status}`,
+    project_id: 52,
+    campaign_id: "CMP-1",
+    candidate_id: `PRC-${status}`,
+    role: "implementation",
+    status,
+    wake_reason: "review_and_evidence",
+    base_sha: "a".repeat(40),
+    current_sha: "b".repeat(40),
+    merged_sha: "",
+    branch_name: `ag/${status}`,
+    worktree_path: `D:\\Worktrees\\${status}`,
+    antigravity_chat_id: "chat-1",
+    issue_number: 4,
+    issue_url: "https://github.com/example/cat-search/issues/4",
+    pr_number: 5,
+    pr_url: "https://github.com/example/cat-search/pull/5",
+    attempt: 1,
+    last_error: "",
+    updated_at: "2026-08-06 10:00:00",
+  };
+}
+
+export function automationPlanningJob(status = "waiting_human"): ControlPlanningJob {
+  return {
+    id: `PLAN-${status}`,
+    project_id: 52,
+    idea_seed_id: "IDEA-1",
+    status,
+    planning_depth: "deep",
+    max_candidates: 30,
+    activation_policy: "campaign_wave",
+    wish: "Die Projektsuche zugänglich und robust machen.",
+    constraints: ["Die bestehende API bleibt kompatibel."],
+    antigravity_chat_id: "planner-chat-1",
+    campaign_id: status === "waiting_human" ? "CMP-1" : null,
+    waiting_reason: status === "waiting_human" ? "plan_approval" : "",
+    active_question_id: null,
+    round_number: 0,
+    attempt: 1,
+    output: {},
+    last_error: status === "failed" ? "Planner-Antwort war unvollständig." : "",
+    created_by: "human",
+    created_at: "2026-08-06 09:00:00",
+    started_at: "2026-08-06 09:00:10",
+    finished_at: status === "waiting_human" ? "2026-08-06 09:05:00" : null,
+    updated_at: "2026-08-06 09:05:00",
+  };
+}
+
+export function automationCandidate(status = "waiting_review"): ControlPrCandidate {
+  const task = automationTask(status);
+  return {
+    id: task.candidate_id,
+    campaign_id: "CMP-1",
+    title: status === "completed" ? "Dokumentation abschließen" : "Suche zugänglich machen",
+    scope: "Suche, Tastaturbedienung und robuste Zustände implementieren.",
+    non_goals: "Keine Backendänderung.",
+    risk_level: "medium",
+    priority: status === "completed" ? 20 : 5,
+    status: status === "completed" ? "completed" : "review",
+    base_sha: task.base_sha,
+    acceptance_criteria: ["Suche ist per Tastatur bedienbar."],
+    depends_on: [],
+    work_order: {
+      id: `WO-${status}`,
+      status: "approved",
+      rationale: "Scope geprüft.",
+      approval_sha: task.base_sha,
+    },
+    contract: {
+      purpose: "Zugängliche Suche",
+      expected_diff_type: "code",
+      reversibility: "Commit zurücksetzen.",
+      migration_plan: "",
+      compatibility_plan: "",
+      definition_of_done: "Tests und Dokumentation sind vollständig.",
+      estimated_size: "small",
+      components: ["src/search.ts", "tests/search.test.ts"],
+      required_checks: ["unit-tests"],
+      manual_tests: ["Tastaturnavigation prüfen"],
+      documentation: [],
+    },
+    task,
+    evidence_pack: {
+      id: `EVD-${status}`,
+      task_id: task.id,
+      project_id: 52,
+      candidate_id: task.candidate_id,
+      sha: task.current_sha,
+      status: status === "completed" ? "complete" : "collecting",
+      summary: status === "completed" ? "Nachweise vollständig." : "Ein Gate ist offen.",
+      preview_url: "",
+      rollback_plan: "Commit zurücksetzen.",
+      risk: {},
+      test_pack: {
+        acceptance_criteria: [
+          { key: "acceptance:1", text: "Suche ist per Tastatur bedienbar." },
+        ],
+        required_checks: [{ key: "check:unit-tests", text: "unit-tests" }],
+        manual_tests: [{ key: "manual:1", text: "Tastaturnavigation prüfen" }],
+        missing: status === "completed" ? [] : ["manual:1"],
+        failed: [],
+      },
+    },
+    findings: [],
+    approvals: [],
+    updated_at: task.updated_at,
+  };
+}
+
+export function automationOverview(): ControlOverviewResponse {
+  const review = automationCandidate("waiting_review");
+  const completed = automationCandidate("completed");
+  return {
+    policy: { mode: "guided", paused: false },
+    summary: {
+      attention_open: 1,
+      recommendations_open: 0,
+      campaigns_open: 1,
+      work_orders_approved: 2,
+      tasks_active: 1,
+      tasks_waiting_human: 0,
+      human_gates_open: 1,
+      deployments_active: 0,
+      webhooks_pending: 0,
+      planning_jobs_active: 0,
+    },
+    attention: [
+      {
+        id: "ATT-1",
+        project_id: 52,
+        category: "review",
+        entity_type: "agent_task",
+        entity_id: review.task?.id ?? "",
+        title: "Evidence prüfen",
+        consequence: "Merge bleibt gesperrt.",
+        recommendation: "Tests und Änderungen prüfen.",
+        urgency: "high",
+        status: "open",
+      },
+    ],
+    tasks: [review.task, completed.task].filter(
+      (task): task is ControlTask => Boolean(task),
+    ),
+    recommendations: [],
+    campaigns: [
+      {
+        id: "CMP-1",
+        project_id: 52,
+        title: "Cat Search Qualität",
+        goal: "Die Suche wird robust und zugänglich.",
+        non_goals: "Kein neues Backend.",
+        risk_level: "medium",
+        status: "approved",
+        version: 2,
+        base_sha: "a".repeat(40),
+        approved_sha: "a".repeat(40),
+        pr_candidates: [review, completed],
+        updated_at: "2026-08-06 10:00:00",
+      },
+    ],
+    planning_jobs: [],
+    deployments: [],
+    metrics: [],
+    checkpoints: [
+      {
+        id: "CHK-1",
+        project_id: 52,
+        entity_type: "agent_task",
+        entity_id: review.task?.id ?? "",
+        actor: "agent",
+        summary: "Implementierung abgeschlossen.",
+        payload: {},
+        created_at: "2026-08-06 09:55:00",
+      },
+    ],
+    audit: [
+      {
+        id: 1,
+        project_id: 52,
+        entity_type: "agent_task",
+        entity_id: review.task?.id ?? "",
+        action: "agent_task.review_ready",
+        actor: "executor",
+        from_state: "running",
+        to_state: "waiting_review",
+        reason: "Evidence Pack erstellt.",
+        evidence: {},
+        created_at: "2026-08-06 10:00:00",
+      },
+    ],
+  };
+}

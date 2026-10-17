@@ -1,0 +1,48 @@
+{
+  "hub_root": "",
+  "host": "127.0.0.1",
+  "port": 8001,
+  "proxy_port": 8000,
+  "auth_token": "",
+  "telegram_token": "",
+  "telegram_chat_id": "",
+  "github_token": "",
+  "github_owner": "",
+  "projects_base_dir": "",
+  "default_repo_visibility": "private",
+  "desktop_modifier": {
+    "supported_upstream_version": "2.24.0",
+    "auto_repack_guard": true,
+    "quiet_period_seconds": 90,
+    "enable_quota_watcher": true,
+    "enable_task_tracker": true,
+    "enable_api_monitor": true,
+    "enable_brain_button": true,
+    "enable_reviews_dashboard": true
+  },
+  "watchdog": {
+    "host": "127.0.0.1",
+    "check_interval_seconds": 10,
+    "retention_days": 30,
+    "timeout_ms": 3000,
+    "alert_cooldown_seconds": 300,
+    "services": [
+      {"name": "api_bridge", "url": "http://127.0.0.1:8001/health"},
+      {"name": "proxy", "url": "http://127.0.0.1:8000/"},
+      {"name": "session_manager", "url": "http://127.0.0.1:8002/health"},
+      {"name": "auto_healer", "url": "http://127.0.0.1:8007/health"}
+    ]
+  },
+  "session_manager": {
+    "sessions": [
+      {"name": "main", "url": "http://127.0.0.1:8001"}
+    ],
+    "health_check_interval_seconds": 30,
+    "session_timeout_seconds": 120
+  },
+  "auto_healer": {
+    "check_interval_seconds": 15,
+    "max_healing_cycles": 3,
+    "api_bridge_url": "http://127.0.0.1:8001"
+  }
+}

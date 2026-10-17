@@ -1,0 +1,38 @@
+// OpenClaw Konfiguration — Antigravity Frontend als Provider
+// ============================================================
+// Füge diesen Block in ~/.openclaw/openclaw.json ein.
+//
+// Die API Bridge nutzt das Antigravity-Frontend direkt (CDP).
+// Keine externen API-Keys nötig!
+//
+// Voraussetzungen:
+//   1. Antigravity Desktop App muss laufen
+//   2. API Bridge muss laufen: python api_bridge.py (Port 8001)
+//   3. auth_token muss mit config.json übereinstimmen
+
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "antigravity": {
+        "baseUrl": "http://127.0.0.1:8001/v1",
+        "apiKey": "ag-local-token",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "antigravity",
+            "name": "Antigravity (Frontend — kein externer API-Key)",
+            "contextWindow": 1048576,
+            "description": "Läuft über dein Antigravity-Abo. Keine Kosten."
+          }
+        ]
+      }
+    }
+  },
+
+  // Optional: Webhook damit die Bridge OpenClaw triggern kann
+  "hooks": {
+    "enabled": true,
+    "token": "dein-webhook-secret-hier"
+  }
+}

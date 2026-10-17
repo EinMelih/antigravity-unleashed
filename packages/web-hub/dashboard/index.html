@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Anti-Gravity Hub — Steuerzentrale für Projekte, Agenten, Pull Requests und menschliche Reviews.">
+    <meta name="color-scheme" content="dark">
+    <title>Anti-Gravity Hub</title>
+    <link rel="stylesheet" href="css/style.css?v=20260727-14">
+    <link rel="stylesheet" href="css/control-center.css?v=20260727-14">
+</head>
+<body>
+    <header>
+        <div class="logo-container">
+            <span class="logo-banana">🍌</span>
+            <div>
+                <h1>Anti-Gravity Hub</h1>
+                <div class="subtitle">Engineering Control Center</div>
+            </div>
+        </div>
+        <div class="nav-links">
+            <div id="github-status" class="github-status" title="GitHub-Verbindung">
+                <span class="gh-icon">⬡</span>
+                <span class="gh-label">GitHub</span>
+                <span id="gh-status-dot" class="gh-dot gh-dot-unknown"></span>
+            </div>
+            <button class="nav-btn active" onclick="switchTab('dashboard-tab', this)">Studio</button>
+            <button class="nav-btn" onclick="switchTab('control-center-tab', this)">Automation</button>
+            <button class="nav-btn" onclick="switchTab('chats-tab', this)">Chats</button>
+            <button class="nav-btn" onclick="switchTab('scheduled-tasks-tab', this)">Scheduled Tasks</button>
+            <button class="nav-btn" onclick="switchTab('control-docs-tab', this)">API &amp; Hilfe</button>
+            <button id="hub-command-button" class="nav-btn nav-btn-command" onclick="openHubCommandPalette()" title="Schnellnavigation öffnen (Strg+K)">
+                <span>⌕</span><kbd>Strg K</kbd>
+            </button>
+            <button id="orchestrator-toggle-btn" class="nav-btn nav-btn-icon" onclick="toggleOrchestratorDrawer()" title="Orchestrator öffnen">🤖</button>
+            <button id="duplicate-win-btn" class="nav-btn nav-btn-icon" onclick="duplicateWindow()" title="Fenster duplizieren / spiegeln">🗖</button>
+        </div>
+    </header>
+
+    <div id="hub-command-palette" class="hub-command-palette" hidden>
+        <button class="hub-command-backdrop" onclick="closeHubCommandPalette()" aria-label="Schnellnavigation schließen"></button>
+        <section class="hub-command-dialog" role="dialog" aria-modal="true" aria-labelledby="hub-command-title">
+            <div class="hub-command-search">
+                <span aria-hidden="true">⌕</span>
+                <input id="hub-command-search" type="search" autocomplete="off"
+                    placeholder="Bereich oder Aktion suchen…"
+                    aria-label="Hub durchsuchen"
+                    oninput="filterHubCommands(this.value)"
+                    onkeydown="handleHubCommandKey(event)">
+                <kbd>Esc</kbd>
+            </div>
+            <div class="hub-command-heading" id="hub-command-title">Schnell wechseln</div>
+            <div id="hub-command-list" class="hub-command-list">
+                <button class="hub-command-item" data-search="übersicht dashboard status aufmerksamkeit" onclick="runHubCommand('dashboard-tab')">
+                    <span class="hub-command-icon">⌂</span><span><strong>Übersicht</strong><small>Attention, Agenten und nächster Schritt</small></span><kbd>1</kbd>
+                </button>
+                <button class="hub-command-item" data-search="chats conversations nachricht agent" onclick="runHubCommand('chats-tab')">
+                    <span class="hub-command-icon">◌</span><span><strong>Chats</strong><small>Conversations öffnen und schreiben</small></span><kbd>2</kbd>
+                </button>
+                <button class="hub-command-item" data-search="planung control center campaign recommendation pr" onclick="runHubCommand('control-center-tab')">
+                    <span class="hub-command-icon">◇</span><span><strong>Control Center</strong><small>Recommendations, Campaigns und Freigaben</small></span><kbd>3</kbd>
+                </button>
+                <button class="hub-command-item" data-search="scheduled tasks zeitplan automation" onclick="runHubCommand('scheduled-tasks-tab')">
+                    <span class="hub-command-icon">◷</span><span><strong>Scheduled Tasks</strong><small>Zeitgesteuerte Anti-Gravity-Aufträge</small></span><kbd>4</kbd>
+                </button>
+                <button class="hub-command-item" data-search="projekt repository github hinzufügen importieren" onclick="runHubCommand('add-project')">
+                    <span class="hub-command-icon">＋</span><span><strong>GitHub-Projekt hinzufügen</strong><small>Repository importieren und verknüpfen</small></span>
+                </button>
+                <button class="hub-command-item" data-search="neuer chat conversation schreiben" onclick="runHubCommand('new-conversation')">
+                    <span class="hub-command-icon">✦</span><span><strong>Neue Conversation</strong><small>Normale Anti-Gravity-Conversation starten</small></span>
+                </button>
+                <button class="hub-command-item" data-search="orchestrator copiloten frage" onclick="runHubCommand('orchestrator')">
+                    <span class="hub-command-icon">◎</span><span><strong>Orchestrator öffnen</strong><small>Zum aktuellen Projekt oder Run fragen</small></span>
+                </button>
+            </div>
+            <div id="hub-command-empty" class="hub-command-empty" hidden>Keine passende Aktion gefunden.</div>
+        </section>
+    </div>
+
+    <!-- Main Dashboard View -->
+    <div id="dashboard-tab" class="tab-content active" tabindex="0">
+        <section class="hub-command-center" aria-labelledby="hub-overview-title">
+            <article class="hub-overview-hero glass-card streamlined-ribbon">
+                <div class="hub-overview-copy">
+                    <div class="hub-overview-eyebrow">
+                        <span id="hub-policy-dot" class="hub-live-dot"></span>
+                        <span id="hub-policy-label">GUIDED CONTROL LOOP</span>
+                    </div>
+                    <h2 id="hub-overview-title">Status</h2>
+                    <p id="hub-next-action-copy">Systemzustand wird zusammengeführt…</p>
+                </div>
+                <div class="hub-overview-actions">
+                    <button id="hub-next-action-button" class="btn btn-primary btn-sm" onclick="runHubPrimaryAction()">Status laden</button>
+                    <button class="btn btn-secondary btn-sm" onclick="loadHubOverview({showErrors:true})">↻ Aktualisieren</button>
+                </div>
+            </article>
+
+            <div class="hub-overview-stats">
+                <button class="hub-overview-stat" onclick="activateHubTab('control-center-tab')">
+                    <span>Aufmerksamkeit</span><strong id="hub-stat-attention">–</strong><small id="hub-stat-attention-note">Entscheidungen</small>
+                </button>
+                <button class="hub-overview-stat" onclick="activateHubTab('chats-tab')">
+                    <span>Aktive Agenten</span><strong id="hub-stat-agents">–</strong><small id="hub-stat-agents-note">Conversations</small>
+                </button>
+                <button class="hub-overview-stat" onclick="activateHubTab('chats-tab')">
+                    <span>AG-Fenster</span><strong id="hub-stat-workers">–</strong><small id="hub-stat-workers-note">Worker-Kapazität</small>
+                </button>
+                <button class="hub-overview-stat" onclick="scrollDashboardToProjects()">
+                    <span>Repositories</span><strong id="hub-stat-projects">–</strong><small id="hub-stat-projects-note">GitHub ↔ Anti-Gravity</small>
+                </button>
+            </div>
+
+            <div class="hub-overview-grid">
+                <article class="hub-overview-panel glass-card">
+                    <div class="hub-overview-panel-header">
+                        <div><span>JETZT WICHTIG</span><h3>Attention Queue</h3></div>
+                        <button class="btn btn-ghost btn-xs" onclick="activateHubTab('control-center-tab')">Alle öffnen →</button>
+                    </div>
+                    <div id="hub-attention-preview" class="hub-overview-list">
+                        <div class="hub-overview-empty">Attention Queue wird geladen…</div>
+                    </div>
+                </article>
+                <article class="hub-overview-panel glass-card">
+                    <div class="hub-overview-panel-header">
+                        <div><span>LIVE WORKER PLANE</span><h3>Agenten &amp; Fenster</h3></div>
+                        <button class="btn btn-ghost btn-xs" onclick="activateHubTab('chats-tab')">Chats öffnen →</button>
+                    </div>
+                    <div id="hub-agent-preview" class="hub-overview-list">
+                        <div class="hub-overview-empty">Worker-Zustand wird geladen…</div>
+                    </div>
+                </article>
+                <article class="hub-overview-panel hub-quick-panel glass-card">
+                    <div class="hub-overview-panel-header">
+                        <div><span>SCHNELLSTART</span><h3>Direkt loslegen</h3></div>
+                    </div>
+                    <div class="hub-quick-grid">
+                        <button onclick="runHubCommand('new-conversation')"><span>✦</span><strong>Neue Conversation</strong><small>Außerhalb eines Projekts</small></button>
+                        <button onclick="runHubCommand('add-project')"><span>＋</span><strong>Repository hinzufügen</strong><small>GitHub zuerst importieren</small></button>
+                        <button onclick="activateHubTab('control-center-tab')"><span>◇</span><strong>Planung öffnen</strong><small>Recommendations &amp; Campaigns</small></button>
+                        <button onclick="activateHubTab('scheduled-tasks-tab')"><span>◷</span><strong>Zeitpläne</strong><small>Scheduled Tasks steuern</small></button>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <main class="hub-project-workspace">
+            <!-- Left Sidebar -->
+            <div class="sidebar-left">
+                <!-- Projects List Panel -->
+                <div class="glass-card">
+                    <div class="glass-panel-header">
+                        <h2>Projekte</h2>
+                        <button class="btn btn-secondary btn-xs" onclick="openProjectModal()">+ Projekt</button>
+                    </div>
+                    <div id="project-list" class="item-list">
+                        <!-- Projects loaded dynamically here -->
+                        <div class="workspace-placeholder placeholder-sm">Lade Projekte...</div>
+                    </div>
+                </div>
+
+                <!-- Issues List Panel -->
+                <div class="glass-card">
+                    <div class="glass-panel-header">
+                        <h2>Issues</h2>
+                        <div class="flex-gap-sm">
+                            <button id="sync-issues-btn" class="btn btn-ghost btn-xs" onclick="syncIssues()" disabled title="Issues von GitHub synchronisieren">🔄</button>
+                            <button id="add-issue-btn" class="btn btn-secondary btn-xs" onclick="openIssueModal()" disabled>+ Add</button>
+                        </div>
+                    </div>
+                    <div id="issue-list" class="item-list">
+                        <div class="workspace-placeholder placeholder-sm">Wähle ein Projekt aus</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workspace Details Column -->
+            <div id="workspace-container" class="details-panel">
+                <div class="glass-card workspace-placeholder placeholder-lg">
+                    <div class="icon">🍌</div>
+                    <h3>Willkommen im Anti-Gravity Hub</h3>
+                    <p class="placeholder-text">Wähle links ein Projekt und ein Issue aus, um die automatisierte Behebung zu starten, Logs zu verfolgen und Diffs zu kontrollieren.</p>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Native Anti-Gravity chat workspace -->
+    <div id="chats-tab" class="tab-content">
+        <div id="antigravity-chats-root"></div>
+    </div>
+
+    <!-- Compact Orchestrator Drawer -->
+    <aside id="orchestrator-sidebar" class="orchestrator-sidebar" aria-hidden="true">
+        <div class="orchestrator-header">
+            <div class="orchestrator-title">
+                <span class="orchestrator-icon">🤖</span>
+                <span>Orchestrator</span>
+                <span id="orchestrator-status-dot" class="orch-dot orch-dot-idle" title="Bereit"></span>
+            </div>
+            <div class="orchestrator-header-actions">
+                <button class="orch-clear-btn" onclick="clearOrchestratorChat()" title="Chat leeren">🗑</button>
+                <button class="orch-clear-btn" onclick="toggleOrchestratorDrawer(false)" title="Orchestrator schließen">×</button>
+            </div>
+        </div>
+        <div id="orchestrator-messages" class="orchestrator-messages">
+            <div id="orchestrator-welcome" class="orch-welcome-panel">
+                <div class="orch-welcome-header">
+                    <span class="orch-welcome-badge">AI Co-Pilot</span>
+                    <h3>Wie kann ich helfen?</h3>
+                    <p>Analysiert Agent-Runs, Logs und das aktive Issue.</p>
+                </div>
+                <div class="orch-quick-prompts">
+                    <div class="orch-quick-prompts-title">Schnellstart</div>
+                    <button class="orch-quick-prompt-btn" onclick="sendOrchestratorMessage('Analysiere den Status des aktuellen Issues und mach konkrete Vorschläge.')">
+                        <span class="orch-quick-prompt-icon">📋</span>
+                        <span class="orch-quick-prompt-text">Aktuelles Issue analysieren</span>
+                        <span class="orch-quick-prompt-arrow">→</span>
+                    </button>
+                    <button class="orch-quick-prompt-btn" onclick="sendOrchestratorMessage('Welche Fehler oder Warnungen gibt es im letzten Run? Zeige Details.')">
+                        <span class="orch-quick-prompt-icon">🐛</span>
+                        <span class="orch-quick-prompt-text">Letzten Run prüfen</span>
+                        <span class="orch-quick-prompt-arrow">→</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="orchestrator-input-area">
+            <textarea id="orchestrator-input" class="orchestrator-input" placeholder="Frage zum Projekt oder Run…" rows="2" onkeydown="handleOrchestratorKey(event)"></textarea>
+            <button class="orch-send-btn" onclick="sendOrchestratorMessage()" title="Senden">➤</button>
+        </div>
+    </aside>
+    <button id="orchestrator-backdrop" class="orchestrator-backdrop" onclick="toggleOrchestratorDrawer(false)" aria-label="Orchestrator schließen"></button>
+
+    <!-- Native Anti-Gravity scheduled-task control -->
+    <div id="scheduled-tasks-tab" class="tab-content">
+        <div class="scheduled-tasks-shell">
+            <section class="scheduled-tasks-hero glass-card">
+                <div>
+                    <div class="antigravity-history-eyebrow">NATIVE CONTROL PLANE</div>
+                    <h2>Scheduled Tasks</h2>
+                    <p>Alle Zeitpläne aus der laufenden Anti-Gravity-App – direkt über den nativen Sidecar-Dienst.</p>
+                </div>
+                <div class="scheduled-tasks-hero-actions">
+                    <span id="scheduled-tasks-connection" class="scheduled-connection is-loading">● Verbinde…</span>
+                    <button class="btn btn-secondary" onclick="loadScheduledTasks(true)">↻ Aktualisieren</button>
+                    <button class="btn btn-primary" onclick="openScheduledTaskModal()">+ Neuer Task</button>
+                </div>
+            </section>
+
+            <section class="scheduled-tasks-toolbar glass-card">
+                <div class="antigravity-history-search">
+                    <span>⌕</span>
+                    <input id="scheduled-task-search" type="search" placeholder="Name, Prompt, Projekt oder Cron suchen…" oninput="renderScheduledTasks()">
+                </div>
+                <div id="scheduled-task-counts" class="antigravity-conversation-counts">0 Tasks</div>
+            </section>
+
+            <section id="scheduled-task-list" class="scheduled-task-grid">
+                <div class="glass-card workspace-placeholder placeholder-lg">
+                    <div class="icon">⏱</div>
+                    <h3>Scheduled Tasks werden geladen</h3>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Engineering Control Center View -->
+    <div id="control-center-tab" class="tab-content">
+        <main class="control-center-main">
+            <section class="cc-hero glass-card">
+                <div>
+                    <div class="cc-eyebrow">ANTI-GRAVITY CONTROL CENTER</div>
+                    <h2>Planen, lokal testen, freigeben</h2>
+                    <p>Du siehst zuerst nur den aktuellen Arbeitsschritt. Planung, technische Nachweise und Audit-Details bleiben darunter verfügbar.</p>
+                </div>
+                <div class="cc-policy-panel">
+                    <div class="cc-project-scope">
+                        <span>Repository</span>
+                        <strong id="cc-project-label">Alle importierten Projekte</strong>
+                    </div>
+                    <label class="cc-mode-control">
+                        <span>Arbeitsweise <button type="button" class="cc-help-trigger" data-cc-help="Legt fest, wie selbstständig neue Arbeit gestartet werden darf. Merge und Production benötigen weiterhin deine Freigabe." aria-label="Arbeitsweise erklären">?</button></span>
+                        <select id="cc-mode-select" onchange="updateControlPolicy()" data-cc-stale-lock aria-describedby="cc-mode-explanation">
+                            <option value="guided">Guided</option>
+                            <option value="observer">Observer</option>
+                            <option value="campaign">Campaign</option>
+                            <option value="autopilot">Autopilot</option>
+                        </select>
+                        <small id="cc-mode-explanation">Wird geladen…</small>
+                    </label>
+                    <button id="cc-repository-policy-button" class="btn btn-secondary" onclick="openRepositoryPolicyModal()" data-cc-help="Repository-Pfad, GitHub-Verknüpfung, Parallelität und sensible Rechte ansehen. Änderungen sind abhängig von der gewählten Arbeitsweise.">Einstellungen</button>
+                    <button id="cc-pause-button" class="btn btn-danger" onclick="toggleControlPause()" data-cc-mutation>Neue Arbeit pausieren</button>
+                </div>
+            </section>
+
+            <section id="cc-scope-notice" class="cc-scope-notice">
+                Wähle links im Dashboard ein GitHub-Projekt aus, um neue Einträge anzulegen. Die Übersicht zeigt solange alle Projekte.
+            </section>
+
+            <section id="cc-stale-notice" class="cc-stale-notice" role="alert" hidden>
+                <div>
+                    <strong>Control-Center-Daten sind nicht aktuell</strong>
+                    <span id="cc-stale-message">Die Verbindung wird erneut geprüft. Schreibende Aktionen bleiben bis dahin gesperrt.</span>
+                </div>
+                <button class="btn btn-secondary btn-xs" type="button" onclick="loadControlCenter()">Erneut laden</button>
+            </section>
+
+            <section class="cc-executor-strip glass-card" aria-live="polite">
+                <div class="cc-executor-state">
+                    <span id="cc-executor-dot" class="cc-live-dot"></span>
+                    <div><strong id="cc-executor-title">Executor wird geprüft…</strong><small id="cc-executor-detail">Leases, Anti-Gravity Worker und GitHub-Sync</small></div>
+                </div>
+                <div class="cc-executor-actions">
+                    <span id="cc-live-status" class="cc-live-status is-loading">
+                        <span class="cc-live-status-dot"></span>
+                        <strong>Synchronisiert…</strong>
+                        <time>noch nie</time>
+                    </span>
+                    <span id="cc-executor-workers" class="cc-compact-stat">0 / 4 AG Worker</span>
+                    <button class="btn btn-ghost btn-xs" onclick="tickControlExecutor()" data-cc-mutation data-cc-allowed-modes="guided campaign autopilot" data-cc-requires-running>Jetzt prüfen</button>
+                    <button class="btn btn-ghost btn-xs" onclick="loadControlCenter()">↻</button>
+                </div>
+            </section>
+
+            <section class="cc-focus-workflow glass-card" aria-labelledby="cc-focus-heading">
+                <header class="cc-focus-header">
+                    <div>
+                        <span class="cc-panel-kicker">DEIN NÄCHSTER SCHRITT</span>
+                        <h2 id="cc-focus-heading">Aktueller PR</h2>
+                    </div>
+                    <div class="cc-inline-actions cc-focus-quick-actions">
+                        <button class="btn btn-primary btn-xs" type="button" onclick="openWishPlanModal()" data-cc-mutation>✦ Wunsch planen</button>
+                        <button class="btn btn-secondary btn-xs" type="button" onclick="openRecommendationModal()" data-cc-mutation>+ Idee notieren</button>
+                    </div>
+                </header>
+                <nav id="cc-human-workflow" class="cc-human-workflow" aria-label="Prüfablauf">
+                    <span class="is-done">1 · Plan</span>
+                    <span class="is-done">2 · Agent</span>
+                    <span class="is-active">3 · Lokal testen</span>
+                    <span>4 · Freigeben</span>
+                    <span>5 · Merge</span>
+                </nav>
+                <div id="cc-focus-task" class="cc-focus-task">
+                    <div class="cc-empty">Der aktuelle Arbeitsschritt wird geladen…</div>
+                </div>
+            </section>
+
+            <section class="cc-summary-strip" aria-label="Kurzübersicht">
+                <span><strong id="cc-stat-tasks">0</strong> aktiv</span>
+                <span><strong id="cc-stat-human">0</strong> warten auf dich</span>
+                <span><strong id="cc-stat-attention">0</strong> Hinweise</span>
+                <span class="cc-summary-secondary"><strong id="cc-stat-campaigns">0</strong> Campaigns</span>
+                <span class="cc-summary-secondary"><strong id="cc-stat-work-orders">0</strong> Work Orders</span>
+                <span class="cc-summary-secondary"><strong id="cc-stat-deployments">0</strong> Deployments</span>
+            </section>
+
+            <details class="cc-advanced-shell">
+                <summary>
+                    <span><strong>Planung &amp; Systemdetails</strong><small>Ideen, Campaigns, alle Tasks, Evidence, Deployments und Audit</small></span>
+                    <span class="cc-advanced-summary-hint">Aufklappen</span>
+                </summary>
+                <section class="cc-dashboard-grid">
+                <article class="glass-card cc-panel">
+                    <div class="glass-panel-header">
+                        <div><span class="cc-panel-kicker">JETZT WICHTIG</span><h2>Attention Queue</h2></div>
+                    </div>
+                    <div id="cc-attention-list" class="cc-list"><div class="cc-empty">Keine offene Entscheidung.</div></div>
+                </article>
+
+                <article class="glass-card cc-panel">
+                    <div class="glass-panel-header">
+                        <div><span class="cc-panel-kicker">IDEEN-EINGANG</span><h2>Recommendations</h2></div>
+                        <button id="cc-add-recommendation" class="btn btn-secondary btn-xs" onclick="openRecommendationModal()" data-cc-mutation>+ Erfassen</button>
+                    </div>
+                    <div id="cc-recommendation-list" class="cc-list"><div class="cc-empty">Noch keine Recommendation.</div></div>
+                </article>
+
+                <article class="glass-card cc-panel cc-panel-wide">
+                    <div class="glass-panel-header">
+                        <div><span class="cc-panel-kicker">VERSIONIERTE PLÄNE</span><h2>Campaigns &amp; PR-Slices</h2></div>
+                        <div class="cc-inline-actions">
+                            <button id="cc-plan-wish" class="btn btn-primary btn-xs" onclick="openWishPlanModal()" data-cc-mutation>✦ Wunsch planen</button>
+                            <button id="cc-add-campaign" class="btn btn-secondary btn-xs" onclick="openCampaignModal()" data-cc-mutation>+ Manuelle Campaign</button>
+                        </div>
+                    </div>
+                    <div id="cc-planning-job-list" class="cc-planning-jobs"></div>
+                    <div id="cc-campaign-list" class="cc-campaign-list"><div class="cc-empty">Noch keine Campaign angelegt.</div></div>
+                </article>
+
+                <article class="glass-card cc-panel cc-panel-wide">
+                    <div class="glass-panel-header">
+                        <div><span class="cc-panel-kicker">LIVE AUSFÜHRUNG</span><h2>Alle Tasks, PRs &amp; Nachweise</h2></div>
+                    </div>
+                    <div id="cc-task-list" class="cc-task-board"><div class="cc-empty">Noch kein freigegebener Work Order.</div></div>
+                </article>
+
+                <article class="glass-card cc-panel cc-panel-wide">
+                    <div class="glass-panel-header">
+                        <div><span class="cc-panel-kicker">DELIVERY &amp; RECOVERY</span><h2>Deployments</h2></div>
+                    </div>
+                    <div id="cc-deployment-list" class="cc-deployment-list"><div class="cc-empty">Noch kein Deployment geplant.</div></div>
+                </article>
+
+                <article class="glass-card cc-panel">
+                    <div class="glass-panel-header"><div><span class="cc-panel-kicker">DAUERHAFTER KONTEXT</span><h2>Checkpoints</h2></div></div>
+                    <div id="cc-checkpoint-list" class="cc-list"><div class="cc-empty">Noch keine Checkpoints.</div></div>
+                </article>
+
+                <article class="glass-card cc-panel">
+                    <div class="glass-panel-header"><div><span class="cc-panel-kicker">NACHVOLLZIEHBARKEIT</span><h2>Audit Timeline</h2></div></div>
+                    <div id="cc-audit-list" class="cc-list cc-audit-list"><div class="cc-empty">Noch keine Ereignisse.</div></div>
+                </article>
+                </section>
+            </details>
+        </main>
+    </div>
+
+    <!-- Anti-Gravity Control Plane documentation and live operation queue -->
+    <div id="control-docs-tab" class="tab-content">
+        <main class="control-docs-main">
+            <section class="control-docs-hero glass-card">
+                <div>
+                    <div class="antigravity-history-eyebrow">OPERATIONS · LEASES · AUDIT</div>
+                    <h2>Anti-Gravity API &amp; Bedienung</h2>
+                    <p>Alle Fernsteuerungen, Konfliktregeln und Recovery-Schritte an einem Ort.</p>
+                </div>
+                <div class="control-docs-hero-actions">
+                    <span id="control-plane-connection" class="scheduled-connection is-loading">● Lade Queue…</span>
+                    <button class="btn btn-secondary" onclick="loadControlPlaneStatus(true)">↻ Aktualisieren</button>
+                    <a class="btn btn-ghost" href="/docs/control-plane" target="_blank" rel="noopener">Markdown öffnen</a>
+                </div>
+            </section>
+
+            <section class="control-queue-summary">
+                <article class="glass-card control-queue-stat">
+                    <span>Aktiv</span>
+                    <strong id="control-queue-active-count">0</strong>
+                    <small>laufende Operationen</small>
+                </article>
+                <article class="glass-card control-queue-stat">
+                    <span>Wartend</span>
+                    <strong id="control-queue-waiting-count">0</strong>
+                    <small>FIFO nach Konfliktressource</small>
+                </article>
+                <article class="glass-card control-queue-stat">
+                    <span>Letzte Vorgänge</span>
+                    <strong id="control-queue-recent-count">0</strong>
+                    <small>dauerhaft auditiert</small>
+                </article>
+            </section>
+
+            <section class="control-docs-grid">
+                <article class="glass-card control-queue-panel">
+                    <div class="glass-panel-header">
+                        <div>
+                            <span class="control-docs-kicker">LIVE CONTROL PLANE</span>
+                            <h2>Aktiv &amp; wartend</h2>
+                        </div>
+                    </div>
+                    <div id="control-operation-list" class="control-operation-list">
+                        <div class="workspace-placeholder placeholder-sm">Keine laufende Operation.</div>
+                    </div>
+                </article>
+
+                <article class="control-guide-stack">
+                    <details class="glass-card control-guide" open>
+                        <summary>1. So verhindert das System Konflikte</summary>
+                        <div class="control-guide-body">
+                            <ol>
+                                <li>Jeder schreibende API-Aufruf erhält eine Operation-ID.</li>
+                                <li>Die Control Plane reserviert Conversation, Projekt, Scheduler oder Primärfenster als Lease.</li>
+                                <li>Kollidierende Vorgänge warten FIFO, bis der vorherige vollständig beendet ist.</li>
+                                <li>Verschiedene Conversation-Fenster dürfen weiterhin parallel arbeiten.</li>
+                                <li>Ein Fehler gibt die Lease sicher frei; die nächste Operation startet danach.</li>
+                                <li>Ein <code>Idempotency-Key</code> verhindert doppelte Ausführung bei Retry oder Doppelklick.</li>
+                            </ol>
+                        </div>
+                    </details>
+
+                    <details class="glass-card control-guide">
+                        <summary>2. Ordner, GitHub und Anti-Gravity als einen Projekt-Workflow anlegen</summary>
+                        <div class="control-guide-body">
+                            <ol>
+                                <li>Im Dashboard <strong>Projekt hinzufügen</strong> öffnen.</li>
+                                <li>Name, Windows-Basisordner und GitHub-Sichtbarkeit wählen; der endgültige Zielpfad wird vorab angezeigt.</li>
+                                <li><strong>Projekt komplett anlegen</strong> führt lokal Git, GitHub und danach Anti-Gravity seriell aus.</li>
+                                <li>Der Hub übergibt denselben Ordner direkt an <strong>Add Folder</strong>; ein Explorer-Dialog muss nicht ferngesteuert werden.</li>
+                                <li>Bei einem Teilfehler bleibt das lokale Hub-Projekt erhalten. Fehlende Schritte können idempotent erneut ausgeführt werden.</li>
+                                <li>Alternativ darunter ein vorhandenes GitHub-Repository importieren und später über ⚙ zuordnen.</li>
+                            </ol>
+                        </div>
+                    </details>
+
+                    <details class="glass-card control-guide">
+                        <summary>3. Conversations lesen, öffnen, parallel steuern und löschen</summary>
+                        <div class="control-guide-body">
+                            <ol>
+                                <li>Der Chats-Tab lädt aktive, projektbezogene und auf Wunsch archivierte Conversations.</li>
+                                <li>Solange der Tab sichtbar ist, gleicht er den Katalog alle zwei Sekunden mit Anti-Gravity ab; externe Archivierungen oder Löschungen erscheinen ohne Reload.</li>
+                                <li>Beim Öffnen erhält jede Conversation ein dediziertes minimiertes Fenster mit eigener ID.</li>
+                                <li>Nachrichten an dieselbe Conversation werden nacheinander zugestellt und verifiziert.</li>
+                                <li>Nachrichten an verschiedene dedizierte Fenster können gleichzeitig laufen.</li>
+                                <li>Beim Löschen schließt der Hub zuerst das zugehörige Fenster und entfernt danach die Conversation.</li>
+                            </ol>
+                        </div>
+                    </details>
+
+                    <details class="glass-card control-guide">
+                        <summary>4. Scheduled Tasks vollständig fernsteuern</summary>
+                        <div class="control-guide-body">
+                            <ol>
+                                <li><strong>Scheduled Tasks</strong> öffnen und native Verbindung prüfen.</li>
+                                <li>Name, Projekt, Rhythmus/Uhrzeit oder Cron und Prompt festlegen.</li>
+                                <li>Task zunächst deaktiviert speichern und Inhalt kontrollieren.</li>
+                                <li>Aktivieren, deaktivieren, bearbeiten, Events lesen oder löschen.</li>
+                                <li><strong>Task neu starten</strong> startet den Schedulerprozess – nicht den Prompt sofort.</li>
+                            </ol>
+                        </div>
+                    </details>
+
+                    <details class="glass-card control-guide">
+                        <summary>5. Modelle, Proxy-Modelle und Diagnose</summary>
+                        <div class="control-guide-body">
+                            <ol>
+                                <li>Native Modelle über <code>/api/antigravity/models</code> lesen. Die Liste stammt dynamisch aus der sichtbaren Combobox oder dem Anti-Gravity-Language-Server.</li>
+                                <li>Neue native Modelle wie Gemini 3.6 erscheinen ohne Hub-Codeänderung; statische Modelllisten werden nicht verwendet.</li>
+                                <li>Aktives Modell über <code>/api/antigravity/active-model</code> setzen.</li>
+                                <li>Eigene OpenAI-kompatible Modelle unter <code>/api/antigravity/custom-models</code> verwalten und testen.</li>
+                                <li>Bei Problemen zuerst <code>/health</code> und danach <code>/api/control-plane/operations</code> prüfen.</li>
+                                <li>Die Operation-ID mit <code>logs/control_operations.jsonl</code> abgleichen.</li>
+                            </ol>
+                        </div>
+                    </details>
+
+                    <details class="glass-card control-guide control-guide-manual">
+                        <summary>6. Vollständiges API-Handbuch lesen</summary>
+                        <div class="control-guide-body">
+                            <pre id="control-plane-manual">Dokumentation wird geladen…</pre>
+                        </div>
+                    </details>
+                </article>
+            </section>
+        </main>
+    </div>
+
+    <!-- Lessons Learned View -->
+    <div id="lessons-tab" class="tab-content">
+        <main class="main-lessons">
+            <div class="glass-card">
+                <div class="glass-panel-header">
+                    <h2>Gelernte Techniken (Lessons Learned)</h2>
+                </div>
+                <div id="lessons-grid" class="lessons-grid">
+                    <!-- Lessons loaded dynamically here -->
+                    <div class="workspace-placeholder placeholder-md">Keine gelernten Techniken gefunden.</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+
+    <!-- Accessible confirmation surface for all auditable Control Center actions -->
+    <div id="cc-confirm-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="cc-confirm-title">
+        <form class="modal-content" onsubmit="submitControlConfirmation(event)">
+            <div class="modal-header"><h3 id="cc-confirm-title">Aktion bestätigen</h3><span class="modal-close-btn" onclick="cancelControlConfirmation()">&times;</span></div>
+            <div class="modal-body">
+                <p id="cc-confirm-message"></p>
+                <div id="cc-confirm-detail" class="cc-form-project" hidden></div>
+                <label id="cc-confirm-reason-group" class="form-group" hidden><span id="cc-confirm-reason-label">Begründung</span><textarea id="cc-confirm-reason" class="form-control" rows="4" minlength="3" maxlength="2000" placeholder="Nachvollziehbaren Grund für den Audit Trail eingeben" data-cc-dictation-label="Control Center · Begründung"></textarea></label>
+                <div id="cc-confirm-hint" class="form-hint"></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="cancelControlConfirmation()">Abbrechen</button><button id="cc-confirm-submit" type="submit" class="btn btn-danger" data-cc-mutation>Bestätigen</button></div>
+        </form>
+    </div>
+
+    <!-- Commit-bound approval without browser-native confirmation dialogs -->
+    <div id="cc-approval-modal" class="modal">
+        <form class="modal-content" onsubmit="submitControlApproval(event)">
+            <div class="modal-header"><h3>SHA verbindlich freigeben</h3><span class="modal-close-btn" onclick="closeModal('cc-approval-modal')">&times;</span></div>
+            <div class="modal-body">
+                <div class="cc-form-project"><strong>Task:</strong> <span id="cc-approval-task"></span><br><strong>Gate:</strong> <span id="cc-approval-type"></span><br><strong>SHA:</strong> <code id="cc-approval-sha"></code></div>
+                <p id="cc-approval-copy" class="form-hint"></p>
+                <div class="form-hint">Prüfe den vollständigen SHA. Diese Entscheidung kann Push, Merge oder Deployment des geprüften Commits ermöglichen.</div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal('cc-approval-modal')">Abbrechen</button><button type="submit" class="btn btn-danger" data-cc-mutation>Exakten SHA freigeben</button></div>
+        </form>
+    </div>
+
+    <!-- Reject an unpublished protected-path commit while preserving its repair overlay -->
+    <div id="cc-protected-reject-modal" class="modal">
+        <form class="modal-content" onsubmit="submitProtectedPathReject(event)">
+            <div class="modal-header"><h3>Geschützte Änderung ablehnen</h3><span class="modal-close-btn" onclick="closeModal('cc-protected-reject-modal')">&times;</span></div>
+            <div class="modal-body">
+                <p class="form-hint">Nur der unveröffentlichte lokale Task-Branch wird auf seinen Base-SHA zurückgesetzt. Die Arbeitsdateien bleiben als bereinigter Repair-Stand erhalten.</p>
+                <div class="cc-form-project"><strong>Task:</strong> <span id="cc-protected-reject-task"></span><br><strong>SHA:</strong> <code id="cc-protected-reject-sha"></code></div>
+                <label class="form-group"><span>Begründung</span><textarea id="cc-protected-reject-reason" class="form-control" rows="5" minlength="3" maxlength="2000" required placeholder="Was ist am Commit falsch und was muss der Repair-Lauf korrigieren?" data-cc-dictation-label="Protected Path · Ablehnungsgrund"></textarea></label>
+                <div class="form-hint">Die Begründung wird im Audit-Log gespeichert. Prüfe Task und vollständigen SHA, bevor du bestätigst.</div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal('cc-protected-reject-modal')">Abbrechen</button><button type="submit" class="btn btn-danger" data-cc-mutation>Commit ablehnen &amp; Repair vorbereiten</button></div>
+        </form>
+    </div>
+
+    <!-- SHA-bound independent review finding -->
+    <div id="cc-finding-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="cc-finding-title">
+        <form class="modal-content" onsubmit="submitTaskFinding(event)">
+            <div class="modal-header"><h3 id="cc-finding-title">Review-Finding erfassen</h3><button type="button" class="modal-close-btn" onclick="closeTaskFindingModal()" aria-label="Finding-Dialog schließen">&times;</button></div>
+            <div class="modal-body">
+                <p class="form-hint">Das Finding wird an den aktuell geprüften PR-Commit gebunden. BLOCKER und REQUIRED sperren das Evidence Pack bis zu einer begründeten Auflösung.</p>
+                <div class="cc-form-project"><strong>Task:</strong> <span id="cc-finding-task"></span><br><strong>SHA:</strong> <code id="cc-finding-sha"></code></div>
+                <label class="form-group"><span>Klassifikation</span><select id="cc-finding-classification" class="form-control" required><option value="BLOCKER">BLOCKER</option><option value="REQUIRED" selected>REQUIRED</option><option value="QUESTION">QUESTION</option><option value="SUGGESTION">SUGGESTION</option><option value="NIT">NIT</option></select></label>
+                <label class="form-group"><span>Quelle</span><input id="cc-finding-source" class="form-control" value="human_review" maxlength="120" required placeholder="z. B. human_review oder accessibility_review"></label>
+                <label class="form-group"><span>Beobachtung und erwartete Korrektur</span><textarea id="cc-finding-body" class="form-control textarea-lg" minlength="3" maxlength="10000" required placeholder="Was ist am exakten SHA falsch, wie lässt es sich nachvollziehen und was muss korrigiert werden?" data-cc-dictation-label="Review-Finding · Beobachtung"></textarea></label>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeTaskFindingModal()">Abbrechen</button><button type="submit" class="btn btn-danger" data-cc-mutation>Finding speichern</button></div>
+        </form>
+    </div>
+
+    <!-- Pause new Control Center work with an explicit, auditable reason -->
+    <div id="cc-pause-modal" class="modal">
+        <form class="modal-content" onsubmit="submitControlPause(event)">
+            <div class="modal-header"><h3>Neue Arbeit pausieren</h3><span class="modal-close-btn" onclick="closeModal('cc-pause-modal')">&times;</span></div>
+            <div class="modal-body">
+                <p class="form-hint">Laufende Tasks enden kontrolliert. Neue Planung, Work Orders und Executor-Leases starten erst nach dem Fortsetzen.</p>
+                <label class="form-group"><span>Grund</span><textarea id="cc-pause-reason" class="form-control" rows="3" maxlength="500" required placeholder="Warum soll neue Arbeit jetzt pausieren?" data-cc-dictation-label="Pause · Grund"></textarea></label>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal('cc-pause-modal')">Abbrechen</button><button type="submit" class="btn btn-danger" data-cc-mutation>Jetzt pausieren</button></div>
+        </form>
+    </div>
+
+    <!-- Capture a recommendation -->
+    <div id="cc-recommendation-modal" class="modal">
+        <form class="modal-content" onsubmit="submitRecommendation(event)">
+            <div class="modal-header"><h3>Recommendation erfassen</h3><span class="modal-close-btn" onclick="closeModal('cc-recommendation-modal')">&times;</span></div>
+            <div class="modal-body">
+                <div class="cc-form-project" id="cc-recommendation-project"></div>
+                <label class="form-group"><span>Titel</span><input id="cc-recommendation-title" class="form-control" maxlength="200" required placeholder="Kurze, eindeutige Verbesserung" data-cc-dictation-label="Recommendation · Titel"></label>
+                <label class="form-group"><span>Begründung</span><textarea id="cc-recommendation-summary" class="form-control textarea-lg" maxlength="5000" required placeholder="Welches Problem wird gelöst und weshalb ist es relevant?" data-cc-dictation-label="Recommendation · Begründung"></textarea></label>
+                <label class="form-group"><span>Belege</span><textarea id="cc-recommendation-evidence" class="form-control" rows="3" maxlength="10000" placeholder="Dateien, Logs, Messwerte oder reproduzierbare Beobachtung" data-cc-dictation-label="Recommendation · Belege"></textarea></label>
+                <label class="form-group"><span>Risiko</span><select id="cc-recommendation-risk" class="form-control"><option value="low">Niedrig</option><option value="medium" selected>Mittel</option><option value="high">Hoch</option><option value="critical">Kritisch</option></select></label>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal('cc-recommendation-modal')">Abbrechen</button><button type="submit" class="btn btn-primary" data-cc-mutation>Speichern</button></div>
+        </form>
+    </div>
+
+    <!-- Create a versioned campaign -->
+    <div id="cc-campaign-modal" class="modal">
+        <form class="modal-content modal-lg" onsubmit="submitCampaign(event)">
+            <div class="modal-header"><h3>Campaign anlegen</h3><span class="modal-close-btn" onclick="closeModal('cc-campaign-modal')">&times;</span></div>
+            <div class="modal-body">
+                <div class="cc-form-project" id="cc-campaign-project"></div>
+                <label class="form-group"><span>Aus akzeptierter Recommendation</span><select id="cc-campaign-recommendation" class="form-control"><option value="">Ohne Verknüpfung</option></select></label>
+                <label class="form-group"><span>Titel</span><input id="cc-campaign-title" class="form-control" maxlength="200" required placeholder="Versioniertes Vorhaben" data-cc-dictation-label="Campaign · Titel"></label>
+                <label class="form-group"><span>Ziel</span><textarea id="cc-campaign-goal" class="form-control textarea-lg" maxlength="10000" required placeholder="Welcher überprüfbare Zielzustand soll erreicht werden?" data-cc-dictation-label="Campaign · Ziel"></textarea></label>
+                <label class="form-group"><span>Nicht-Ziele</span><textarea id="cc-campaign-non-goals" class="form-control" rows="3" maxlength="5000" placeholder="Was gehört ausdrücklich nicht in diese Campaign?" data-cc-dictation-label="Campaign · Nicht-Ziele"></textarea></label>
+                <div class="cc-form-row cc-form-row-3">
+                    <label class="form-group"><span>Planungsgrad</span><select id="cc-campaign-depth" class="form-control" onchange="syncCampaignCandidateLimit()"><option value="compact">Compact · bis 5</option><option value="balanced" selected>Balanced · bis 12</option><option value="deep">Deep · bis 30</option><option value="exhaustive">Exhaustive · bis 100</option></select></label>
+                    <label class="form-group"><span>Max. PR-Kandidaten</span><input id="cc-campaign-max-candidates" class="form-control" type="number" value="12" min="1" max="100"></label>
+                    <label class="form-group"><span>Aktivierung</span><select id="cc-campaign-activation" class="form-control"><option value="per_candidate">Je PR manuell</option><option value="campaign_wave">Konfliktfreie Waves</option><option value="autopilot">Autopilot-Gates</option></select></label>
+                </div>
+                <label class="form-group"><span>Schlüsselentscheidung / Pivotal Fork</span><textarea id="cc-campaign-pivotal-fork" class="form-control" rows="2" maxlength="10000" placeholder="Welche Architekturentscheidung verändert den restlichen Plan?" data-cc-dictation-label="Campaign · Schlüsselentscheidung"></textarea></label>
+                <label class="form-group"><span>Erfolgsmetriken · eine Zeile je Metrik</span><textarea id="cc-campaign-success-metrics" class="form-control" rows="3" placeholder="Keine doppelte Task-Ausführung&#10;Alle Required Checks grün" data-cc-dictation-label="Campaign · Erfolgsmetriken"></textarea></label>
+                <label class="form-group"><span>Acceptance Matrix · eine Zeile je Fall</span><textarea id="cc-campaign-acceptance-matrix" class="form-control" rows="3" placeholder="Lease-Race → genau ein Gewinner&#10;Neuer SHA → alte Freigabe widerrufen" data-cc-dictation-label="Campaign · Acceptance Matrix"></textarea></label>
+                <div class="cc-form-row">
+                    <label class="form-group"><span>Rollout</span><textarea id="cc-campaign-rollout" class="form-control" rows="3" data-cc-dictation-label="Campaign · Rollout"></textarea></label>
+                    <label class="form-group"><span>Rollback</span><textarea id="cc-campaign-rollback" class="form-control" rows="3" required data-cc-dictation-label="Campaign · Rollback"></textarea></label>
+                </div>
+                <label class="form-group"><span>Risiko</span><select id="cc-campaign-risk" class="form-control"><option value="low">Niedrig</option><option value="medium" selected>Mittel</option><option value="high">Hoch</option><option value="critical">Kritisch</option></select></label>
+                <div class="form-hint">Der aktuelle lokale Git-Commit wird automatisch als Baseline gespeichert. Ohne verifizierbaren SHA bleibt die Freigabe gesperrt.</div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal('cc-campaign-modal')">Abbrechen</button><button type="submit" class="btn btn-primary" data-cc-mutation>Campaign anlegen</button></div>
+        </form>
+    </div>
+
+    <!-- Add a small PR candidate to a campaign draft -->
+    <div id="cc-candidate-modal" class="modal">
+        <form class="modal-content modal-lg" onsubmit="submitPrCandidate(event)">
+            <div class="modal-header"><h3>PR-Slice definieren</h3><span class="modal-close-btn" onclick="closeModal('cc-candidate-modal')">&times;</span></div>
+            <div class="modal-body">
+                <input id="cc-candidate-campaign-id" type="hidden">
+                <div class="cc-form-project" id="cc-candidate-campaign-label"></div>
+                <label class="form-group"><span>Titel</span><input id="cc-candidate-title" class="form-control" maxlength="200" required placeholder="Kleiner, eigenständig überprüfbarer Slice" data-cc-dictation-label="PR-Slice · Titel"></label>
+                <label class="form-group"><span>Scope</span><textarea id="cc-candidate-scope" class="form-control textarea-lg" maxlength="10000" required placeholder="Konkrete Änderung und betroffene Grenzen" data-cc-dictation-label="PR-Slice · Scope"></textarea></label>
+                <label class="form-group"><span>Akzeptanzkriterien · eine Zeile pro Kriterium</span><textarea id="cc-candidate-criteria" class="form-control textarea-lg" required placeholder="Verhalten X ist durch Test Y belegt&#10;Dokumentation Z ist aktualisiert" data-cc-dictation-label="PR-Slice · Akzeptanzkriterien"></textarea></label>
+                <label class="form-group"><span>Required Checks · exakte GitHub-Checknamen</span><textarea id="cc-candidate-checks" class="form-control" rows="3" required placeholder="unit&#10;lint&#10;build" data-cc-dictation-label="PR-Slice · Required Checks"></textarea></label>
+                <label class="form-group"><span>Manuelle Tests · eine Zeile pro Test</span><textarea id="cc-candidate-manual-tests" class="form-control" rows="3" placeholder="Im Hub zwei parallele Tasks starten" data-cc-dictation-label="PR-Slice · manuelle Tests"></textarea></label>
+                <label class="form-group"><span>Definition of Done</span><textarea id="cc-candidate-dod" class="form-control" rows="2" required placeholder="Alle Kriterien und Checks sind am finalen SHA belegt." data-cc-dictation-label="PR-Slice · Definition of Done"></textarea></label>
+                <label class="form-group"><span>Nicht-Ziele</span><textarea id="cc-candidate-non-goals" class="form-control" rows="2" maxlength="5000" data-cc-dictation-label="PR-Slice · Nicht-Ziele"></textarea></label>
+                <div class="cc-form-row">
+                    <label class="form-group"><span>Risiko</span><select id="cc-candidate-risk" class="form-control"><option value="low">Niedrig</option><option value="medium" selected>Mittel</option><option value="high">Hoch</option><option value="critical">Kritisch</option></select></label>
+                    <label class="form-group"><span>Priorität</span><input id="cc-candidate-priority" class="form-control" type="number" value="100" min="1" max="9999"></label>
+                </div>
+                <label class="form-group"><span>Blockiert durch</span><select id="cc-candidate-dependencies" class="form-control" multiple size="4"></select></label>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal('cc-candidate-modal')">Abbrechen</button><button type="submit" class="btn btn-primary" data-cc-mutation>PR-Slice speichern</button></div>
+        </form>
+    </div>
+
+    <!-- Repository execution boundaries -->
+    <div id="cc-repository-policy-modal" class="modal">
+        <form class="modal-content modal-lg" onsubmit="submitRepositoryPolicy(event)">
+            <div class="modal-header"><h3>Repository-Einstellungen</h3><span class="modal-close-btn" onclick="closeModal('cc-repository-policy-modal')">&times;</span></div>
+            <div class="modal-body">
+                <div id="cc-policy-project" class="cc-form-project"></div>
+                <div class="cc-settings-explainer">
+                    <strong>Lokale Prüfung</strong>
+                    <span>Der Preview-Server startet nur auf 127.0.0.1 und verwendet beim Review exakt das isolierte PR-Arbeitsverzeichnis.</span>
+                </div>
+                <div class="cc-form-row cc-form-row-3">
+                    <label class="form-group"><span>Gleichzeitig arbeitende Agenten</span><input id="cc-policy-parallel" class="form-control" type="number" min="1" max="20"><small>Wie viele unabhängige Tasks parallel laufen dürfen.</small></label>
+                    <label class="form-group"><span>Maximal offene Pull Requests</span><input id="cc-policy-open-prs" class="form-control" type="number" min="1" max="100"><small>Stoppt neue Arbeit, bevor GitHub unübersichtlich wird.</small></label>
+                    <label class="form-group"><span>Maximale Plan-Schritte</span><input id="cc-policy-candidates" class="form-control" type="number" min="1" max="100"><small>Obergrenze, kein Zielwert: Es wird kein künstlicher Müll erzeugt.</small></label>
+                </div>
+                <div class="cc-form-row">
+                    <label class="form-group"><span>Retries</span><input id="cc-policy-retries" class="form-control" type="number" min="0" max="20"></label>
+                    <label class="form-group"><span>No-progress-Limit</span><input id="cc-policy-no-progress" class="form-control" type="number" min="1" max="20"></label>
+                </div>
+                <fieldset class="cc-capability-grid">
+                    <legend>Sensible Rechte</legend>
+                    <label data-cc-help="Erlaubt dem Hub, einen von dir separat für den aktuellen Commit freigegebenen PR zu mergen."><input id="cc-cap-merge" type="checkbox"> Geprüfte Pull Requests mergen</label>
+                    <label data-cc-help="Gibt nur die Deployment-Planung frei. Ein Ziel/Adapter muss zusätzlich eingerichtet sein."><input id="cc-cap-staging" type="checkbox"> Staging-Deployment planen</label>
+                    <label data-cc-help="Production bleibt zusätzlich an eine eigene menschliche Commit-Freigabe gebunden."><input id="cc-cap-production" type="checkbox"> Production-Deployment planen</label>
+                    <label data-cc-help="Erlaubt einen Rücksprung auf den gespeicherten vorherigen stabilen Commit."><input id="cc-cap-rollback" type="checkbox"> Rollback planen</label>
+                </fieldset>
+                <div class="form-hint"><strong>Commit-Freigabe:</strong> Der Hub speichert exakt, welchen Code-Stand du geprüft hast. Ändert sich der Commit, verfällt die Freigabe automatisch. Lokale Vorschau und Web‑IDE benötigen keine Deployment-Capability.</div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal('cc-repository-policy-modal')">Abbrechen</button><button type="submit" class="btn btn-primary" data-cc-mutation>Regeln speichern</button></div>
+        </form>
+    </div>
+
+    <!-- Versioned planning artifacts without dirtying the approved checkout -->
+    <div id="cc-plan-docs-modal" class="modal">
+        <form class="modal-content modal-lg" onsubmit="submitCampaignPlanDocuments(event)">
+            <div class="modal-header"><h3>Plan-Dokumente</h3><span class="modal-close-btn" onclick="closeModal('cc-plan-docs-modal')">&times;</span></div>
+            <div class="modal-body">
+                <input id="cc-plan-docs-campaign-id" type="hidden">
+                <div id="cc-plan-docs-label" class="cc-form-project"></div>
+                <label class="form-group"><span>Repository Map</span><textarea id="cc-plan-repository-map" class="form-control textarea-lg" required placeholder="Module, Laufzeitgrenzen, Datenflüsse, Tests und Owner" data-cc-dictation-label="Plan · Repository Map"></textarea></label>
+                <label class="form-group"><span>Design Document</span><textarea id="cc-plan-design-document" class="form-control textarea-lg" required placeholder="Kontext, Optionen, Entscheidung, Schnittstellen, Failure Modes und Rollout" data-cc-dictation-label="Plan · Design Document"></textarea></label>
+                <label class="form-group"><span>ADR · bei hoher/kritischer Architekturwirkung</span><textarea id="cc-plan-adr" class="form-control textarea-lg" placeholder="Entscheidung, Status, Konsequenzen und verworfene Alternativen" data-cc-dictation-label="Plan · ADR"></textarea></label>
+                <div class="form-hint">Die Graph-Simulation wird beim Speichern aus Dependencies und Konflikten neu berechnet. Dokumente bleiben SHA-neutral im Control Plane Store, bis ein eigener Dokumentations-PR sie materialisiert.</div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal('cc-plan-docs-modal')">Abbrechen</button><button type="submit" class="btn btn-primary" data-cc-mutation>Plan-Dokumente versionieren</button></div>
+        </form>
+    </div>
+
+    <!-- Read-only Anti-Gravity repository planning job -->
+    <div id="cc-wish-plan-modal" class="modal">
+        <form class="modal-content modal-lg" onsubmit="submitWishPlan(event)">
+            <div class="modal-header"><h3>Wunsch intelligent planen</h3><span class="modal-close-btn" onclick="closeModal('cc-wish-plan-modal')">&times;</span></div>
+            <div class="modal-body">
+                <div id="cc-wish-plan-project" class="cc-form-project"></div>
+                <label class="form-group"><span>Was soll erreicht werden?</span><textarea id="cc-wish-plan-text" class="form-control textarea-lg" required maxlength="50000" placeholder="Beschreibe Ziel, aktuelles Problem, gewünschtes Verhalten und wichtige Grenzen." data-cc-dictation-label="Planungswunsch"></textarea></label>
+                <div class="cc-form-row cc-form-row-3">
+                    <label class="form-group"><span>Planungsgrad</span><select id="cc-wish-plan-depth" class="form-control" onchange="syncWishCandidateLimit()"><option value="compact">Compact</option><option value="balanced" selected>Balanced</option><option value="deep">Deep</option><option value="exhaustive">Exhaustive</option></select></label>
+                    <label class="form-group"><span>Max. PR-Kandidaten</span><input id="cc-wish-plan-limit" class="form-control" type="number" value="12" min="1" max="100"></label>
+                    <label class="form-group"><span>Spätere Aktivierung</span><select id="cc-wish-plan-activation" class="form-control"><option value="per_candidate">Jeden PR einzeln</option><option value="campaign_wave">Konfliktfreie Waves</option><option value="autopilot">Autopilot nach Gates</option></select></label>
+                </div>
+                <label class="form-group"><span>Zusätzliche Constraints · eine Zeile je Grenze</span><textarea id="cc-wish-plan-constraints" class="form-control" rows="4" placeholder="Keine Breaking Changes&#10;Production bleibt manuell&#10;Bestehende API bleibt kompatibel" data-cc-dictation-label="Planungsconstraints"></textarea></label>
+                <div class="form-hint">Der Planner analysiert das Repository read-only. Erst nach deiner Planfreigabe können Work Orders, Branches oder Draft-PRs entstehen.</div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal('cc-wish-plan-modal')">Abbrechen</button><button type="submit" class="btn btn-primary" data-cc-mutation>Read-only Planung starten</button></div>
+        </form>
+    </div>
+
+    <!-- Create or import a Hub project -->
+    <div id="project-modal" class="modal">
+        <div class="modal-content modal-lg project-workflow-modal">
+            <div class="modal-header">
+                <div>
+                    <div class="antigravity-history-eyebrow">ANTI-GRAVITY HUB</div>
+                    <h3>Projekt hinzufügen</h3>
+                </div>
+                <span class="modal-close-btn" onclick="closeModal('project-modal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="new-project-workflow-form" onsubmit="createHubProjectWorkflow(event)">
+                    <input type="hidden" id="new-project-created-id">
+                    <div class="project-workflow-heading">
+                        <strong>Neues Projekt vollständig anlegen</strong>
+                        <span>Ordner, GitHub-Repository und Anti-Gravity-Projekt werden nacheinander erstellt und eindeutig gekoppelt.</span>
+                    </div>
+                    <div class="project-workflow-grid">
+                        <div class="form-group">
+                            <label for="new-project-name">Projektname</label>
+                            <input type="text" id="new-project-name" class="form-control" maxlength="100" required
+                                placeholder="z. B. Mein neues Projekt" oninput="updateNewProjectPathPreview()">
+                        </div>
+                        <div class="form-group">
+                            <label for="new-project-visibility">GitHub-Sichtbarkeit</label>
+                            <select id="new-project-visibility" class="form-control">
+                                <option value="private" selected>Privat</option>
+                                <option value="public">Öffentlich</option>
+                            </select>
+                        </div>
+                        <div class="form-group project-workflow-full">
+                            <label for="new-project-base-path">Windows-Basisordner</label>
+                            <input type="text" id="new-project-base-path" class="form-control" required
+                                placeholder="C:\Users\DEIN_NAME\Projects"
+                                oninput="updateNewProjectPathPreview()">
+                            <div class="form-hint">Der Hub legt darin automatisch einen Unterordner mit dem Projektnamen an und übergibt genau diesen Pfad an „Add Folder“ in Anti-Gravity.</div>
+                        </div>
+                    </div>
+                    <div class="project-path-preview">
+                        <span>Zielordner</span>
+                        <code id="new-project-path-preview">Name und Basisordner eingeben</code>
+                    </div>
+                    <div class="project-workflow-options">
+                        <label><input type="checkbox" id="new-project-create-github" checked> GitHub-Repository erstellen und initial pushen</label>
+                        <label><input type="checkbox" id="new-project-create-antigravity" checked> In Anti-Gravity über „Add Folder“ erstellen und verknüpfen</label>
+                    </div>
+                    <div id="new-project-workflow-status" class="project-workflow-status" hidden aria-live="polite">
+                        <div data-step="local"><span>1</span><strong>Lokaler Ordner & Git</strong><small>Wartet</small></div>
+                        <div data-step="github"><span>2</span><strong>GitHub</strong><small>Wartet</small></div>
+                        <div data-step="antigravity"><span>3</span><strong>Anti-Gravity</strong><small>Wartet</small></div>
+                    </div>
+                </form>
+
+                <div class="form-divider project-workflow-divider"><span>oder vorhandenes GitHub-Repository importieren</span></div>
+                <div class="form-group">
+                    <label for="github-repo-search">Deine GitHub-Repositories</label>
+                    <div class="flex-align-center-gap">
+                        <input type="search" id="github-repo-search" class="form-control" placeholder="Repository suchen…" oninput="renderGithubRepositoryCatalog()">
+                        <button class="btn btn-secondary" type="button" onclick="loadGithubRepositories(true)" title="GitHub neu laden">↻</button>
+                    </div>
+                    <div class="form-hint">Wähle ein Repository aus deinem verbundenen GitHub-Konto. Clone und lokaler Pfad werden automatisch verwaltet.</div>
+                </div>
+                <div class="form-group">
+                    <label for="github-local-path">Lokaler Windows-Projektordner</label>
+                    <input type="text" id="github-local-path" class="form-control" placeholder="z. B. D:\Projekte\mein-repository">
+                    <div class="form-hint">Optional. Leer lassen nutzt den angezeigten Standardpfad des gewählten Repositories. Dieser Ordner wird später auch für das Anti-Gravity-Projekt verwendet.</div>
+                </div>
+                <div id="github-repo-catalog" class="github-repo-catalog">
+                    <div class="workspace-placeholder placeholder-sm">Lade GitHub-Repositories…</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="new-project-workflow-submit" type="submit" form="new-project-workflow-form" class="btn btn-primary">Projekt komplett anlegen</button>
+                <button class="btn btn-secondary" onclick="closeModal('project-modal')">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Link Hub/GitHub project to a live Anti-Gravity project -->
+    <div id="integrity-link-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Anti-Gravity-Projekt zuordnen</h3>
+                <span class="modal-close-btn" onclick="closeModal('integrity-link-modal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="integrity-link-project-id">
+                <div class="form-info-box" style="display:flex">
+                    <span class="info-icon">🔗</span>
+                    <span><strong id="integrity-link-project-name"></strong> bleibt ein GitHub-Projekt. Wähle hier das passende Projekt aus der laufenden Anti-Gravity-App.</span>
+                </div>
+                <div id="project-github-health" class="form-info-box" style="display:none">
+                    <span class="info-icon">⬡</span>
+                    <span>
+                        <strong>GitHub-Verbindung</strong>
+                        <span id="project-github-health-text"></span>
+                    </span>
+                    <button id="project-github-repair-btn" type="button" class="btn btn-secondary btn-sm"
+                        onclick="repairProjectGithub()">GitHub prüfen</button>
+                </div>
+                <div class="form-group">
+                    <label for="antigravity-project-select">Projekt in Anti-Gravity</label>
+                    <select id="antigravity-project-select" class="form-control">
+                        <option value="">Lade Projekte aus Anti-Gravity…</option>
+                    </select>
+                    <div class="form-hint">Die Liste wird direkt aus der geöffneten Anti-Gravity-App gelesen. Es ist keine Pfadeingabe notwendig.</div>
+                </div>
+                <div class="form-divider"></div>
+                <div class="form-group">
+                    <label for="antigravity-create-workspace-path">Oder neues Anti-Gravity-Projekt anlegen</label>
+                    <input type="text" id="antigravity-create-workspace-path" class="form-control" readonly>
+                    <div class="form-hint">Der beim GitHub-Import gewählte lokale Repo-Ordner. Der Hub übergibt ihn direkt an Anti-Gravity; der Windows-Explorer muss nicht automatisiert werden.</div>
+                </div>
+                <div id="integrity-link-current" class="form-hint"></div>
+            </div>
+            <div class="modal-footer" style="justify-content:space-between">
+                <button id="integrity-unlink-btn" class="btn btn-secondary" onclick="unlinkAntigravityProject()">Verknüpfung lösen</button>
+                <div class="flex-align-center-gap">
+                    <button id="antigravity-create-project-btn" class="btn btn-secondary" onclick="createAndLinkAntigravityProject()">In Anti-Gravity erstellen</button>
+                    <button class="btn btn-secondary" onclick="closeModal('integrity-link-modal')">Abbrechen</button>
+                    <button class="btn btn-primary" onclick="submitAntigravityProjectLink()">Verknüpfen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/edit native scheduled task -->
+    <div id="scheduled-task-modal" class="modal">
+        <div class="modal-content scheduled-task-modal-content">
+            <div class="modal-header">
+                <div>
+                    <div class="antigravity-history-eyebrow">ANTI-GRAVITY SIDECAR</div>
+                    <h3 id="scheduled-task-modal-title">Neuer Scheduled Task</h3>
+                </div>
+                <span class="modal-close-btn" onclick="closeModal('scheduled-task-modal')">&times;</span>
+            </div>
+            <form id="scheduled-task-form" onsubmit="submitScheduledTask(event)">
+                <div class="modal-body scheduled-task-form-grid">
+                    <input type="hidden" id="scheduled-task-id">
+                    <div class="form-group scheduled-task-full">
+                        <label for="scheduled-task-name">Name</label>
+                        <input type="text" id="scheduled-task-name" class="form-control" maxlength="160" required placeholder="z. B. Nightly Issue Triage">
+                        <div id="scheduled-task-id-preview" class="form-hint">ID wird automatisch erzeugt.</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="scheduled-task-project">Projekt</label>
+                        <select id="scheduled-task-project" class="form-control" required>
+                            <option value="">Anti-Gravity-Projekte werden geladen…</option>
+                        </select>
+                    </div>
+                    <label class="scheduled-task-check">
+                        <input type="checkbox" id="scheduled-task-all-projects">
+                        <span>Für alle Projekte freigeben</span>
+                    </label>
+                    <div class="form-group">
+                        <label for="scheduled-task-frequency">Rhythmus</label>
+                        <select id="scheduled-task-frequency" class="form-control" onchange="syncScheduledTaskScheduleFields()">
+                            <option value="daily">Täglich</option>
+                            <option value="weekly">Wöchentlich</option>
+                            <option value="custom">Eigener Cron</option>
+                        </select>
+                    </div>
+                    <div id="scheduled-task-weekday-group" class="form-group" style="display:none">
+                        <label for="scheduled-task-weekday">Wochentag</label>
+                        <select id="scheduled-task-weekday" class="form-control">
+                            <option value="1">Montag</option>
+                            <option value="2">Dienstag</option>
+                            <option value="3">Mittwoch</option>
+                            <option value="4">Donnerstag</option>
+                            <option value="5">Freitag</option>
+                            <option value="6">Samstag</option>
+                            <option value="0">Sonntag</option>
+                        </select>
+                    </div>
+                    <div id="scheduled-task-time-group" class="form-group">
+                        <label for="scheduled-task-time">Uhrzeit</label>
+                        <input type="time" id="scheduled-task-time" class="form-control" value="09:00">
+                    </div>
+                    <div id="scheduled-task-cron-group" class="form-group scheduled-task-full" style="display:none">
+                        <label for="scheduled-task-cron">Cron-Ausdruck</label>
+                        <input type="text" id="scheduled-task-cron" class="form-control form-mono" value="0 9 * * *" placeholder="0 9 * * *">
+                        <div class="form-hint">Fünf Felder: Minute Stunde Tag Monat Wochentag.</div>
+                    </div>
+                    <div class="form-group scheduled-task-full">
+                        <label for="scheduled-task-prompt">Prompt</label>
+                        <textarea id="scheduled-task-prompt" class="form-control textarea-lg" required placeholder="Was soll der Anti-Gravity-Agent ausführen?"></textarea>
+                    </div>
+                    <label class="scheduled-task-check scheduled-task-full">
+                        <input type="checkbox" id="scheduled-task-enabled">
+                        <span>Task nach dem Speichern aktivieren</span>
+                    </label>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('scheduled-task-modal')">Abbrechen</button>
+                    <button id="scheduled-task-submit" type="submit" class="btn btn-primary">Task speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Native scheduled-task event history -->
+    <div id="scheduled-task-events-modal" class="modal">
+        <div class="modal-content scheduled-task-modal-content">
+            <div class="modal-header">
+                <div>
+                    <div class="antigravity-history-eyebrow">NATIVE EVENTS</div>
+                    <h3 id="scheduled-task-events-title">Task-Verlauf</h3>
+                </div>
+                <span class="modal-close-btn" onclick="closeModal('scheduled-task-events-modal')">&times;</span>
+            </div>
+            <div id="scheduled-task-events-body" class="modal-body scheduled-task-events">
+                <div class="workspace-placeholder placeholder-sm">Events werden geladen…</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('scheduled-task-events-modal')">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Issue Modal -->
+    <div id="issue-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Neues Issue erstellen</h3>
+                <span class="modal-close-btn" onclick="closeModal('issue-modal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="issue-type">Typ</label>
+                    <select id="issue-type" class="form-control">
+                        <option value="task">📋 Task (Feature / Aufgabe)</option>
+                        <option value="bug">🐛 Bug (Fehler beheben)</option>
+                        <option value="feature">✨ Feature (Neue Funktion)</option>
+                        <option value="epic">🎯 Epic (Größeres Vorhaben)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="issue-title">Titel</label>
+                    <input type="text" id="issue-title" class="form-control" placeholder="z. B. Login-Seite implementieren">
+                </div>
+                <div class="form-group">
+                    <label for="issue-desc">Beschreibung</label>
+                    <textarea id="issue-desc" class="form-control textarea-lg" placeholder="Beschreibe was gemacht werden soll..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('issue-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="submitIssue()">Erstellen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Browser Modal kept for legacy compatibility but hidden -->
+    <div id="file-browser-modal" class="modal" style="display: none;"></div>
+
+    <!-- Add Subtask Modal -->
+    <div id="subtask-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Neue Unteraufgabe hinzufügen</h3>
+                <span class="modal-close-btn" onclick="closeModal('subtask-modal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="subtask-title">Beschreibung der Aufgabe</label>
+                    <input type="text" id="subtask-title" class="form-control" placeholder="z. B. Unit-Tests schreiben...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('subtask-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="submitSubtask()">Hinzufügen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Git Commit & Sync Modal -->
+    <div id="commit-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Git Commit &amp; Sync</h3>
+                <span class="modal-close-btn" onclick="closeModal('commit-modal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="commit-msg-input">Commit-Nachricht</label>
+                    <div style="display: flex; gap: var(--space-2); align-items: center;">
+                        <input type="text" id="commit-msg-input" class="form-control" placeholder="z. B. docs(memory): add new guidelines" style="flex: 1;">
+                        <button class="btn btn-secondary" onclick="generateAICommitMessage()" id="ai-commit-btn" title="AI-gestützte Commit-Nachricht generieren">🤖 Generieren</button>
+                    </div>
+                    <div id="commit-msg-hint" class="form-hint" style="margin-top: var(--space-2); color: var(--color-text-secondary); font-size: var(--text-xs);"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('commit-modal')">Abbrechen</button>
+                <button class="btn btn-primary" onclick="submitCommit()" id="submit-commit-btn">Commit &amp; Sync ausführen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Anti-Gravity Chat History Modal -->
+    <div id="chat-history-modal" class="modal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="chat-history-title">Chat Verlauf</h3>
+                <span class="modal-close-btn" onclick="closeModal('chat-history-modal')">&times;</span>
+            </div>
+            <div class="modal-body" id="chat-history-body" style="max-height: 60vh; overflow-y: auto; padding: var(--space-4); background: rgba(0,0,0,0.15); border-radius: var(--radius-lg); display: flex; flex-direction: column; gap: var(--space-3);">
+                <!-- Chat history bubbles loaded dynamically -->
+            </div>
+            <div class="modal-input-area" style="border-top: 1px solid var(--color-border-default); background: var(--color-bg-secondary); display: flex; flex-direction: column;">
+                <!-- Thumbnail preview area for uploaded images -->
+                <div id="chat-attachment-preview" style="display: none; padding: var(--space-2) var(--space-4); gap: var(--space-2); flex-wrap: wrap; background: rgba(0,0,0,0.1); border-bottom: 1px solid var(--color-border-default);">
+                    <!-- Uploaded thumbnails dynamically added here -->
+                </div>
+
+                <!-- Main Input row -->
+                <div style="padding: var(--space-3) var(--space-4); display: flex; gap: var(--space-2); align-items: center;">
+                    <!-- Add Context (+) Button -->
+                    <button class="btn btn-secondary" title="Bild anhängen" style="border-radius: 50%; width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; shrink: 0;" onclick="document.getElementById('chat-file-input').click()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor"><path d="M450-450H220v-60H450V-740h60v230H740v60H510v230H450V-450Z"></path></svg>
+                    </button>
+                    <input type="file" id="chat-file-input" accept="image/*" multiple style="display: none;" onchange="handleChatFileInput(event)">
+
+                    <input type="text" id="chat-send-input" class="form-control" placeholder="Schreibe eine Nachricht an den Agenten..." style="flex: 1;" onkeydown="if(event.key === 'Enter') sendIntegrityChatMessage()">
+
+                    <!-- Mic Button -->
+                    <button class="btn btn-secondary" id="chat-mic-btn" title="Sprachnachricht aufnehmen" style="border-radius: 50%; width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; shrink: 0; opacity: 0.7;" onclick="toggleVoiceInput()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 -960 960 960" fill="currentColor" style="width:16px; height:16px;"><path d="M409.04-449.04Q380-478.08 380-520V-760q0-41.92 29.04-70.96T480-860t70.96,29.04T580-760v240q0,41.92-29.04,70.96T480-420t-70.96-29.04ZM480-640ZM450-130V-261.85q-99-11.31-164.5-84.92T220-520h60q0,83 58.5,141.5T480-320t141.5-58.5T680-520h60q0,99.61-65.5,173.23T510-261.85V-130H450Zm58.5-361.5Q520-503 520-520V-760q0-17-11.5-28.5T480-800t-28.5,11.5T440-760v240q0,17 11.5,28.5T480-480t28.5-11.5Z"></path></svg>
+                    </button>
+
+                    <!-- Send Button (Blue circle with arrow icon) -->
+                    <button class="btn btn-primary" id="chat-send-btn" title="Nachricht senden" style="border-radius: 50%; width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; shrink: 0; background: var(--color-accent-neon); border-color: var(--color-accent-neon);" onclick="sendIntegrityChatMessage()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor" style="color: var(--color-bg-primary);"><path d="M120-160v-640l760 320-760 320Zm60-93 544-227-544-230v168l242 62-242 60v167Zm0 0v-457 457Z"></path></svg>
+                    </button>
+                </div>
+
+                <!-- Status Row -->
+                <div style="padding: var(--space-2) var(--space-4); border-top: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; font-size: 11px; background: rgba(0,0,0,0.15);">
+                    <div style="display: flex; align-items: center; gap: var(--space-2);">
+                        <!-- Model Selection Dropdown -->
+                        <div class="model-dropdown-container" style="position: relative; display: inline-block;">
+                            <button type="button" id="model-dropdown-btn" class="btn btn-secondary" style="height: 24px; padding: 0 var(--space-2); font-size: 10px; display: flex; align-items: center; gap: 4px; border-radius: var(--radius-sm);" onclick="toggleModelDropdown(event)">
+                                <span id="current-selected-model">Modell wird geladen…</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 -960 960 960" fill="currentColor"><path d="M480-541.85l-184,184L253.85-400L480-626.15L706.15-400L664-357.85l-184-184Z"></path></svg>
+                            </button>
+                            <!-- Dropdown menu items (dynamically loaded) -->
+                            <div id="model-dropdown-menu" class="dropdown-menu" style="display: none; position: absolute; bottom: 30px; left: 0; background: var(--color-bg-primary); border: 1px solid var(--color-border-default); border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 1000; min-width: 220px;">
+                                <div style="padding: var(--space-2) var(--space-3); font-size: 10px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--color-border-default);">Model</div>
+                                <!-- Items filled by loadModelList() -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quota display (Dynamic display loaded from LS with fallback) -->
+                    <div id="antigravity-quota-display" style="font-family: var(--font-mono); color: var(--color-text-secondary); font-size: 10px; display: flex; align-items: center; gap: var(--space-1); cursor: pointer; user-select: none;">
+                        <span id="quota-gemini" title="Gemini Quota">G: --%</span>
+                        <span style="opacity: 0.3;">|</span>
+                        <span id="quota-claude" title="Claude Quota">C: --%</span>
+                        <span style="opacity: 0.3;">|</span>
+                        <span id="quota-token" title="Token count">T: --</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('chat-history-modal')">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom OpenAI-compatible Model Modal -->
+    <div id="custom-model-modal" class="modal">
+        <div class="modal-content modal-lg custom-model-modal-content">
+            <div class="modal-header">
+                <div>
+                    <h3>Eigenes API-Modell</h3>
+                    <p class="custom-model-subtitle">OpenAI-kompatible API, lokaler Server oder Reverse Proxy</p>
+                </div>
+                <span class="modal-close-btn" onclick="closeModal('custom-model-modal')">&times;</span>
+            </div>
+            <div class="modal-body custom-model-layout">
+                <aside class="custom-model-sidebar">
+                    <button type="button" class="btn btn-secondary custom-model-new-btn" onclick="resetCustomModelForm()">＋ Neues Modell</button>
+                    <div id="custom-model-list" class="custom-model-list">
+                        <div class="custom-model-empty">Noch kein eigenes Modell eingerichtet.</div>
+                    </div>
+                </aside>
+                <form id="custom-model-form" class="custom-model-form" onsubmit="saveCustomModel(event)">
+                    <input type="hidden" id="custom-model-id">
+                    <div class="custom-model-field-grid">
+                        <label class="form-group">
+                            <span>Anzeigename</span>
+                            <input id="custom-model-name" type="text" maxlength="80" required placeholder="z. B. Mein OpenRouter">
+                        </label>
+                        <label class="form-group">
+                            <span>Modell-ID</span>
+                            <input id="custom-model-model-id" type="text" maxlength="200" required placeholder="z. B. openai/gpt-4.1-mini">
+                        </label>
+                    </div>
+                    <label class="form-group">
+                        <span>Base URL</span>
+                        <input id="custom-model-base-url" type="url" required placeholder="https://api.example.com/v1">
+                        <small>Der Hub verwendet <code>/models</code> und <code>/chat/completions</code>.</small>
+                    </label>
+                    <label class="form-group">
+                        <span>API-Key</span>
+                        <input id="custom-model-api-key" type="password" autocomplete="new-password" placeholder="Beim Bearbeiten leer lassen, um ihn zu behalten">
+                        <small>Wird ausschließlich mit Windows DPAPI verschlüsselt gespeichert und nie zurückgegeben.</small>
+                    </label>
+                    <details class="custom-model-advanced">
+                        <summary>Erweiterte Einstellungen</summary>
+                        <div class="custom-model-field-grid">
+                            <label class="form-group">
+                                <span>API-Key-Header</span>
+                                <input id="custom-model-api-key-header" type="text" value="Authorization">
+                            </label>
+                            <label class="form-group">
+                                <span>Präfix</span>
+                                <input id="custom-model-api-key-prefix" type="text" value="Bearer" placeholder="Bearer">
+                            </label>
+                            <label class="form-group">
+                                <span>Temperatur</span>
+                                <input id="custom-model-temperature" type="number" min="0" max="2" step="0.1" value="0.7">
+                            </label>
+                            <label class="form-group">
+                                <span>Timeout (Sekunden)</span>
+                                <input id="custom-model-timeout" type="number" min="5" max="300" step="1" value="60">
+                            </label>
+                        </div>
+                        <label class="form-group">
+                            <span>Zusätzliche Header (JSON)</span>
+                            <textarea id="custom-model-extra-headers" rows="3" spellcheck="false" placeholder='{"X-Custom-Header": "value"}'>{}</textarea>
+                            <small>Gespeicherte Werte werden als <code>null</code> redigiert. <code>null</code> behält den Wert; entferne den Schlüssel, um den Header zu löschen.</small>
+                        </label>
+                        <label class="form-group">
+                            <span>Systemprompt</span>
+                            <textarea id="custom-model-system-prompt" rows="4" placeholder="Optionaler Systemprompt für dieses Modell"></textarea>
+                        </label>
+                        <label class="custom-model-checkbox">
+                            <input id="custom-model-verify-tls" type="checkbox" checked>
+                            <span>TLS-Zertifikat prüfen</span>
+                        </label>
+                    </details>
+                    <div id="custom-model-status" class="custom-model-status" aria-live="polite"></div>
+                    <div class="custom-model-actions">
+                        <button id="custom-model-test-btn" type="button" class="btn btn-secondary" onclick="testCustomModel()" disabled>Verbindung testen</button>
+                        <button id="custom-model-delete-btn" type="button" class="btn btn-danger" onclick="deleteCustomModel()" disabled>Löschen</button>
+                        <button id="custom-model-save-btn" type="submit" class="btn btn-primary">Speichern</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Preview Lightbox Modal -->
+    <div id="file-preview-modal" class="file-preview-overlay" onclick="closeFilePreview(event)">
+        <div class="file-preview-container" onclick="event.stopPropagation()">
+            <div class="file-preview-header">
+                <div class="file-preview-title">
+                    <span id="file-preview-icon" class="file-preview-type-icon">📄</span>
+                    <span id="file-preview-filename">filename.ext</span>
+                    <span id="file-preview-size" class="file-preview-meta"></span>
+                </div>
+                <button class="file-preview-close" onclick="closeFilePreview()" title="Schließen">&times;</button>
+            </div>
+            <div id="file-preview-body" class="file-preview-body">
+                <div class="file-preview-loading">
+                    <div class="file-preview-spinner"></div>
+                    <span>Lade Vorschau...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Code Review Modal Overlay (original Anti-Gravity design) -->
+    <div id="review-modal-overlay" class="review-modal-overlay" onclick="closeReviewModal(event)">
+        <div class="review-modal-content" onclick="event.stopPropagation()">
+            <div class="review-modal-header">
+                <div class="review-modal-title">
+                    <span class="git-diff-file-icon">📄</span>
+                    <span id="review-modal-filename">filename.ext</span>
+                </div>
+                <button class="btn btn-secondary btn-sm review-open-ide-btn"
+                    onclick="openCodeReviewWorkspace()"
+                    title="Zugehörigen Workspace in code-server öffnen">&lt;/&gt; Web-IDE</button>
+                <button class="review-modal-close-btn" onclick="closeReviewModal(event)">&times;</button>
+            </div>
+            <div class="review-modal-body">
+                <pre id="review-diff-container" class="review-diff-container"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Javascript Orchestrator logic -->
+    <script src="js/app.js?v=20260824-16"></script>
+    <script src="js/control-center.js?v=20260727-14"></script>
+</body>
+</html>

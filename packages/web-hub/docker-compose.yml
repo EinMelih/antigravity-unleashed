@@ -1,0 +1,47 @@
+# ============================================================
+#  Antigravity Web - Docker Compose
+#  All 5 loopback-coupled services in one host-networked container
+# ============================================================
+
+services:
+  hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${ANTIGRAVITY_HUB_VERSION:-0.1.0-dev}
+        VCS_REF: ${ANTIGRAVITY_HUB_BUILD_SHA:-development}
+    container_name: antigravity-hub
+    command: ["./start.sh", "all"]
+    # CDP discovery and service-to-service calls intentionally use loopback.
+    # Sharing the host network keeps those calls in the same namespace as the
+    # locally running Antigravity desktop application.
+    network_mode: host
+    init: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 20s
+    volumes:
+      - type: bind
+        source: ${ANTIGRAVITY_HUB_CONFIG_FILE:-./config.example.json}
+        target: /app/config.json
+        read_only: true
+      - antigravity-data:/app/data
+      - antigravity-logs:/app/logs
+      - antigravity-projects:/home/antigravity/Projects
+    environment:
+      PYTHONUNBUFFERED: "1"
+      ANTIGRAVITY_HUB_CONFIG: /app/config.json
+      ANTIGRAVITY_HUB_DB: /app/data/dashboard.db
+    restart: unless-stopped
+
+# --- Shared Resources ---
+volumes:
+  antigravity-data:
+    driver: local
+  antigravity-logs:
+    driver: local
+  antigravity-projects:
+    driver: local

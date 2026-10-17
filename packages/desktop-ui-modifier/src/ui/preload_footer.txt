@@ -1,0 +1,131 @@
+function showInjectionError(err) {
+    const displayError = () => {
+        if (!document.body) return false;
+        if (document.getElementById('antigravity-injection-error-popup')) return true;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'antigravity-injection-error-popup';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '50px';
+        overlay.style.right = '20px';
+        overlay.style.width = '380px';
+        overlay.style.background = 'rgba(24, 24, 27, 0.95)';
+        overlay.style.border = '1px solid #ef4444';
+        overlay.style.borderRadius = '8px';
+        overlay.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.5)';
+        overlay.style.zIndex = '999999';
+        overlay.style.padding = '16px';
+        overlay.style.color = '#fafafa';
+        overlay.style.fontFamily = 'ui-sans-serif, system-ui, sans-serif';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.gap = '10px';
+        overlay.style.backdropFilter = 'blur(4px)';
+
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.justifyContent = 'space-between';
+
+        const title = document.createElement('span');
+        title.innerHTML = '⚠️ <strong>AMS Injection Error</strong>';
+        title.style.fontSize = '13px';
+        title.style.color = '#ef4444';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Schließen';
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.border = '1px solid #27272a';
+        closeBtn.style.color = '#71717a';
+        closeBtn.style.borderRadius = '4px';
+        closeBtn.style.padding = '2px 8px';
+        closeBtn.style.fontSize = '10px';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.addEventListener('click', () => overlay.remove());
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+
+        const msg = document.createElement('div');
+        msg.style.fontSize = '11px';
+        msg.style.lineHeight = '1.4';
+        msg.style.color = '#d4d4d8';
+        msg.textContent = 'Das AMS Main-World-Skript konnte nicht geladen werden. Dies deutet meistens auf einen Syntax- oder Escaping-Fehler im Preload-Skript hin.';
+
+        const errorStack = document.createElement('pre');
+        errorStack.style.margin = '0';
+        errorStack.style.padding = '8px';
+        errorStack.style.background = 'rgba(0, 0, 0, 0.3)';
+        errorStack.style.borderRadius = '4px';
+        errorStack.style.fontSize = '10px';
+        errorStack.style.color = '#fca5a5';
+        errorStack.style.overflowX = 'auto';
+        errorStack.style.whiteSpace = 'pre-wrap';
+        errorStack.style.fontFamily = 'monospace';
+
+        let errDesc = err ? (err.stack || err.message || JSON.stringify(err)) : 'Unbekannter Fehler';
+        if (typeof err === 'object' && err.description) {
+            errDesc = err.description;
+        }
+        errorStack.textContent = errDesc;
+
+        overlay.appendChild(header);
+        overlay.appendChild(msg);
+        overlay.appendChild(errorStack);
+        document.body.appendChild(overlay);
+        return true;
+    };
+
+    if (!displayError()) {
+        const interval = setInterval(() => {
+            if (displayError()) {
+                clearInterval(interval);
+            }
+        }, 100);
+    }
+}
+
+securityTokenPromise
+    .then(() => {
+        const preparedScript = amsScriptContent;
+
+        // Monitor the main world script health
+        let lastHeartbeat = Date.now();
+        window.addEventListener('message', (event) => {
+            if (event.source === window &&
+                event.origin === window.location.origin &&
+                event.data && event.data.type === 'antigravity-heartbeat-ping') {
+                lastHeartbeat = Date.now();
+            }
+        });
+
+        // Watchdog checker loop (every 3 seconds)
+        setInterval(() => {
+            // If no heartbeat for more than 6 seconds, re-inject the script
+            if (Date.now() - lastHeartbeat > 6000) {
+                console.warn('[AMS Preload] Heartbeat lost! Re-injecting main world script...');
+                lastHeartbeat = Date.now(); // reset timer
+                electron_1.webFrame.executeJavaScript(preparedScript)
+                    .then(() => {
+                        console.log('[AMS Preload] Successfully re-injected main world script.');
+                    })
+                    .catch(err => {
+                        console.error('[AMS Preload] Failed to re-inject main world script:', err);
+                        showInjectionError(err);
+                    });
+            }
+        }, 3000);
+
+        // Inject the main world script
+        electron_1.webFrame.executeJavaScript(preparedScript)
+            .then(() => {
+                console.log('[AMS] Successfully executed main world script via webFrame.');
+            })
+            .catch(err => {
+                console.error('[AMS] Failed to execute main world script via webFrame:', err);
+                showInjectionError(err);
+            });
+    })
+    .catch(err => {
+        console.error('[AMS Preload] Failed to retrieve security token:', err);
+    });

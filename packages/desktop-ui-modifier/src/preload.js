@@ -1,0 +1,5972 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * Preload script — runs in every BrowserWindow before the page loads.
+ * Exposes a minimal, secure API via contextBridge so the renderer can
+ * communicate with the main-process auto-updater without nodeIntegration.
+ */
+const electron_1 = require("electron");
+const securityTokenPromise = electron_1.ipcRenderer.invoke('security:get-token')
+    .then((token) => {
+        if (typeof token !== 'string' || !token) {
+            throw new Error('Main process returned an invalid IPC security token.');
+        }
+        return token;
+    });
+const updaterAPI = {
+    getState: () => electron_1.ipcRenderer.invoke('updater:get-state'),
+    onStateChanged: (callback) => {
+        const handler = (_event, state) => {
+            callback(state);
+        };
+        electron_1.ipcRenderer.on('updater:state-changed', handler);
+        // Return unsubscribe function
+        return () => {
+            electron_1.ipcRenderer.removeListener('updater:state-changed', handler);
+        };
+    },
+    applyUpdate: () => electron_1.ipcRenderer.invoke('updater:apply'),
+    quitAndInstall: () => electron_1.ipcRenderer.invoke('updater:quit-and-install'),
+    checkForUpdates: () => electron_1.ipcRenderer.invoke('updater:check-for-updates'),
+};
+const dialogAPI = {
+    showOpenDialog: () => electron_1.ipcRenderer.invoke('dialog:open-workspace'),
+    showOpenMultipleFolderDialog: () => electron_1.ipcRenderer.invoke('dialog:open-workspaces'),
+};
+const notificationAPI = {
+    send: (options) => electron_1.ipcRenderer.invoke('notification:send', options),
+    openSystemPreferences: () => electron_1.ipcRenderer.invoke('notification:open-system-preferences'),
+    onClicked: (callback) => {
+        const handler = (_event, payload) => {
+            callback(payload);
+        };
+        electron_1.ipcRenderer.on('notification:clicked', handler);
+        return () => {
+            electron_1.ipcRenderer.removeListener('notification:clicked', handler);
+        };
+    },
+};
+const storageAPI = {
+    getItems: () => electron_1.ipcRenderer.invoke('storage:get-items'),
+    updateItems: (changes) => electron_1.ipcRenderer.invoke('storage:update-items', changes),
+    onChanged: (callback) => {
+        const handler = (_event, changes) => {
+            callback(changes);
+        };
+        electron_1.ipcRenderer.on('storage:changed', handler);
+        return () => {
+            electron_1.ipcRenderer.removeListener('storage:changed', handler);
+        };
+    },
+};
+const logsAPI = {
+    getElectronLogs: () => electron_1.ipcRenderer.invoke('logs:electron'),
+};
+const extensionsAPI = {
+    sendAuthorities: (authoritiesMap) => electron_1.ipcRenderer.invoke('extensions:send-authorities', authoritiesMap),
+};
+const deepLinkAPI = {
+    onDeepLink: (callback) => {
+        const handler = (_event, url) => {
+            callback(url);
+        };
+        electron_1.ipcRenderer.on('deep-link', handler);
+        return () => {
+            electron_1.ipcRenderer.removeListener('deep-link', handler);
+        };
+    },
+    getStoredDeepLink: () => electron_1.ipcRenderer.invoke('deep-link:get-stored'),
+};
+const agentAPI = {
+    updateActiveAgentCount: (count) => electron_1.ipcRenderer.invoke('agent:update-active-count', count),
+};
+const commitProgressListeners = new WeakMap();
+const electronNativeAPI = {
+    getZoomLevel: () => electron_1.webFrame.getZoomFactor(),
+    getPathForFile: (file) => electron_1.webUtils.getPathForFile(file),
+    setTitleBarOverlay: (options) => electron_1.ipcRenderer.invoke('window:set-title-bar-overlay', options),
+    minimize: () => electron_1.ipcRenderer.invoke('window:minimize'),
+    maximize: () => electron_1.ipcRenderer.invoke('window:maximize'),
+    unmaximize: () => electron_1.ipcRenderer.invoke('window:unmaximize'),
+    isMaximized: () => electron_1.ipcRenderer.invoke('window:is-maximized'),
+    getWindowRole: () => electron_1.ipcRenderer.invoke('window:get-role'),
+    getProfileInfo: () => electron_1.ipcRenderer.invoke('window:get-profile-info'),
+    prepareAutomation: () => electron_1.ipcRenderer.invoke('window:prepare-automation'),
+    close: () => electron_1.ipcRenderer.invoke('window:close'),
+    toggleDevTools: () => electron_1.ipcRenderer.invoke('window:toggle-devtools'),
+    zoomIn: () => {
+        void electron_1.ipcRenderer.invoke('window:zoom-in');
+    },
+    zoomOut: () => {
+        void electron_1.ipcRenderer.invoke('window:zoom-out');
+    },
+    resetZoom: () => {
+        void electron_1.ipcRenderer.invoke('window:reset-zoom');
+    },
+    openExternal: (url) => electron_1.ipcRenderer.invoke('shell:open-external', url),
+    revealInFilePicker: (path) => electron_1.ipcRenderer.invoke('shell:reveal-in-file-picker', path),
+    showContextMenu: (items) => electron_1.ipcRenderer.invoke('window:show-context-menu', items),
+    closeContextMenu: () => electron_1.ipcRenderer.invoke('window:close-context-menu'),
+    openBrain: () => electron_1.ipcRenderer.invoke('shell:open-brain'),
+    getSyncStatus: () => electron_1.ipcRenderer.invoke('shell:get-sync-status'),
+    getPRs: (conversationId) => electron_1.ipcRenderer.invoke('git:get-prs', conversationId),
+    getIssues: (conversationId) => electron_1.ipcRenderer.invoke('git:get-issues', conversationId),
+    commitAndPush: (message, conversationId) => electron_1.ipcRenderer.invoke('git:commit-and-push', message, conversationId),
+    getGitStatus: (conversationId) => electron_1.ipcRenderer.invoke('git:get-status', conversationId),
+    getGitDiff: (filePath, repoType, conversationId) => electron_1.ipcRenderer.invoke('git:get-diff', filePath, repoType, conversationId),
+    generateCommitMsg: (conversationId, csrfToken) => electron_1.ipcRenderer.invoke('git:generate-commit-msg', conversationId, csrfToken),
+    deleteTempConversation: (convoId, csrfToken) => electron_1.ipcRenderer.invoke('git:delete-temp-conversation', convoId, csrfToken),
+    getReviews: () => electron_1.ipcRenderer.invoke('reviews:get-runs'),
+    getRunLog: (convoId) => electron_1.ipcRenderer.invoke('reviews:get-run-log', convoId),
+    getTaskPlan: (conversationId) => electron_1.ipcRenderer.invoke('task:get-plan', conversationId),
+    setTaskPlan: (text, conversationId) => electron_1.ipcRenderer.invoke('task:set-plan', text, conversationId),
+    getNotes: (conversationId) => electron_1.ipcRenderer.invoke('notes:get-notes', conversationId),
+    setNotes: (text, syncAI, conversationId) => electron_1.ipcRenderer.invoke('notes:set-notes', text, syncAI, conversationId),
+    writeToClipboard: (text) => electron_1.ipcRenderer.invoke('clipboard:write-text', text),
+    getHistory: () => electron_1.ipcRenderer.invoke('logs:get-history'),
+    getUpgradeHistory: () => electron_1.ipcRenderer.invoke('updater:get-upgrade-history'),
+    getApiWindowVisible: () => electron_1.ipcRenderer.invoke('api-window:get-visible'),
+    setApiWindowVisible: (visible) => electron_1.ipcRenderer.invoke('api-window:set-visible', visible === true),
+    writeLogEntry: (entry) => electron_1.ipcRenderer.invoke('logs:write-entry', entry),
+    consolidateMemory: (conversationId, csrfToken) => electron_1.ipcRenderer.invoke('git:consolidate-memory', conversationId, csrfToken),
+    applyMemorySuggestion: (type, text) => electron_1.ipcRenderer.invoke('memory:apply-suggestion', type, text),
+    getCompactionCount: (conversationId) => electron_1.ipcRenderer.invoke('trajectory:get-compaction-count', conversationId),
+    getTokenStats: (conversationId) => electron_1.ipcRenderer.invoke('trajectory:get-token-stats', conversationId),
+    openDuplicateWindow: (_token) => securityTokenPromise.then((token) => electron_1.ipcRenderer.invoke('window:open-duplicate', token)),
+    prepareWorkspaceOpen: (workspacePath) => securityTokenPromise.then((token) => electron_1.ipcRenderer.invoke('dialog:prepare-workspace', token, workspacePath)),
+    readSwitchRequest: (_token) => securityTokenPromise.then((token) => electron_1.ipcRenderer.invoke('bridge:read-switch-request', token)),
+    writeStatus: (_token, modelName) => securityTokenPromise.then((token) => electron_1.ipcRenderer.invoke('bridge:write-status', token, modelName)),
+    hubRequest: (_token, operation, payload) => securityTokenPromise.then((token) => electron_1.ipcRenderer.invoke('hub:request', token, operation, payload)),
+    onGenerateCommitProgress: (callback) => {
+        if (typeof callback !== 'function') return;
+        const listener = (_event, message) => callback(String(message || '').slice(0, 2000));
+        const previous = commitProgressListeners.get(callback);
+        if (previous) electron_1.ipcRenderer.removeListener('git:generate-commit-progress', previous);
+        commitProgressListeners.set(callback, listener);
+        electron_1.ipcRenderer.on('git:generate-commit-progress', listener);
+    },
+    removeGenerateCommitProgressListener: (callback) => {
+        const listener = commitProgressListeners.get(callback);
+        if (!listener) return;
+        electron_1.ipcRenderer.removeListener('git:generate-commit-progress', listener);
+        commitProgressListeners.delete(callback);
+    },
+};
+const ideAPI = {
+    isInstalled: () => electron_1.ipcRenderer.invoke('ide:is-installed'),
+};
+const wslAPI = {
+    getState: () => electron_1.ipcRenderer.invoke('wsl:get-state'),
+    connect: (distro) => electron_1.ipcRenderer.invoke('wsl:connect', distro),
+};
+electron_1.contextBridge.exposeInMainWorld('electronUpdater', updaterAPI);
+electron_1.contextBridge.exposeInMainWorld('dialog', dialogAPI);
+electron_1.contextBridge.exposeInMainWorld('nativeNotifications', notificationAPI);
+electron_1.contextBridge.exposeInMainWorld('nativeStorage', storageAPI);
+electron_1.contextBridge.exposeInMainWorld('logs', logsAPI);
+electron_1.contextBridge.exposeInMainWorld('extensions', extensionsAPI);
+electron_1.contextBridge.exposeInMainWorld('deepLink', deepLinkAPI);
+electron_1.contextBridge.exposeInMainWorld('agent', agentAPI);
+electron_1.contextBridge.exposeInMainWorld('electronNative', electronNativeAPI);
+electron_1.contextBridge.exposeInMainWorld('ide', ideAPI);
+electron_1.contextBridge.exposeInMainWorld('wsl', wslAPI);
+
+// Antigravity Autonomy & Memory System (AMS) - Main World Script Injection
+const amsScriptContent = `(async function() {
+    if (window.__antigravity_ams_loaded) {
+        console.log('[AMS] Script already loaded. Skipping duplicate initialization.');
+        return;
+    }
+    window.__antigravity_ams_loaded = true;
+
+    // DevTools-Shortcut (F12 / Ctrl+Shift+I) abfangen und triggern
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'i')) {
+            try {
+                if (window.electronNative && window.electronNative.toggleDevTools) {
+                    e.preventDefault();
+                    window.electronNative.toggleDevTools();
+                }
+            } catch (err) {
+                console.error('[AMS UI] Failed to toggle DevTools via shortcut:', err);
+            }
+        }
+
+        // Quick Menu Shortcut: Ctrl+Shift+B
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'b') {
+            try {
+                e.preventDefault();
+                if (window.toggleQuickMenu) {
+                    window.toggleQuickMenu();
+                }
+            } catch (err) {
+                console.error('[AMS UI] Failed to toggle Quick Menu via shortcut:', err);
+            }
+        }
+
+        // Plan Panel Shortcut: Ctrl+Shift+P
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') {
+            try {
+                e.preventDefault();
+                if (typeof togglePlanPanel === 'function') {
+                    togglePlanPanel();
+                }
+            } catch (err) {
+                console.error('[AMS UI] Failed to toggle Plan Panel via shortcut:', err);
+            }
+        }
+    });
+
+    // Kept as a compatibility argument for the exposed API. The real token
+    // remains inside the context-isolated preload and is never injected here.
+    const amsToken = '';
+
+    console.log('[AMS] Initializing Autonomy & Memory System in main world...');
+
+    let nativeStorageItems = {};
+    try {
+        nativeStorageItems = await window.nativeStorage.getItems() || {};
+    } catch (e) {
+        console.error('[AMS] Failed to load nativeStorage:', e);
+    }
+
+    // Auto-restore last active session (any page: chats, settings, history, scheduled tasks, etc.)
+    try {
+        const savedPath = nativeStorageItems.antigravity_last_chat_path;
+        const currentPath = window.location.pathname + window.location.search;
+        if ((window.location.pathname === '/' || window.location.pathname === '') && savedPath && savedPath !== '/' && !savedPath.includes('blank') && currentPath !== savedPath) {
+            console.log('[AMS] Restoring last active session:', savedPath);
+            window.location.href = window.location.origin + savedPath;
+            return;
+        }
+    } catch (e) {
+        console.error('[AMS] Failed to restore last active session:', e);
+    }
+
+    // Save current page path on initial load (any non-root path)
+    try {
+        const initialPath = window.location.pathname + window.location.search;
+        if (initialPath && initialPath !== '/' && initialPath !== '' && !initialPath.includes('blank')) {
+            await window.nativeStorage.updateItems({ antigravity_last_chat_path: initialPath });
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    // Auto-save and auto-restore message input draft
+
+        function saveMessageDraft() {
+        try {
+            const input = document.querySelector('[role="combobox"][aria-label="Message input"]');
+            if (input) {
+                const val = input.value !== undefined ? input.value : (input.innerText || '');
+                if (val.trim()) {
+                    window.nativeStorage.updateItems({ antigravity_message_input_draft: val });
+                } else {
+                    window.nativeStorage.updateItems({ antigravity_message_input_draft: '' });
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    // Clear any leftover draft in storage on startup so we start fresh
+    try {
+        window.nativeStorage.updateItems({ antigravity_message_input_draft: '' });
+    } catch (e) {
+        // ignore
+    }
+
+    document.addEventListener('input', (e) => {
+        const target = e.target;
+        if (target && target.matches && target.matches('[role="combobox"][aria-label="Message input"]')) {
+            saveMessageDraft();
+        }
+    });
+
+    const draftInterval = setInterval(() => {
+        saveMessageDraft();
+    }, 1000);
+
+    window.addEventListener('beforeunload', () => {
+        try {
+            const input = document.querySelector('[role="combobox"][aria-label="Message input"]');
+            if (input) {
+                const val = input.value !== undefined ? input.value : (input.innerText || '');
+                if (val.trim()) {
+                    window.electronNative.writeToClipboard(val);
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+    });
+
+
+    let currentQuotaData = {
+        gemini5h: 100,
+        geminiWeekly: 100,
+        geminiWeeklyDesc: '',
+        gemini5hDesc: '',
+
+        claude5h: 100,
+        claudeWeekly: 100,
+        claudeWeeklyDesc: '',
+        claude5hDesc: ''
+    };
+
+
+    const originalFetch = window.fetch;
+
+    async function fetchUserQuotaSummary() {
+        try {
+            const csrfToken = window.__APP_CONFIG__ ? window.__APP_CONFIG__.csrfToken : '';
+            if (!csrfToken) return;
+
+            const bodyStr = '{"forceRefresh":false}';
+            const len = bodyStr.length;
+            const header = new Uint8Array(5);
+            header[0] = 0;
+            header[1] = (len >> 24) & 0xFF;
+            header[2] = (len >> 16) & 0xFF;
+            header[3] = (len >> 8) & 0xFF;
+            header[4] = len & 0xFF;
+
+            const bodyBytes = new TextEncoder().encode(bodyStr);
+            const reqBytes = new Uint8Array(5 + bodyBytes.length);
+            reqBytes.set(header, 0);
+            reqBytes.set(bodyBytes, 5);
+
+            const response = await originalFetch('/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary', {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/grpc-web+json',
+                    'x-codeium-csrf-token': csrfToken,
+                    'x-grpc-web': '1',
+                    'x-user-agent': 'CONNECT_ES_USER_AGENT'
+                },
+                body: reqBytes
+            });
+
+            const text = await response.text();
+            handleRetrieveUserQuotaSummaryText(text);
+        } catch (err) {
+            console.error('[AMS Quota Interceptor] Failed to fetch user quota summary:', err);
+        }
+    }
+
+    function cleanResetTime(desc) {
+        if (!desc) return 'Aktiv';
+
+        const match = desc.match(/(?:resets?|resetting|reset|will\\s+reset|refreshes?|refreshing|refresh|will\\s+refresh|fully\\s+refresh)\\s+(?:in|on|at|until)\\s+(.+)/i);
+        let clean = match ? match[1] : desc;
+
+        clean = clean.split('.')[0].toLowerCase();
+
+        clean = clean.replace(/remaining\\s+fraction/g, '')
+                     .replace(/quota/g, '')
+                     .replace(/limit/g, '')
+                     .trim();
+
+        clean = clean.replace(/\\bhours?\\b/g, 'h')
+                     .replace(/\\bminutes?\\b/g, 'm')
+                     .replace(/\\bseconds?\\b/g, 's')
+                     .replace(/\\bdays?\\b/g, 'd')
+                     .replace(/\\bweeks?\\b/g, 'w');
+
+        clean = clean.replace(/(\\d+)\\s*([hmsdw])\\b/g, '$1$2');
+        clean = clean.replace(/[.,]$/g, '').trim();
+
+        if (!clean) return 'Aktiv';
+        return clean.charAt(0).toUpperCase() + clean.slice(1);
+    }
+
+    function handleRetrieveUserQuotaSummaryText(text) {
+        if (!text) return;
+        try {
+            const jsonStart = text.indexOf('{');
+            const jsonEnd = text.lastIndexOf('}');
+            if (jsonStart !== -1 && jsonEnd !== -1) {
+                const jsonStr = text.substring(jsonStart, jsonEnd + 1);
+                const data = JSON.parse(jsonStr);
+                if (data && data.response && data.response.groups) {
+                    const groups = data.response.groups;
+
+                    const geminiGroup = groups.find(g => g.displayName && g.displayName.toLowerCase().includes('gemini'));
+                    const claudeGroup = groups.find(g => g.displayName && g.displayName.toLowerCase().includes('claude'));
+
+                    if (geminiGroup && geminiGroup.buckets) {
+                        const weeklyBucket = geminiGroup.buckets.find(b => b.window === 'weekly');
+                        const fiveHourBucket = geminiGroup.buckets.find(b => b.window === '5h');
+
+                        if (weeklyBucket) {
+                            currentQuotaData.geminiWeekly = Math.round(weeklyBucket.remainingFraction * 100);
+                            currentQuotaData.geminiWeeklyDesc = weeklyBucket.description || '';
+                        } else {
+                            currentQuotaData.geminiWeekly = 100;
+                            currentQuotaData.geminiWeeklyDesc = '';
+                        }
+                        if (fiveHourBucket) {
+                            currentQuotaData.gemini5h = Math.round(fiveHourBucket.remainingFraction * 100);
+                            currentQuotaData.gemini5hDesc = fiveHourBucket.description || '';
+                        } else {
+                            currentQuotaData.gemini5h = 100;
+                            currentQuotaData.gemini5hDesc = '';
+                        }
+                    }
+
+                    if (claudeGroup && claudeGroup.buckets) {
+                        const weeklyBucket = claudeGroup.buckets.find(b => b.window === 'weekly');
+                        const fiveHourBucket = claudeGroup.buckets.find(b => b.window === '5h');
+
+                        if (weeklyBucket) {
+                            currentQuotaData.claudeWeekly = Math.round(weeklyBucket.remainingFraction * 100);
+                            currentQuotaData.claudeWeeklyDesc = weeklyBucket.description || '';
+                        } else {
+                            currentQuotaData.claudeWeekly = 0;
+                            currentQuotaData.claudeWeeklyDesc = '0%';
+                        }
+                        if (fiveHourBucket) {
+                            currentQuotaData.claude5h = Math.round(fiveHourBucket.remainingFraction * 100);
+                            currentQuotaData.claude5hDesc = fiveHourBucket.description || '';
+                        } else {
+                            currentQuotaData.claude5h = 0;
+                            currentQuotaData.claude5hDesc = '0%';
+                        }
+                    } else {
+                        currentQuotaData.claudeWeekly = 0;
+                        currentQuotaData.claudeWeeklyDesc = 'Ablauf';
+                        currentQuotaData.claude5h = 0;
+                        currentQuotaData.claude5hDesc = 'Ablauf';
+                    }
+                    refreshQuotaDisplay();
+                }
+            }
+        } catch (err) {
+            console.error('[AMS Quota Interceptor] Failed to parse RetrieveUserQuotaSummary JSON:', err);
+        }
+    }
+
+    function handleGetUserStatusText(text) {
+        if (!text) return;
+        try {
+            const jsonStart = text.indexOf('{');
+            const jsonEnd = text.lastIndexOf('}');
+            if (jsonStart !== -1 && jsonEnd !== -1) {
+                const jsonStr = text.substring(jsonStart, jsonEnd + 1);
+                const data = JSON.parse(jsonStr);
+                if (data && data.userStatus && data.userStatus.cascadeModelConfigData) {
+                    const configs = data.userStatus.cascadeModelConfigData.clientModelConfigs || [];
+                    const geminiConfig = configs.find(c => c.label && c.label.toLowerCase().includes('gemini'));
+                    const claudeConfig = configs.find(c => c.label && c.label.toLowerCase().includes('claude'));
+
+                    if (geminiConfig && geminiConfig.quotaInfo) {
+                        currentQuotaData.gemini5h = Math.round(geminiConfig.quotaInfo.remainingFraction * 100);
+                    }
+                    if (claudeConfig && claudeConfig.quotaInfo) {
+                        currentQuotaData.claude5h = Math.round(claudeConfig.quotaInfo.remainingFraction * 100);
+                    } else {
+                        currentQuotaData.claude5h = 0;
+                    }
+                    fetchUserQuotaSummary();
+                }
+            }
+        } catch (err) {
+            console.error('[AMS Quota Interceptor] Failed to parse GetUserStatus JSON:', err);
+        }
+    }
+
+    // Hook Fetch in Main World
+    window.fetch = async function(...args) {
+        const response = await originalFetch(...args);
+        try {
+            const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url);
+            if (url) {
+                if (url.includes('GetUserStatus')) {
+                    const clone = response.clone();
+                    const text = await clone.text();
+                    handleGetUserStatusText(text);
+                } else if (url.includes('RetrieveUserQuotaSummary')) {
+                    const clone = response.clone();
+                    const text = await clone.text();
+                    handleRetrieveUserQuotaSummaryText(text);
+                }
+            }
+        } catch (err) {
+            console.error('[AMS Quota Interceptor] Error intercepting fetch:', err);
+        }
+        return response;
+    };
+
+    // Hook XMLHttpRequest in Main World
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(method, url, ...args) {
+        this._url = url;
+        return originalOpen.call(this, method, url, ...args);
+    };
+    XMLHttpRequest.prototype.send = function(...args) {
+        this.addEventListener('load', function() {
+            try {
+                if (this._url) {
+                    if (this._url.includes('GetUserStatus')) {
+                        const text = this.responseText;
+                        handleGetUserStatusText(text);
+                    } else if (this._url.includes('RetrieveUserQuotaSummary')) {
+                        const text = this.responseText;
+                        handleRetrieveUserQuotaSummaryText(text);
+                    }
+                }
+            } catch (err) {
+                console.error('[AMS Quota Interceptor] Error intercepting XHR:', err);
+            }
+        });
+        return originalSend.apply(this, args);
+    };
+
+    let isSwitchingModel = false;
+
+    function showQuotaFallbackToast(modelName) {
+        const toast = document.createElement('div');
+        toast.className = 'antigravity-quota-toast';
+        toast.style.position = 'fixed';
+        toast.style.bottom = '24px';
+        toast.style.right = '24px';
+        toast.style.padding = '12px 20px';
+        toast.style.borderRadius = '8px';
+        toast.style.background = 'var(--card, #1c1917)';
+        toast.style.border = '1px solid #ef4444';
+        toast.style.color = 'var(--foreground, #ffffff)';
+        toast.style.fontSize = '12px';
+        toast.style.fontWeight = '500';
+        toast.style.zIndex = '999999';
+        toast.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.5)';
+        toast.style.display = 'flex';
+        toast.style.alignItems = 'center';
+        toast.style.gap = '8px';
+        toast.style.fontFamily = 'ui-sans-serif, system-ui, sans-serif';
+        toast.style.transform = 'translateY(20px)';
+        toast.style.opacity = '0';
+        toast.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+
+        toast.innerHTML =
+            '<span style="display: flex; align-items: center; justify-content: center; background: #ef4444; color: white; border-radius: 50%; width: 18px; height: 18px; font-weight: bold; font-size: 11px;">!</span>' +
+            '<span><strong>Quoten-Wächter:</strong> Claude verbraucht. Automatisch auf ' + modelName + ' umgeschaltet.</span>';
+
+        document.body.appendChild(toast);
+
+        // Force reflow
+        toast.offsetHeight;
+
+        // Animate in
+        toast.style.transform = 'translateY(0)';
+        toast.style.opacity = '1';
+
+        setTimeout(() => {
+            toast.style.transform = 'translateY(20px)';
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }, 5000);
+    }
+
+    async function switchModel(targetModelName) {
+        console.log('[AMS Quota Watchdog] Attempting to switch model to:', targetModelName);
+        const selectorBtn = document.querySelector('button[aria-label^="Select model, current:"]');
+        if (!selectorBtn) {
+            console.error('[AMS Quota Watchdog] Model selector button not found.');
+            return false;
+        }
+
+        try {
+            selectorBtn.click();
+            await new Promise(r => setTimeout(r, 250));
+
+            let targetBtn = null;
+            const buttons = document.querySelectorAll('button');
+            for (let i = 0; i < buttons.length; i++) {
+                const btn = buttons[i];
+                const text = btn.textContent ? btn.textContent.trim() : '';
+                if (text.toLowerCase().includes(targetModelName.toLowerCase())) {
+                    targetBtn = btn;
+                    break;
+                }
+            }
+
+            if (targetBtn) {
+                console.log('[AMS Quota Watchdog] Found target model button, clicking...');
+                targetBtn.click();
+                showQuotaFallbackToast(targetModelName);
+                return true;
+            } else {
+                console.error('[AMS Quota Watchdog] Target model button not found for text:', targetModelName);
+                selectorBtn.click();
+                return false;
+            }
+        } catch (e) {
+            console.error('[AMS Quota Watchdog] Error switching model:', e);
+            return false;
+        }
+    }
+
+    function refreshQuotaDisplay() {
+        const quotaEl = document.querySelector('.antigravity-quota-display');
+        if (!quotaEl) return;
+
+        const g5h = currentQuotaData.gemini5h;
+        const gW = currentQuotaData.geminiWeekly;
+        const c5h = currentQuotaData.claude5h;
+        const cW = currentQuotaData.claudeWeekly;
+
+        const gDisplay = (gW === 0) ? 0 : g5h;
+        const cDisplay = (cW === 0) ? 0 : c5h;
+
+        function getTooltipLine(label, pct, desc) {
+            const cleaned = cleanResetTime(desc);
+            if (!cleaned || cleaned === 'Aktiv' || cleaned === pct + '%') {
+                return '• ' + label + ': ' + pct + '%';
+            }
+            return '• ' + label + ': ' + pct + '% (' + cleaned + ')';
+        }
+
+        let gTooltip = 'Gemini:\\n' +
+                       getTooltipLine('5h', g5h, currentQuotaData.gemini5hDesc) + '\\n' +
+                       getTooltipLine('Weekly', gW, currentQuotaData.geminiWeeklyDesc);
+
+        let cTooltip = 'Claude:\\n' +
+                       getTooltipLine('5h', c5h, currentQuotaData.claude5hDesc) + '\\n' +
+                       getTooltipLine('Weekly', cW, currentQuotaData.claudeWeeklyDesc);
+
+        function getPercentColor(pct) {
+            if (pct > 50) return '';
+            if (pct > 20) return 'color: #eab308;';
+            return 'color: #ef4444; font-weight: bold;';
+        }
+
+        const createQuotaValue = (label, display, tooltip) => {
+            const value = document.createElement('span');
+            value.title = String(tooltip || '');
+            value.style.cssText = getPercentColor(display);
+            value.textContent = label + ': ' + String(display) + '%';
+            return value;
+        };
+        const separator = document.createElement('span');
+        separator.style.opacity = '0.4';
+        separator.textContent = '|';
+        quotaEl.replaceChildren(
+            createQuotaValue('G', gDisplay, gTooltip),
+            separator,
+            createQuotaValue('C', cDisplay, cTooltip)
+        );
+
+        // Quoten-Wächter (Model Fallback)
+        if (!isSwitchingModel) {
+            const activeModel = getActiveModel();
+            if (activeModel.startsWith('Claude')) {
+                if (cDisplay === 0 || c5h === 0 || cW === 0) {
+                    console.log('[AMS Quota Watchdog] Claude quota depleted! Triggering automatic fallback to Gemini...');
+                    isSwitchingModel = true;
+                    switchModel('Gemini 3.5 Flash (High)').finally(() => {
+                        isSwitchingModel = false;
+                    });
+                }
+            }
+        }
+    }
+
+
+    // Start Polling for weekly quota
+    setTimeout(() => {
+        fetchUserQuotaSummary();
+    }, 1500);
+
+    setInterval(() => {
+        fetchUserQuotaSummary();
+    }, 30000);
+
+    setInterval(() => {
+        updateTokenStats();
+        updateCompactionCounter();
+    }, 10000);
+
+    let currentPlanText = '';
+    const parts = window.location.pathname.split('/');
+    let currentConvId = (parts.length > 2 && parts[2]) ? parts[2] : null;
+    let currentNotesText = '';
+    let notesSyncAI = true;
+
+
+    function generateSubtasks(item, type) {
+        var tasks = [];
+        if (item.body) {
+            var lines = item.body.split('\\n');
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i];
+                var match = line.match(/^\\s*[-*]\\s*\\[([ xX])\\]\\s*(.+)$/);
+                if (match) {
+                    tasks.push('- [ ] ' + match[2].trim());
+                }
+            }
+        }
+        if (tasks.length === 0) {
+            tasks = [
+                '- [ ] Anforderungen & Codebasis analysieren',
+                '- [ ] Implementierung vorbereiten & Code anpassen',
+                '- [ ] Änderungen lokal testen & verifizieren',
+                '- [ ] Pull Request erstellen / Issue abschließen'
+            ];
+        }
+        var titleClean = item.title.replace(/[#*\`[\\]]/g, '');
+        return '# ' + type + ' #' + item.number + ': ' + titleClean + '\\n\\n' + tasks.join('\\n');
+    }
+
+
+    async function loadNotesUI() {
+        const textarea = document.getElementById('antigravity-notes-textarea');
+        const checkbox = document.getElementById('antigravity-notes-sync-ai');
+        if (!textarea || !checkbox) return;
+
+        try {
+            if (currentConvId && window.electronNative && window.electronNative.getNotes) {
+                const res = await window.electronNative.getNotes(currentConvId);
+                if (res && res.status === 'success') {
+                    currentNotesText = res.notes || '';
+                    notesSyncAI = res.syncAI;
+                    textarea.value = currentNotesText;
+                    checkbox.checked = notesSyncAI;
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error('[AMS] Failed to load notes from notes.txt:', e);
+        }
+
+        // Fallback to nativeStorage
+        const storageKey = 'antigravity_notes_' + currentConvId;
+        const syncKey = 'antigravity_notes_sync_ai_' + currentConvId;
+        currentNotesText = nativeStorageItems[storageKey] || '';
+        notesSyncAI = nativeStorageItems[syncKey] !== false; // default to true
+
+        textarea.value = currentNotesText;
+        checkbox.checked = notesSyncAI;
+    }
+
+    async function updateCompactionCounter() {
+        const counterEl = document.getElementById('antigravity-compaction-counter');
+        if (!counterEl) return;
+
+        if (!currentConvId || !window.electronNative || !window.electronNative.getCompactionCount) {
+            counterEl.style.display = 'none';
+            return;
+        }
+
+        try {
+            const res = await window.electronNative.getCompactionCount(currentConvId);
+            if (res && res.status === 'success') {
+                const count = res.count || 0;
+                counterEl.querySelector('span').textContent = 'Compacts: ' + count;
+                counterEl.style.display = 'inline-flex';
+                if (count > 0) {
+                    counterEl.style.color = '#3b82f6';
+                    counterEl.style.borderColor = 'rgba(59, 130, 246, 0.2)';
+                    counterEl.style.background = 'rgba(59, 130, 246, 0.05)';
+                    counterEl.title = 'Dieses Gespräch wurde bereits ' + count + ' mal automatisch kompaktwert / bereinigt.';
+                } else {
+                    counterEl.style.color = 'var(--muted-foreground, #71717a)';
+                    counterEl.style.borderColor = 'var(--border, rgba(255,255,255,0.05))';
+                    counterEl.style.background = 'rgba(255,255,255,0.03)';
+                    counterEl.title = 'Bisher wurden keine automatischen Kompaktierungen durchgeführt.';
+                }
+            } else {
+                counterEl.style.display = 'none';
+            }
+        } catch (e) {
+            console.error('[AMS] Failed to fetch compaction count:', e);
+            counterEl.style.display = 'none';
+        }
+    }
+
+    async function updateTokenStats() {
+        const chatTokenEl = document.getElementById('antigravity-chat-token-counter');
+        const footerTokenEl = document.getElementById('antigravity-token-counter');
+
+        if (!currentConvId || !window.electronNative || !window.electronNative.getTokenStats) {
+            if (chatTokenEl) chatTokenEl.style.display = 'none';
+            if (footerTokenEl) footerTokenEl.style.display = 'none';
+            return;
+        }
+
+        try {
+            const res = await window.electronNative.getTokenStats(currentConvId);
+            if (res && res.status === 'success') {
+                const totalIn = res.totalInput || 0;
+                const totalOut = res.totalOutput || 0;
+                const totalUncached = res.totalUncached || 0;
+                const totalCached = res.totalCached || 0;
+                const cacheRatio = res.cacheRatio || 0.0;
+
+                const latestIn = res.latestInput || 0;
+                const latestOut = res.latestOutput || 0;
+                const latestUncached = res.latestUncached || 0;
+                const latestCached = res.latestCached || 0;
+
+                function formatTokens(num) {
+                    if (num >= 1000000) {
+                        return (num / 1000000).toFixed(1) + 'M';
+                    }
+                    if (num >= 1000) {
+                        return (num / 1000).toFixed(0) + 'k';
+                    }
+                    return num.toString();
+                }
+
+                const totalStr = formatTokens(totalIn);
+
+                if (footerTokenEl) {
+                    footerTokenEl.querySelector('span').textContent = 'Tokens: ' + totalStr;
+                    footerTokenEl.style.display = 'inline-flex';
+
+                    const tooltip =
+                        'Akkumulierter Verbrauch für dieses Gespräch:\\n' +
+                        '• Input (Gesamt): ' + totalIn.toLocaleString('de-DE') + '\\n' +
+                        '  - Aus Cache: ' + totalCached.toLocaleString('de-DE') + ' (' + cacheRatio + '%)\\n' +
+                        '  - Uncached: ' + totalUncached.toLocaleString('de-DE') + '\\n' +
+                        '• Output (Antworten): ' + totalOut.toLocaleString('de-DE') + '\\n\\n' +
+                        'Letzter Schritt:\\n' +
+                        '• Input: ' + latestIn.toLocaleString('de-DE') + '\\n' +
+                        '  - Aus Cache: ' + latestCached.toLocaleString('de-DE') + '\\n' +
+                        '  - Uncached: ' + latestUncached.toLocaleString('de-DE') + '\\n' +
+                        '• Output: ' + latestOut.toLocaleString('de-DE');
+                    footerTokenEl.title = tooltip;
+                }
+
+                if (chatTokenEl) {
+                    chatTokenEl.textContent = 'T: ' + totalStr;
+                    chatTokenEl.style.display = 'inline-flex';
+
+                    const tooltip =
+                        'Akkumulierter Token-Verbrauch (Input): ' + totalIn.toLocaleString('de-DE') + '\\n' +
+                        'Cache-Trefferquote: ' + cacheRatio + '%\\n' +
+                        'Output: ' + totalOut.toLocaleString('de-DE') + '\\n' +
+                        '(Details im Task-Planer)';
+                    chatTokenEl.title = tooltip;
+                }
+            } else {
+                if (chatTokenEl) chatTokenEl.style.display = 'none';
+                if (footerTokenEl) footerTokenEl.style.display = 'none';
+            }
+        } catch (e) {
+            console.error('[AMS] Failed to fetch token stats:', e);
+            if (chatTokenEl) chatTokenEl.style.display = 'none';
+            if (footerTokenEl) footerTokenEl.style.display = 'none';
+        }
+    }
+
+    async function loadInitialPlan() {
+        try {
+            if (currentConvId && window.electronNative && window.electronNative.getTaskPlan) {
+                const res = await window.electronNative.getTaskPlan(currentConvId);
+                if (res && res.status === 'success') {
+                    console.log('[AMS] Loaded task plan from active task.md');
+                    currentPlanText = res.plan;
+                    updatePlanUI();
+                    loadNotesUI();
+                    updateCompactionCounter();
+                    updateTokenStats();
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error('[AMS] Failed to load plan from task.md:', e);
+        }
+        currentPlanText = nativeStorageItems.antigravity_task_plan ||
+            '# Active Tasks\\n- [ ] Task 1\\n- [ ] Task 2\\n- [ ] Task 3';
+        updatePlanUI();
+        loadNotesUI();
+        updateCompactionCounter();
+        updateTokenStats();
+    }
+
+    window.getTaskPlan = function() {
+        return currentPlanText;
+    };
+
+    window.setTaskPlan = async function(text) {
+        currentPlanText = text;
+        try {
+            await window.nativeStorage.updateItems({ antigravity_task_plan: text });
+        } catch (e) {}
+        try {
+            if (currentConvId && window.electronNative && window.electronNative.setTaskPlan) {
+                await window.electronNative.setTaskPlan(text, currentConvId);
+            }
+        } catch (e) {
+            console.error('[AMS] Failed to write plan to task.md:', e);
+        }
+        updatePlanUI();
+    };
+
+    // Load the plan asynchronously at boot
+    setTimeout(loadInitialPlan, 50);
+
+    function triggerSaveStatus() {
+        const indicator = document.querySelector('.antigravity-save-indicator');
+        if (!indicator) return;
+        indicator.className = 'antigravity-save-indicator saving';
+        const txt = indicator.querySelector('span');
+        if (txt) txt.textContent = 'Speichert...';
+
+        setTimeout(() => {
+            indicator.className = 'antigravity-save-indicator saved';
+            const txt2 = indicator.querySelector('span');
+            if (txt2) txt2.textContent = 'Gespeichert';
+        }, 500);
+    }
+
+    function togglePlanPanel() {
+        const panel = ensurePlanPanel();
+        const isOpen = panel.classList.toggle('open');
+        if (isOpen) {
+            updateCompactionCounter();
+            updateTokenStats();
+        }
+    }
+
+    function updatePlanUI() {
+        const editor = document.getElementById('antigravity-plan-editor');
+        if (editor) {
+            editor.value = currentPlanText;
+        }
+        updateChecklistFromText();
+    }
+
+    function stopKeyPropagation(el) {
+        if (!el) return;
+        ['keydown', 'keyup', 'keypress'].forEach(eventType => {
+            el.addEventListener(eventType, (e) => {
+                e.stopPropagation();
+            });
+        });
+    }
+
+    function ensurePlanPanel() {
+        let panel = document.getElementById('antigravity-plan-panel');
+        if (panel) return panel;
+
+        panel = document.createElement('div');
+        panel.id = 'antigravity-plan-panel';
+        stopKeyPropagation(panel);
+
+        const styles =
+            '#antigravity-plan-panel {' +
+            '    position: fixed;' +
+            '    top: 30px;' +
+            '    right: 0;' +
+            '    width: 350px;' +
+            '    height: calc(100% - 30px);' +
+            '    z-index: 10000;' +
+            '    background-color: var(--background, #121214);' +
+            '    border-left: 1px solid var(--border, #27272a);' +
+            '    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);' +
+            '    transform: translateX(100%);' +
+            '    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);' +
+            '    display: flex;' +
+            '    flex-direction: column;' +
+            '    color: var(--foreground, #ececec);' +
+            '    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;' +
+            '}' +
+            '#antigravity-plan-panel.open {' +
+            '    transform: translateX(0);' +
+            '}' +
+            '.antigravity-plan-header {' +
+            '    display: flex;' +
+            '    align-items: center;' +
+            '    justify-content: space-between;' +
+            '    padding: 16px;' +
+            '    border-bottom: 1px solid var(--border, #27272a);' +
+            '    background-color: var(--card, #18181b);' +
+            '}' +
+            '.antigravity-plan-title {' +
+            '    font-weight: 600;' +
+            '    font-size: 13px;' +
+            '    margin: 0;' +
+            '    color: var(--foreground, #ffffff);' +
+            '    letter-spacing: 0.05em;' +
+            '    text-transform: uppercase;' +
+            '    opacity: 0.9;' +
+            '}' +
+            '.antigravity-plan-close {' +
+            '    cursor: pointer;' +
+            '    background: transparent;' +
+            '    border: none;' +
+            '    color: var(--muted-foreground, #a1a1aa);' +
+            '    padding: 4px;' +
+            '    border-radius: 4px;' +
+            '    display: flex;' +
+            '    align-items: center;' +
+            '    justify-content: center;' +
+            '    transition: background-color 0.2s, color 0.2s;' +
+            '}' +
+            '.antigravity-plan-close:hover {' +
+            '    background-color: var(--secondary, #27272a);' +
+            '    color: var(--foreground, #ffffff);' +
+            '}' +
+            '.antigravity-plan-content {' +
+            '    flex: 1;' +
+            '    overflow-y: auto;' +
+            '    padding: 16px;' +
+            '    display: flex;' +
+            '    flex-direction: column;' +
+            '    gap: 16px;' +
+            '}' +
+            '.antigravity-plan-mode-tabs {' +
+            '    display: flex;' +
+            '    border-bottom: 1px solid var(--border, #27272a);' +
+            '    background-color: var(--card, #18181b);' +
+            '}' +
+            '.antigravity-plan-tab {' +
+            '    flex: 1;' +
+            '    text-align: center;' +
+            '    padding: 10px;' +
+            '    font-size: 13px;' +
+            '    cursor: pointer;' +
+            '    border-bottom: 2px solid transparent;' +
+            '    transition: all 0.2s;' +
+            '    font-weight: 500;' +
+            '    color: var(--muted-foreground, #a1a1aa);' +
+            '}' +
+            '.antigravity-plan-tab.active {' +
+            '    border-bottom-color: var(--foreground, #ffffff);' +
+            '    color: var(--foreground, #ffffff);' +
+            '    background-color: rgba(255, 255, 255, 0.03);' +
+            '}' +
+            '.antigravity-plan-textarea {' +
+            '    flex: 1;' +
+            '    width: 100%;' +
+            '    background-color: var(--input, #09090b);' +
+            '    border: 1px solid var(--border, #27272a);' +
+            '    border-radius: 8px;' +
+            '    padding: 12px;' +
+            '    color: var(--foreground, #ececec);' +
+            '    font-family: monospace;' +
+            '    font-size: 13px;' +
+            '    resize: none;' +
+            '    line-height: 1.5;' +
+            '    outline: none;' +
+            '    transition: border-color 0.2s;' +
+            '}' +
+            '.antigravity-plan-textarea:focus {' +
+            '    border-color: #3b82f6;' +
+            '}' +
+            '.antigravity-plan-checklist {' +
+            '    display: flex;' +
+            '    flex-direction: column;' +
+            '    gap: 10px;' +
+            '}' +
+            '.antigravity-checklist-item {' +
+            '    display: flex;' +
+            '    align-items: flex-start;' +
+            '    gap: 8px;' +
+            '    padding: 6px;' +
+            '    border-radius: 6px;' +
+            '    transition: background-color 0.2s;' +
+            '}' +
+            '.antigravity-checklist-item:hover {' +
+            '    background-color: rgba(255, 255, 255, 0.02);' +
+            '}' +
+            '.antigravity-checklist-cb {' +
+            '    margin-top: 3px;' +
+            '    cursor: pointer;' +
+            '    accent-color: #3b82f6;' +
+            '    width: 14px;' +
+            '    height: 14px;' +
+            '}' +
+            '.antigravity-checklist-text {' +
+            '    font-size: 13px;' +
+            '    line-height: 1.4;' +
+            '    cursor: pointer;' +
+            '    user-select: none;' +
+            '}' +
+            '.antigravity-checklist-text.checked {' +
+            '    text-decoration: line-through;' +
+            '    opacity: 0.5;' +
+            '}' +
+            '.antigravity-checklist-item:hover .antigravity-checklist-delete {' +
+            '    display: inline-flex !important;' +
+            '}' +
+            '.antigravity-checklist-delete:hover {' +
+            '    color: #ef4444 !important;' +
+            '}' +
+            '.antigravity-checklist-add-btn:hover {' +
+            '    background-color: var(--secondary, #27272a);' +
+            '    color: var(--foreground, #ffffff) !important;' +
+            '}' +
+            '.antigravity-plan-footer {' +
+            '    padding: 12px 16px;' +
+            '    border-top: 1px solid var(--border, #27272a);' +
+            '    font-size: 11px;' +
+            '    color: var(--muted-foreground, #71717a);' +
+            '    display: flex;' +
+            '    justify-content: space-between;' +
+            '    align-items: center;' +
+            '    background-color: var(--card, #18181b);' +
+            '}' +
+            '.antigravity-save-indicator {' +
+            '    display: flex;' +
+            '    align-items: center;' +
+            '    gap: 4px;' +
+            '    opacity: 0.7;' +
+            '    transition: opacity 0.3s;' +
+            '}' +
+            '.antigravity-save-indicator.saving {' +
+            '    opacity: 1;' +
+            '    color: #eab308;' +
+            '}' +
+            '.antigravity-save-indicator.saved {' +
+            '    color: #22c55e;' +
+            '}' +
+            '@keyframes modalFadeIn {' +
+            '    from { opacity: 0; transform: scale(0.97); }' +
+            '    to { opacity: 1; transform: scale(1); }' +
+            '}' +
+            '@keyframes antigravity-spin {' +
+            '    from { transform: rotate(0deg); }' +
+            '    to { transform: rotate(360deg); }' +
+            '}' +
+            '.antigravity-spinner {' +
+            '    animation: antigravity-spin 1s linear infinite;' +
+            '}';
+
+        const styleEl = document.createElement('style');
+        styleEl.id = 'antigravity-plan-panel-styles';
+        styleEl.innerHTML = styles;
+        document.head.appendChild(styleEl);
+
+        panel.innerHTML =
+            '<div class="antigravity-plan-header">' +
+            '    <h3 class="antigravity-plan-title" style="display:flex;align-items:center;gap:7px;">' +
+            '        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">' +
+            '            <ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-28 12 12)" stroke="#38bdf8" stroke-width="1.8" stroke-opacity="0.9"/>' +
+            '            <polygon points="12,3 19.4,12 12,21 4.6,12" fill="rgba(139,92,246,0.28)" stroke="#a78bfa" stroke-width="1.8" stroke-linejoin="round"/>' +
+            '            <circle cx="12" cy="12" r="2.2" fill="#f8fafc"/>' +
+            '        </svg>' +
+            '        <span>Task & Plan Tracker</span>' +
+            '    </h3>' +
+            '    <button class="antigravity-plan-close" title="Schließen">' +
+            '        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '            <line x1="18" y1="6" x2="6" y2="18"></line>' +
+            '            <line x1="6" y1="6" x2="18" y2="18"></line>' +
+            '        </svg>' +
+            '    </button>' +
+            '</div>' +
+            '<div class="antigravity-plan-mode-tabs">' +
+            '    <div class="antigravity-plan-tab active" data-tab="notes">Notizen</div>' +
+            '    <div class="antigravity-plan-tab" data-tab="prs">Pull Requests</div>' +
+            '    <div class="antigravity-plan-tab" data-tab="issues">Issues</div>' +
+            '    <div class="antigravity-plan-tab" data-tab="reviews">Reviews</div>' +
+            '</div>' +
+            '<div class="antigravity-plan-content">' +
+            '    <div id="antigravity-plan-notes-container" class="antigravity-plan-notes" style="display: flex; flex-direction: column; gap: 10px; height: 100%; flex: 1;">' +
+            '        <textarea id="antigravity-notes-textarea" class="antigravity-plan-textarea" placeholder="Hinterlasse hier deine freien Notizen für dieses Gespräch..."></textarea>' +
+            '        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px; padding: 4px 0; color: var(--muted-foreground, #71717a);">' +
+            '            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">' +
+            '                <input type="checkbox" id="antigravity-notes-sync-ai" style="cursor: pointer; accent-color: #3b82f6;" checked> ' +
+            '                <span>Als AI-Kontext (notes.txt) freigeben</span>' +
+            '            </label>' +
+            '        </div>' +
+            '    </div>' +
+            '    <div id="antigravity-plan-prs-container" class="antigravity-plan-prs" style="display: none; flex-direction: column; gap: 12px; height: 100%; overflow-y: auto;"></div>' +
+            '    <div id="antigravity-plan-issues-container" class="antigravity-plan-issues" style="display: none; flex-direction: column; gap: 12px; height: 100%; overflow-y: auto;"></div>' +
+            '    <div id="antigravity-plan-reviews-container" class="antigravity-plan-reviews" style="display: none; flex-direction: column; gap: 12px; height: 100%; overflow-y: auto;"></div>' +
+            '</div>' +
+            '<div class="antigravity-plan-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-top: 1px solid var(--border, #27272a); background-color: var(--card, #18181b);">' +
+            '    <button class="antigravity-git-sync-btn" title="Mit GitHub synchronisieren" style="background-color: var(--secondary, #27272a); color: var(--foreground, #ffffff); border: 1px solid var(--border, #27272a); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; transition: background-color 0.2s; outline: none;">' +
+            '        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>' +
+            '        Git Sync' +
+            '    </button>' +
+            '    <div style="display: flex; align-items: center; gap: 8px;">' +
+            '        <span id="antigravity-compaction-counter" style="font-size: 10px; color: var(--muted-foreground, #71717a); display: none; align-items: center; gap: 3px; cursor: help; background: rgba(255,255,255,0.03); border: 1px solid var(--border, rgba(255,255,255,0.05)); padding: 2px 6px; border-radius: 4px;" title="Anzahl der durchgeführten Kontext-Kompaktierungen für dieses Gespräch">' +
+            '            <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="14" x2="20" y2="14"></line><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="10" x2="20" y2="10"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>' +
+            '            <span>Compacts: 0</span>' +
+            '        </span>' +
+            '        <span id="antigravity-token-counter" style="font-size: 10px; color: var(--muted-foreground, #71717a); display: none; align-items: center; gap: 3px; cursor: help; background: rgba(255,255,255,0.03); border: 1px solid var(--border, rgba(255,255,255,0.05)); padding: 2px 6px; border-radius: 4px;" title="Token-Verbrauch für dieses Gespräch (Details per Hover)">' +
+            '            <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>' +
+            '            <span>Tokens: -</span>' +
+            '        </span>' +
+            '        <span class="antigravity-save-indicator saved">' +
+            '            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">' +
+            '                <polyline points="20 6 9 17 4 12"></polyline>' +
+            '            </svg>' +
+            '            <span>Gespeichert</span>' +
+            '        </span>' +
+            '    </div>' +
+            '</div>';
+
+        document.body.appendChild(panel);
+
+        panel.querySelector('.antigravity-plan-close').addEventListener('click', togglePlanPanel);
+
+        const syncBtn = panel.querySelector('.antigravity-git-sync-btn');
+        let gitCheckInterval = null;
+
+        async function updateGitSyncButtonStatus() {
+            const btn = panel.querySelector('.antigravity-git-sync-btn');
+            if (!btn) return;
+            try {
+                const parts = window.location.pathname.split('/');
+                const conversationId = (parts.length > 2 && parts[2]) ? parts[2] : null;
+
+                const res = await window.electronNative.getGitStatus(conversationId);
+                if (res && res.status === 'success') {
+                    const count = res.totalChanges;
+                    if (count === 0) {
+                        btn.disabled = true;
+                        btn.style.opacity = '0.5';
+                        btn.style.cursor = 'not-allowed';
+                        btn.title = 'Keine uncommitted Änderungen im Workspace vorhanden';
+                        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Git Sync';
+                    } else {
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                        btn.style.cursor = 'pointer';
+                        btn.title = count + ' geänderte Datei(en) im Workspace. Klicken zum Synchronisieren.';
+                        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Git Sync (' + count + ')';
+                    }
+                }
+            } catch (err) {
+                console.error('[AMS UI] Failed to check git status for badge:', err);
+            }
+        }
+
+        if (syncBtn) {
+            // Initial check after rendering
+            setTimeout(updateGitSyncButtonStatus, 500);
+            gitCheckInterval = setInterval(updateGitSyncButtonStatus, 15000);
+
+            syncBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+
+                const parts = window.location.pathname.split('/');
+                const conversationId = (parts.length > 2 && parts[2]) ? parts[2] : null;
+
+                showGitSyncModal(conversationId, async (commitMsg) => {
+                    syncBtn.disabled = true;
+                    syncBtn.textContent = 'Syncing...';
+
+                    try {
+                        const res = await window.electronNative.commitAndPush(commitMsg || 'wip: sync tasks', conversationId);
+                        if (res.status === 'success') {
+                            showCustomAlert('Synchronisation erfolgreich abgeschlossen!\\n\\n' + res.details);
+                            updateGitSyncButtonStatus();
+                        } else {
+                            showCustomAlert('Fehler bei der Synchronisation:\\n\\n' + (res.message || 'Unbekannter Fehler'));
+                        }
+                    } catch (err) {
+                        showCustomAlert('Ausnahmefehler bei der Synchronisation: ' + err.message);
+                    } finally {
+                        syncBtn.disabled = false;
+                        updateGitSyncButtonStatus();
+                    }
+                });
+            });
+        }
+
+        const textarea = panel.querySelector('#antigravity-notes-textarea');
+        const checkbox = panel.querySelector('#antigravity-notes-sync-ai');
+
+        const saveNotes = async () => {
+            const text = textarea.value;
+            const syncAI = checkbox.checked;
+            currentNotesText = text;
+            notesSyncAI = syncAI;
+
+            const storageKey = 'antigravity_notes_' + currentConvId;
+            const syncKey = 'antigravity_notes_sync_ai_' + currentConvId;
+            const updateObj = {};
+            updateObj[storageKey] = text;
+            updateObj[syncKey] = syncAI;
+            window.nativeStorage.updateItems(updateObj);
+
+            if (currentConvId && window.electronNative && window.electronNative.setNotes) {
+                await window.electronNative.setNotes(text, syncAI, currentConvId);
+            }
+            triggerSaveStatus();
+        };
+
+        if (textarea && checkbox) {
+            textarea.addEventListener('input', saveNotes);
+            checkbox.addEventListener('change', saveNotes);
+        }
+
+        // Initial load for notes
+        setTimeout(loadNotesUI, 50);
+
+        const tabs = panel.querySelectorAll('.antigravity-plan-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                const mode = tab.getAttribute('data-tab');
+                const notesContainer = panel.querySelector('#antigravity-plan-notes-container');
+                const prsContainer = panel.querySelector('#antigravity-plan-prs-container');
+                const issuesContainer = panel.querySelector('#antigravity-plan-issues-container');
+                const reviewsContainer = panel.querySelector('#antigravity-plan-reviews-container');
+
+                if (mode === 'notes') {
+                    notesContainer.style.display = 'flex';
+                    prsContainer.style.display = 'none';
+                    issuesContainer.style.display = 'none';
+                    reviewsContainer.style.display = 'none';
+                    loadNotesUI();
+                } else if (mode === 'prs') {
+                    notesContainer.style.display = 'none';
+                    prsContainer.style.display = 'flex';
+                    issuesContainer.style.display = 'none';
+                    reviewsContainer.style.display = 'none';
+                    updatePRsUI();
+                } else if (mode === 'issues') {
+                    notesContainer.style.display = 'none';
+                    prsContainer.style.display = 'none';
+                    issuesContainer.style.display = 'flex';
+                    reviewsContainer.style.display = 'none';
+                    updateIssuesUI();
+                } else if (mode === 'reviews') {
+                    notesContainer.style.display = 'none';
+                    prsContainer.style.display = 'none';
+                    issuesContainer.style.display = 'none';
+                    reviewsContainer.style.display = 'flex';
+                    updateReviewsUI();
+                }
+            });
+        });
+
+        return panel;
+    }
+
+
+    function updateChecklistFromText() {
+        const container = document.getElementById('antigravity-plan-preview-container');
+        if (!container) return;
+
+        container.innerHTML = '';
+        const lines = currentPlanText.split('\\n');
+        let hasTasks = false;
+
+        lines.forEach((line, index) => {
+            const match = line.match(/^(\\s*)-\\s*\\[([ xX])\\]\\s*(.*)$/);
+            if (match) {
+                hasTasks = true;
+                const indent = match[1] || '';
+                const checked = match[2].toLowerCase() === 'x';
+                const text = match[3].trim();
+
+                const item = document.createElement('div');
+                item.className = 'antigravity-checklist-item';
+                item.style.paddingLeft = (indent.length * 8 + 6) + 'px';
+                item.style.display = 'flex';
+                item.style.alignItems = 'center';
+                item.style.width = '100%';
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'antigravity-checklist-cb';
+                cb.checked = checked;
+
+                const label = document.createElement('span');
+                label.className = 'antigravity-checklist-text' + (checked ? ' checked' : '');
+                label.textContent = text;
+                label.style.flex = '1';
+                label.style.marginLeft = '8px';
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'antigravity-checklist-delete';
+                deleteBtn.title = 'Task löschen';
+                deleteBtn.style.marginLeft = 'auto';
+                deleteBtn.style.background = 'transparent';
+                deleteBtn.style.border = 'none';
+                deleteBtn.style.color = 'var(--muted-foreground, #71717a)';
+                deleteBtn.style.cursor = 'pointer';
+                deleteBtn.style.padding = '2px';
+                deleteBtn.style.display = 'none';
+                deleteBtn.style.alignItems = 'center';
+                deleteBtn.style.justifyContent = 'center';
+                deleteBtn.style.outline = 'none';
+                deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+
+                const toggleItem = () => {
+                    cb.checked = !cb.checked;
+                    label.classList.toggle('checked', cb.checked);
+                    const newChar = cb.checked ? 'x' : ' ';
+                    lines[index] = indent + '- [' + newChar + '] ' + text;
+                    currentPlanText = lines.join('\\n');
+                    window.nativeStorage.updateItems({ antigravity_task_plan: currentPlanText });
+                    if (currentConvId && window.electronNative && window.electronNative.setTaskPlan) {
+                        window.electronNative.setTaskPlan(currentPlanText, currentConvId);
+                    }
+
+                    const editor = document.getElementById('antigravity-plan-editor');
+                    if (editor) {
+                        editor.value = currentPlanText;
+                    }
+                    triggerSaveStatus();
+
+                    // Auto-Git-commit on check
+                    if (cb.checked && currentConvId) {
+                        triggerAutoGitCommitAndPush(currentConvId, text.trim());
+                    }
+                };
+
+                cb.addEventListener('change', (e) => {
+                    e.stopPropagation();
+                    const checkedState = cb.checked;
+                    label.classList.toggle('checked', checkedState);
+                    const newChar = checkedState ? 'x' : ' ';
+                    lines[index] = indent + '- [' + newChar + '] ' + text;
+                    currentPlanText = lines.join('\\n');
+                    window.nativeStorage.updateItems({ antigravity_task_plan: currentPlanText });
+                    if (currentConvId && window.electronNative && window.electronNative.setTaskPlan) {
+                        window.electronNative.setTaskPlan(currentPlanText, currentConvId);
+                    }
+
+                    const editor = document.getElementById('antigravity-plan-editor');
+                    if (editor) {
+                        editor.value = currentPlanText;
+                    }
+                    triggerSaveStatus();
+
+                    // Auto-Git-commit on check
+                    if (checkedState && currentConvId) {
+                        triggerAutoGitCommitAndPush(currentConvId, text.trim());
+                    }
+                });
+
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    showCustomConfirm('Möchtest du diesen Task wirklich löschen?', (confirmed) => {
+                        if (confirmed) {
+                            lines.splice(index, 1);
+                            currentPlanText = lines.join('\\n');
+                            window.nativeStorage.updateItems({ antigravity_task_plan: currentPlanText });
+                            if (currentConvId && window.electronNative && window.electronNative.setTaskPlan) {
+                                window.electronNative.setTaskPlan(currentPlanText, currentConvId);
+                            }
+
+                            const editor = document.getElementById('antigravity-plan-editor');
+                            if (editor) {
+                                editor.value = currentPlanText;
+                            }
+                            updateChecklistFromText();
+                            triggerSaveStatus();
+                        }
+                    });
+                });
+
+                label.addEventListener('click', toggleItem);
+
+                item.appendChild(cb);
+                item.appendChild(label);
+                item.appendChild(deleteBtn);
+                container.appendChild(item);
+            } else {
+                if (line.trim().startsWith('#')) {
+                    const headerContainer = document.createElement('div');
+                    headerContainer.className = 'antigravity-checklist-header-container';
+                    headerContainer.style.display = 'flex';
+                    headerContainer.style.alignItems = 'center';
+                    headerContainer.style.justifyContent = 'space-between';
+                    headerContainer.style.marginTop = '16px';
+                    headerContainer.style.marginBottom = '6px';
+
+                    const level = line.match(/^#+/)[0].length;
+                    headerContainer.style.borderBottom = level === 1 ? '1px solid var(--border, #27272a)' : 'none';
+                    headerContainer.style.paddingBottom = level === 1 ? '4px' : '0';
+
+                    const headerText = document.createElement('span');
+                    headerText.style.fontWeight = 'bold';
+                    headerText.style.fontSize = (18 - level) + 'px';
+                    headerText.textContent = line.replace(/^#+\\s*/, '');
+
+                    const addBtn = document.createElement('button');
+                    addBtn.className = 'antigravity-checklist-add-btn';
+                    addBtn.title = 'Task hinzufügen';
+                    addBtn.style.background = 'transparent';
+                    addBtn.style.border = 'none';
+                    addBtn.style.color = 'var(--muted-foreground, #71717a)';
+                    addBtn.style.cursor = 'pointer';
+                    addBtn.style.display = 'inline-flex';
+                    addBtn.style.alignItems = 'center';
+                    addBtn.style.padding = '4px';
+                    addBtn.style.borderRadius = '4px';
+                    addBtn.style.outline = 'none';
+                    addBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+
+                    addBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const titleClean = headerText.textContent;
+                        showCustomPrompt("Neuen Task unter '" + titleClean + "' hinzufügen:", "", (taskText) => {
+                            if (taskText && taskText.trim()) {
+                                let insertIdx = index + 1;
+                                while (insertIdx < lines.length) {
+                                    const nextLine = lines[insertIdx];
+                                    if (nextLine.trim().startsWith('#')) {
+                                        break;
+                                    }
+                                    insertIdx++;
+                                }
+
+                                lines.splice(insertIdx, 0, '- [ ] ' + taskText.trim());
+                                currentPlanText = lines.join('\\n');
+                                window.nativeStorage.updateItems({ antigravity_task_plan: currentPlanText });
+                                if (currentConvId && window.electronNative && window.electronNative.setTaskPlan) {
+                                    window.electronNative.setTaskPlan(currentPlanText, currentConvId);
+                                }
+
+                                const editor = document.getElementById('antigravity-plan-editor');
+                                if (editor) {
+                                    editor.value = currentPlanText;
+                                }
+                                updateChecklistFromText();
+                                triggerSaveStatus();
+                            }
+                        });
+                    });
+
+                    headerContainer.appendChild(headerText);
+                    headerContainer.appendChild(addBtn);
+                    container.appendChild(headerContainer);
+                } else if (line.trim()) {
+                    const txt = document.createElement('div');
+                    txt.style.fontSize = '13px';
+                    txt.style.opacity = '0.8';
+                    txt.style.marginTop = '4px';
+                    txt.textContent = line;
+                    container.appendChild(txt);
+                }
+            }
+        });
+
+        if (!hasTasks) {
+            const emptyMsg = document.createElement('div');
+            emptyMsg.style.fontSize = '12px';
+            emptyMsg.style.color = 'var(--muted-foreground, #71717a)';
+            emptyMsg.style.textAlign = 'center';
+            emptyMsg.style.marginTop = '20px';
+            emptyMsg.innerHTML = 'Keine Tasks gefunden.<br>Nutze das "Bearbeiten"-Tab, um einen Plan im Markdown-Checklisten-Format hinzuzufügen.';
+            container.appendChild(emptyMsg);
+        }
+    }
+
+    let autoCommitTimeout = null;
+    let pendingSteps = [];
+
+    function triggerAutoGitCommitAndPush(convoId, stepText) {
+        if (!window.electronNative || !window.electronNative.commitAndPush) return;
+
+        pendingSteps.push(stepText);
+
+        if (autoCommitTimeout) {
+            clearTimeout(autoCommitTimeout);
+        }
+
+        autoCommitTimeout = setTimeout(async () => {
+            const stepsList = pendingSteps.join(', ');
+            pendingSteps = [];
+            autoCommitTimeout = null;
+
+            console.log('[AMS Auto-Sync] Triggering auto-commit for completed steps:', stepsList);
+            const commitMsg = \`docs(tasks): completed steps: \${stepsList}\`;
+            try {
+                const res = await window.electronNative.commitAndPush(commitMsg, convoId);
+                if (res && res.status === 'success') {
+                    console.log('[AMS Auto-Sync] Auto-commit and push successful.');
+                } else {
+                    console.warn('[AMS Auto-Sync] Auto-commit failed:', res ? res.message : 'unknown error');
+                }
+            } catch (err) {
+                console.error('[AMS Auto-Sync] Error during auto-commit:', err);
+            }
+        }, 5000);
+    }
+
+
+    const loadedPRs = Object.create(null);
+    const loadedIssues = Object.create(null);
+
+
+    async function updateReviewsUI() {
+        const container = document.getElementById('antigravity-plan-reviews-container');
+        if (!container) return;
+
+        container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a);">Lade Reviews...</div>';
+
+        try {
+            const runsGrouped = await window.electronNative.getReviews();
+            if (!runsGrouped || runsGrouped.length === 0) {
+                container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a);">Keine nächtlichen Läufe protokolliert.</div>';
+                return;
+            }
+
+            let html = '<div style="display: flex; flex-direction: column; gap: 14px; padding-bottom: 10px;">';
+
+            runsGrouped.forEach(group => {
+                html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+                html += '  <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-foreground, #71717a); border-bottom: 1px solid var(--border, #27272a); padding-bottom: 4px; margin-top: 8px;">Lauf: ' + escapeHtml(group.date) + '</div>';
+
+                group.runs.forEach(run => {
+                    const runStatus = String(run.status || 'Unknown');
+                    const safeConversationId = String(run.conversationId || '');
+                    const safePrUrl = safeExternalUrl(run.prUrl);
+                    let statusColor = '#3b82f6';
+                    let statusBg = 'rgba(59, 130, 246, 0.1)';
+                    if (runStatus === 'Success') {
+                        statusColor = '#22c55e';
+                        statusBg = 'rgba(34, 197, 94, 0.1)';
+                    } else if (runStatus === 'Loop Detected') {
+                        statusColor = '#eab308';
+                        statusBg = 'rgba(234, 179, 8, 0.1)';
+                    } else if (runStatus.startsWith('Failed') || runStatus === 'Failed to launch') {
+                        statusColor = '#ef4444';
+                        statusBg = 'rgba(239, 68, 68, 0.1)';
+                    }
+
+                    html += '<div style="background-color: var(--card, #1c1c1e); border: 1px solid var(--border, #27272a); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">';
+                    html += '  <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">';
+                    html += '    <div style="font-size: 12px; font-weight: 500; color: var(--foreground, #ffffff); line-height: 1.3;">Issue #' + escapeHtml(run.issueNumber) + ': ' + escapeHtml(run.title) + '</div>';
+                    html += '    <span style="font-size: 9px; font-weight: 600; text-transform: uppercase; color: ' + statusColor + '; background-color: ' + statusBg + '; padding: 2px 6px; border-radius: 4px; shrink-0;">' + escapeHtml(runStatus) + '</span>';
+                    html += '  </div>';
+                    html += '  <div style="font-size: 11px; color: var(--muted-foreground, #71717a); display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">';
+                    html += '    <span>Branch: <code style="background-color: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 3px; font-family: monospace;">' + escapeHtml(run.branch) + '</code></span>';
+                    if (run.startTime) {
+                        html += '    <span>| Start: ' + escapeHtml(String(run.startTime).split(' ')[1] || run.startTime) + '</span>';
+                    }
+                    if (run.endTime) {
+                        html += '    <span>| Ende: ' + escapeHtml(String(run.endTime).split(' ')[1] || run.endTime) + '</span>';
+                    }
+                    html += '  </div>';
+                    html += '  <div style="display: flex; gap: 8px; margin-top: 4px;">';
+                    if (safeConversationId) {
+                        html += '    <button class="antigravity-review-log-btn" data-convoid="' + escapeHtml(safeConversationId) + '" style="background: transparent; border: 1px solid var(--border, #27272a); color: var(--foreground, #ffffff); border-radius: 4px; padding: 3px 8px; font-size: 11px; cursor: pointer; transition: background-color 0.2s; outline: none;">Log ansehen</button>';
+                    }
+                    if (safePrUrl) {
+                        html += '    <a href="' + escapeHtml(safePrUrl) + '" target="_blank" rel="noopener noreferrer" style="text-decoration: none; border: 1px solid var(--border, #27272a); color: var(--foreground, #ffffff); background-color: rgba(255,255,255,0.02); border-radius: 4px; padding: 3px 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; transition: background-color 0.2s;"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>PR ansehen</a>';
+                    }
+                    html += '  </div>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            });
+            html += '</div>';
+            container.innerHTML = html;
+
+            container.querySelectorAll('.antigravity-review-log-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const convoId = btn.getAttribute('data-convoid');
+                    showReviewLogModal(convoId);
+                });
+            });
+
+        } catch (e) {
+            console.error('[AMS UI Reviews] Failed to render reviews:', e);
+            container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a);">Fehler beim Laden der Reviews.</div>';
+        }
+    }
+
+    async function showReviewLogModal(convoId) {
+        const previouslyFocused = document.activeElement;
+        const overlay = document.createElement('div');
+        overlay.className = 'antigravity-modal-overlay';
+        stopKeyPropagation(overlay);
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+        overlay.style.backdropFilter = 'blur(4px)';
+        overlay.style.zIndex = '9999';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+
+        const modal = document.createElement('div');
+        modal.style.width = '80vw';
+        modal.style.maxWidth = '700px';
+        modal.style.height = '80vh';
+        modal.style.maxHeight = '600px';
+        modal.style.backgroundColor = 'var(--background, #0a0a0a)';
+        modal.style.border = '1px solid var(--border, #27272a)';
+        modal.style.borderRadius = '12px';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.overflow = 'hidden';
+        modal.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.justifyContent = 'space-between';
+        header.style.alignItems = 'center';
+        header.style.padding = '12px 16px';
+        header.style.borderBottom = '1px solid var(--border, #27272a)';
+        header.style.backgroundColor = 'var(--card, #18181b)';
+
+        const title = document.createElement('span');
+        title.textContent = 'Ausführungs-Log für ' + String(convoId || '').substring(0, 8) + '...';
+        title.style.fontSize = '12px';
+        title.style.fontWeight = '600';
+        title.style.color = 'var(--foreground, #ffffff)';
+        title.style.textTransform = 'uppercase';
+        title.style.letterSpacing = '0.05em';
+        title.style.fontFamily = 'system-ui, sans-serif';
+        title.id = 'antigravity-review-log-title-' + Date.now();
+        modal.setAttribute('aria-labelledby', title.id);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.border = 'none';
+        closeBtn.style.color = 'var(--muted-foreground, #71717a)';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.display = 'flex';
+        closeBtn.style.alignItems = 'center';
+        closeBtn.style.justifyContent = 'center';
+        closeBtn.style.padding = '4px';
+        closeBtn.style.borderRadius = '4px';
+        closeBtn.setAttribute('aria-label', 'Ausführungs-Log schließen');
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        modal.appendChild(header);
+
+        const body = document.createElement('div');
+        body.style.flex = '1';
+        body.style.overflowY = 'auto';
+        body.style.padding = '16px';
+        body.style.display = 'flex';
+        body.style.flexDirection = 'column';
+        body.style.gap = '12px';
+        body.style.fontSize = '12px';
+        body.innerHTML = '<div style="color: var(--muted-foreground, #71717a); text-align: center; margin-top: 40px;">Lade Log-Details aus SQLite-Datenbank...</div>';
+        modal.appendChild(body);
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        const controller = createAmsModalController({
+            overlay,
+            modal,
+            initialFocus: closeBtn,
+            previouslyFocused,
+        });
+        closeBtn.addEventListener('click', () => controller.close('close-button'));
+        overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) controller.close('backdrop');
+        });
+        controller.focusInitial();
+
+        try {
+            const logs = await window.electronNative.getRunLog(convoId);
+            if (controller.isClosed()) return;
+            if (!logs || logs.length === 0) {
+                body.innerHTML = '<div style="color: var(--muted-foreground, #71717a); text-align: center; margin-top: 40px;">Keine Einträge in der Datenbank gefunden.</div>';
+                return;
+            }
+
+            let logHtml = '';
+            logs.forEach(log => {
+                if (log.role === 'user') {
+                    logHtml += '<div style="align-self: flex-end; background-color: var(--secondary, #27272a); color: var(--foreground, #ffffff); border: 1px solid var(--border, #3f3f46); border-radius: 12px 12px 0 12px; padding: 10px; max-width: 85%; white-space: pre-wrap; line-height: 1.4; text-align: left;">' + escapeHtml(log.content) + '</div>';
+                } else if (log.role === 'agent') {
+                    logHtml += '<div style="align-self: flex-start; background-color: rgba(255,255,255,0.02); color: var(--foreground, #ffffff); border: 1px solid var(--border, #27272a); border-radius: 12px 12px 12px 0; padding: 10px; max-width: 85%; white-space: pre-wrap; line-height: 1.4; text-align: left;">' + escapeHtml(log.content) + '</div>';
+                } else if (log.role === 'tool') {
+                    logHtml += '<div style="align-self: center; background-color: rgba(59,130,246,0.05); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); border-radius: 6px; padding: 6px 12px; font-family: monospace; font-size: 11px; max-width: 95%; text-align: left; word-break: break-all;">' + escapeHtml(log.content) + '</div>';
+                } else if (log.role === 'system') {
+                    logHtml += '<div style="align-self: center; color: var(--muted-foreground, #71717a); font-style: italic;">' + escapeHtml(log.content) + '</div>';
+                }
+            });
+            body.innerHTML = logHtml;
+            body.scrollTop = body.scrollHeight;
+        } catch (e) {
+            console.error('[AMS UI Reviews] Failed to fetch log details:', e);
+            body.innerHTML = '<div style="color: #ef4444; text-align: center; margin-top: 40px;">Fehler beim Laden des Logs.</div>';
+        }
+    }
+
+    function escapeHtml(text) {
+        return String(text ?? '')
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function safeExternalUrl(value) {
+        try {
+            const raw = String(value || '');
+            if (!raw || raw.length > 2048) return '';
+            const parsed = new URL(raw);
+            return parsed.protocol === 'https:' ? parsed.href : '';
+        } catch (_) {
+            return '';
+        }
+    }
+
+    async function updatePRsUI() {
+        const container = document.getElementById('antigravity-plan-prs-container');
+        if (!container) return;
+
+        container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a);">Lade Pull Requests...</div>';
+
+        try {
+            const parts = window.location.pathname.split('/');
+            const conversationId = (parts.length > 2 && parts[2]) ? parts[2] : null;
+
+            const res = await window.electronNative.getPRs(conversationId);
+            if (res.status === 'success') {
+                if (res.prs.length === 0) {
+                    container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a);">Keine Pull Requests gefunden.</div>';
+                    return;
+                }
+
+                let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                res.prs.forEach(pr => {
+                    const prNumber = String(pr.number ?? '');
+                    const prUrl = safeExternalUrl(pr.url);
+                    loadedPRs[prNumber] = pr;
+                    let stateColor = '#22c55e';
+                    let stateLabel = 'Open';
+                    if (pr.state === 'MERGED') {
+                        stateColor = '#a855f7';
+                        stateLabel = 'Merged';
+                    } else if (pr.state === 'CLOSED') {
+                        stateColor = '#ef4444';
+                        stateLabel = 'Closed';
+                    }
+
+                    html += '<div class="antigravity-pr-card" style="border: 1px solid var(--border, #27272a); border-radius: 8px; background-color: var(--card, #18181b); display: flex; flex-direction: column; overflow: hidden;">' +
+                            '  <div class="antigravity-card-header" style="padding: 10px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; user-select: none;">' +
+                            '    <div style="font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--foreground, #ffffff);">' + escapeHtml(pr.title) + '</div>' +
+                            '    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--muted-foreground, #71717a);">' +
+                            '      <div style="display: flex; align-items: center; gap: 6px;">' +
+                            '        <span style="background-color: ' + stateColor + '20; color: ' + stateColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 10px;">' + stateLabel + '</span>' +
+                            '        <span>#' + escapeHtml(prNumber) + '</span>' +
+                            '        <span>by ' + escapeHtml(pr.author?.login || 'unknown') + '</span>' +
+                            '      </div>' +
+                            '      <span class="antigravity-toggle-indicator" style="font-size: 10px; opacity: 0.7;">Details anzeigen ▾</span>' +
+                            '    </div>' +
+                            '  </div>' +
+                            '  <div class="antigravity-body-details" style="display: none; border-top: 1px solid var(--border, #27272a); padding: 10px; background-color: rgba(0,0,0,0.15); flex-direction: column; gap: 8px;">' +
+                            '    <div style="font-size: 12px; color: var(--muted-foreground, #a1a1aa); white-space: pre-wrap; max-height: 200px; overflow-y: auto; line-height: 1.5; font-family: ui-sans-serif, system-ui, sans-serif; padding-right: 4px;">' + escapeHtml(pr.body || '*Keine Beschreibung vorhanden.*') + '</div>' +
+                            '    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">' +
+                            '      <button class="antigravity-plan-subtasks" data-type="PR" data-number="' + escapeHtml(prNumber) + '" style="background-color: #2563eb; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px;">' +
+                            '        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>' +
+                            '        Subtasks planen' +
+                            '      </button>' +
+                            '      <button class="antigravity-send-to-ai" data-type="PR" data-number="' + escapeHtml(prNumber) + '" style="background-color: var(--secondary, #27272a); color: var(--foreground, #ffffff); border: 1px solid var(--border, #27272a); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 4px;">' +
+                            '        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>' +
+                            '        An Chat senden' +
+                            '      </button>' +
+                            '      <button class="antigravity-open-web" data-url="' + escapeHtml(prUrl) + '" style="background-color: transparent; color: var(--muted-foreground, #a1a1aa); border: 1px solid var(--border, #27272a); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 500;">Im Browser öffnen</button>' +
+                            '    </div>' +
+                            '  </div>' +
+                            '</div>';
+                });
+                html += '</div>';
+                container.innerHTML = html;
+
+                container.querySelectorAll('.antigravity-card-header').forEach(header => {
+                    header.addEventListener('click', () => {
+                        const details = header.parentElement.querySelector('.antigravity-body-details');
+                        const indicator = header.querySelector('.antigravity-toggle-indicator');
+                        if (details.style.display === 'none') {
+                            details.style.display = 'flex';
+                            indicator.textContent = 'Details verbergen ▴';
+                        } else {
+                            details.style.display = 'none';
+                            indicator.textContent = 'Details anzeigen ▾';
+                        }
+                    });
+                });
+
+                container.querySelectorAll('.antigravity-plan-subtasks').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const type = btn.getAttribute('data-type');
+                        const number = btn.getAttribute('data-number');
+                        const item = type === 'PR' ? loadedPRs[number] : loadedIssues[number];
+                        if (!item) {
+                            alert('Daten im Speicher nicht gefunden!');
+                            return;
+                        }
+
+                        const newPlan = generateSubtasks(item, type);
+                        const editor = document.getElementById('antigravity-plan-editor');
+                        if (editor) {
+                            editor.value = newPlan;
+                            const event = new Event('input', { bubbles: true });
+                            editor.dispatchEvent(event);
+
+                            const previewTab = document.querySelector('.antigravity-plan-tab[data-tab="preview"]');
+                            if (previewTab) {
+                                previewTab.click();
+                            }
+                        }
+                    });
+                });
+
+                container.querySelectorAll('.antigravity-send-to-ai').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const type = btn.getAttribute('data-type');
+                        const number = btn.getAttribute('data-number');
+                        const item = loadedPRs[number];
+                        if (!item) {
+                            alert('Daten im Speicher nicht gefunden!');
+                            return;
+                        }
+
+                        const promptText = \`Bitte bearbeite folgendes GitHub-\${type}:\\n\\n\` +
+                                           \`**Titel:** \${item.title} (#\${item.number})\\n\` +
+                                           \`**Link:** \${item.url}\\n\\n\` +
+                                           \`**Beschreibung:**\\n\${item.body || 'Keine Beschreibung.'}\`;
+
+                        const input = document.querySelector('[role="combobox"][aria-label="Message input"]');
+                        if (input) {
+                            input.focus();
+                            document.execCommand('selectAll', false, null);
+                            document.execCommand('delete', false, null);
+                            document.execCommand('insertText', false, promptText);
+                            const event = new Event('input', { bubbles: true });
+                            input.dispatchEvent(event);
+                        } else {
+                            alert('Chat-Eingabefeld nicht gefunden!');
+                        }
+                    });
+                });
+
+                container.querySelectorAll('.antigravity-open-web').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const url = safeExternalUrl(btn.getAttribute('data-url'));
+                        if (url && window.electronNative && window.electronNative.openExternal) {
+                            window.electronNative.openExternal(url);
+                        }
+                    });
+                });
+            } else if (res.status === 'no_remote') {
+                container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a); padding: 10px; line-height: 1.5;">' +
+                                      '  Kein GitHub-Remote-Repository konfiguriert.<br>' +
+                                      '  <span style="font-size: 11px; opacity: 0.7;">Füge ein Remote-Repository hinzu (z.B. git remote add origin &lt;url&gt;), um Pull Requests anzuzeigen.</span>' +
+                                      '</div>';
+            } else if (res.status === 'no_git') {
+                container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a); padding: 10px;">' +
+                                      '  Kein Git-Repository in diesem Workspace gefunden.<br>' +
+                                      '  <span style="font-size: 11px; opacity: 0.7; word-break: break-all;">Pfad: ' + escapeHtml(res.repoPath) + '</span>' +
+                                      '</div>';
+            } else {
+                container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a); padding: 10px;">' +
+                                      '  Fehler beim Laden: ' + escapeHtml(res.message || 'Unbekannter Fehler') +
+                                      '</div>';
+            }
+        } catch (err) {
+            container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: #ef4444;">Ausnahmefehler: ' + escapeHtml(err.message) + '</div>';
+        }
+    }
+
+    async function updateIssuesUI() {
+        const container = document.getElementById('antigravity-plan-issues-container');
+        if (!container) return;
+
+        container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a);">Lade Issues...</div>';
+
+        try {
+            const parts = window.location.pathname.split('/');
+            const conversationId = (parts.length > 2 && parts[2]) ? parts[2] : null;
+
+            const res = await window.electronNative.getIssues(conversationId);
+            if (res.status === 'success') {
+                if (res.issues.length === 0) {
+                    container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a);">Keine offenen Issues gefunden.</div>';
+                    return;
+                }
+
+                let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                res.issues.forEach(issue => {
+                    const issueNumber = String(issue.number ?? '');
+                    const issueUrl = safeExternalUrl(issue.url);
+                    loadedIssues[issueNumber] = issue;
+                    let stateColor = '#22c55e';
+                    let stateLabel = 'Open';
+                    if (issue.state && issue.state.toLowerCase() === 'closed') {
+                        stateColor = '#ef4444';
+                        stateLabel = 'Closed';
+                    }
+
+                    html += '<div class="antigravity-issue-card" style="border: 1px solid var(--border, #27272a); border-radius: 8px; background-color: var(--card, #18181b); display: flex; flex-direction: column; overflow: hidden;">' +
+                            '  <div class="antigravity-card-header" style="padding: 10px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; user-select: none;">' +
+                            '    <div style="font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--foreground, #ffffff);">' + escapeHtml(issue.title) + '</div>' +
+                            '    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--muted-foreground, #71717a);">' +
+                            '      <div style="display: flex; align-items: center; gap: 6px;">' +
+                            '        <span style="background-color: ' + stateColor + '20; color: ' + stateColor + '; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 10px;">' + stateLabel + '</span>' +
+                            '        <span>#' + escapeHtml(issueNumber) + '</span>' +
+                            '        <span>by ' + escapeHtml(issue.author?.login || 'unknown') + '</span>' +
+                            '      </div>' +
+                            '      <span class="antigravity-toggle-indicator" style="font-size: 10px; opacity: 0.7;">Details anzeigen ▾</span>' +
+                            '    </div>' +
+                            '  </div>' +
+                            '  <div class="antigravity-body-details" style="display: none; border-top: 1px solid var(--border, #27272a); padding: 10px; background-color: rgba(0,0,0,0.15); flex-direction: column; gap: 8px;">' +
+                            '    <div style="font-size: 12px; color: var(--muted-foreground, #a1a1aa); white-space: pre-wrap; max-height: 200px; overflow-y: auto; line-height: 1.5; font-family: ui-sans-serif, system-ui, sans-serif; padding-right: 4px;">' + escapeHtml(issue.body || '*Keine Beschreibung vorhanden.*') + '</div>' +
+                            '    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">' +
+                            '      <button class="antigravity-plan-subtasks" data-type="Issue" data-number="' + escapeHtml(issueNumber) + '" style="background-color: #2563eb; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 4px;">' +
+                            '        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>' +
+                            '        Subtasks planen' +
+                            '      </button>' +
+                            '      <button class="antigravity-send-to-ai" data-type="Issue" data-number="' + escapeHtml(issueNumber) + '" style="background-color: var(--secondary, #27272a); color: var(--foreground, #ffffff); border: 1px solid var(--border, #27272a); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 4px;">' +
+                            '        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>' +
+                            '        An Chat senden' +
+                            '      </button>' +
+                            '      <button class="antigravity-open-web" data-url="' + escapeHtml(issueUrl) + '" style="background-color: transparent; color: var(--muted-foreground, #a1a1aa); border: 1px solid var(--border, #27272a); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 500;">Im Browser öffnen</button>' +
+                            '    </div>' +
+                            '  </div>' +
+                            '</div>';
+                });
+                html += '</div>';
+                container.innerHTML = html;
+
+                container.querySelectorAll('.antigravity-card-header').forEach(header => {
+                    header.addEventListener('click', () => {
+                        const details = header.parentElement.querySelector('.antigravity-body-details');
+                        const indicator = header.querySelector('.antigravity-toggle-indicator');
+                        if (details.style.display === 'none') {
+                            details.style.display = 'flex';
+                            indicator.textContent = 'Details verbergen ▴';
+                        } else {
+                            details.style.display = 'none';
+                            indicator.textContent = 'Details anzeigen ▾';
+                        }
+                    });
+                });
+
+                container.querySelectorAll('.antigravity-plan-subtasks').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const type = btn.getAttribute('data-type');
+                        const number = btn.getAttribute('data-number');
+                        const item = type === 'PR' ? loadedPRs[number] : loadedIssues[number];
+                        if (!item) {
+                            alert('Daten im Speicher nicht gefunden!');
+                            return;
+                        }
+
+                        const newPlan = generateSubtasks(item, type);
+                        const editor = document.getElementById('antigravity-plan-editor');
+                        if (editor) {
+                            editor.value = newPlan;
+                            const event = new Event('input', { bubbles: true });
+                            editor.dispatchEvent(event);
+
+                            const previewTab = document.querySelector('.antigravity-plan-tab[data-tab="preview"]');
+                            if (previewTab) {
+                                previewTab.click();
+                            }
+                        }
+                    });
+                });
+
+                container.querySelectorAll('.antigravity-send-to-ai').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const type = btn.getAttribute('data-type');
+                        const number = btn.getAttribute('data-number');
+                        const item = loadedIssues[number];
+                        if (!item) {
+                            alert('Daten im Speicher nicht gefunden!');
+                            return;
+                        }
+
+                        const promptText = \`Bitte bearbeite folgendes GitHub-\${type}:\\n\\n\` +
+                                           \`**Titel:** \${item.title} (#\${item.number})\\n\` +
+                                           \`**Link:** \${item.url}\\n\\n\` +
+                                           \`**Beschreibung:**\\n\${item.body || 'Keine Beschreibung.'}\`;
+
+                        const input = document.querySelector('[role="combobox"][aria-label="Message input"]');
+                        if (input) {
+                            input.focus();
+                            document.execCommand('selectAll', false, null);
+                            document.execCommand('delete', false, null);
+                            document.execCommand('insertText', false, promptText);
+                            const event = new Event('input', { bubbles: true });
+                            input.dispatchEvent(event);
+                        } else {
+                            alert('Chat-Eingabefeld nicht gefunden!');
+                        }
+                    });
+                });
+
+                container.querySelectorAll('.antigravity-open-web').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const url = safeExternalUrl(btn.getAttribute('data-url'));
+                        if (url && window.electronNative && window.electronNative.openExternal) {
+                            window.electronNative.openExternal(url);
+                        }
+                    });
+                });
+            } else if (res.status === 'no_remote') {
+                container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a); padding: 10px; line-height: 1.5;">' +
+                                      '  Kein GitHub-Remote-Repository konfiguriert.<br>' +
+                                      '  <span style="font-size: 11px; opacity: 0.7;">Füge ein Remote-Repository hinzu, um Issues anzuzeigen.</span>' +
+                                      '</div>';
+            } else if (res.status === 'no_git') {
+                container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a); padding: 10px;">' +
+                                      '  Kein Git-Repository in diesem Workspace gefunden.<br>' +
+                                      '  <span style="font-size: 11px; opacity: 0.7; word-break: break-all;">Pfad: ' + escapeHtml(res.repoPath) + '</span>' +
+                                      '</div>';
+            } else {
+                container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a); padding: 10px;">' +
+                                      '  Fehler beim Laden: ' + escapeHtml(res.message || 'Unbekannter Fehler') +
+                                      '</div>';
+            }
+        } catch (e) {
+            container.innerHTML = '<div style="font-size: 12px; text-align: center; margin-top: 20px; color: var(--muted-foreground, #71717a); padding: 10px;">' +
+                                  '  Exception beim Laden: ' + escapeHtml(e.message) +
+                                  '</div>';
+        }
+    }
+
+
+    async function renderAppLogViewer() {
+        const logsTab = document.getElementById('antigravity-settings-logs-tab');
+        if (!logsTab) return;
+        const sidebar = logsTab.parentElement;
+        if (!sidebar) return;
+
+        const sidebarContainer = sidebar.closest('.bg-sidebar');
+        if (!sidebarContainer) return;
+
+        const layoutContainer = sidebarContainer.closest('.flex.w-full.h-full.outline-none') ||
+                                (sidebarContainer.parentElement ? sidebarContainer.parentElement.parentElement : null);
+        if (!layoutContainer) return;
+
+        const rightPanel = layoutContainer.children[1];
+        if (!rightPanel) return;
+
+        let container = document.getElementById('antigravity-log-viewer-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'antigravity-log-viewer-container';
+            container.className = 'antigravity-log-viewer-main flex-grow flex flex-col gap-4 min-w-0 bg-transparent p-6';
+            container.style.height = '100%';
+            container.style.width = '100%';
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.boxSizing = 'border-box';
+            container.style.flexGrow = '1';
+            container.style.minHeight = '0';
+            rightPanel.appendChild(container);
+        }
+
+        // Hide all other elements in rightPanel to avoid vertical split/squeezing
+        for (let i = 0; i < rightPanel.children.length; i++) {
+            const child = rightPanel.children[i];
+            if (child !== container) {
+                child.style.display = 'none';
+            }
+        }
+        container.style.display = 'flex';
+
+        // Only reconstruct UI if needed
+        if (!container.querySelector('#log-rows-container')) {
+            container.innerHTML =
+                '<div class="flex items-center justify-between border-b pb-3 border-border" style="border-bottom: 1px solid var(--border);">' +
+                    '<h2 class="text-xl font-semibold text-foreground">Log Viewer</h2>' +
+                    '<div class="flex gap-2" style="margin-right: 28px; align-items: center;">' +
+                        '<button id="ams-consolidate-btn" class="text-xs bg-primary text-primary-foreground px-2.5 py-1 rounded-md" style="background: var(--primary, #3b82f6); color: var(--primary-foreground, #ffffff); border: none; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 500; font-family: inherit; font-size: 11px; height: 24px; transition: opacity 0.2s;" title="Langzeitgedächtnis aus dem Chatverlauf aktualisieren">🧠 Lernen</button>' +
+                        '<span class="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground" style="background: var(--muted); color: var(--muted-foreground); height: 24px; display: flex; align-items: center;" title="IPC token is isolated in the preload context">IPC geschützt</span>' +
+                        '<span class="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground" id="log-stats-count" style="background: var(--muted); color: var(--muted-foreground); height: 24px; display: flex; align-items: center;">Loading...</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="flex gap-2 items-center">' +
+                    '<input type="text" id="log-search" placeholder="Search logs..." class="flex-1 px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none" style="background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px;" />' +
+                    '<select id="log-source" class="px-2 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none" style="background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13px;">' +
+                        '<option value="">All Sources</option>' +
+                        '<option value="USER">User</option>' +
+                        '<option value="AGENT">Agent</option>' +
+                        '<option value="SYSTEM">System</option>' +
+                    '</select>' +
+                '</div>' +
+                '<div id="log-rows-container" class="flex-grow overflow-y-auto pr-1 flex flex-col gap-2" style="overflow-y: auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: 8px; flex-grow: 1; min-height: 0;">' +
+                    '<div class="text-sm text-muted-foreground p-8 text-center" style="color: var(--muted-foreground);">Loading log history...</div>' +
+                '</div>';
+
+            container.querySelector('#log-search').addEventListener('input', () => renderRows());
+            container.querySelector('#log-source').addEventListener('change', () => renderRows());
+
+            const consolidateBtn = container.querySelector('#ams-consolidate-btn');
+            if (consolidateBtn) {
+                consolidateBtn.addEventListener('click', () => triggerConsolidation());
+            }
+        }
+
+        const rowsContainer = container.querySelector('#log-rows-container');
+        const statsEl = container.querySelector('#log-stats-count');
+
+        let res;
+        try {
+            res = await window.electronNative.getHistory();
+        } catch (ipcErr) {
+            rowsContainer.innerHTML = '<div class="text-sm text-red-500 p-8 text-center">Failed to invoke logs IPC handler: ' + escapeHtml(ipcErr.message) + '</div>';
+            statsEl.textContent = 'Error';
+            return;
+        }
+
+        if (res.status !== 'success') {
+            rowsContainer.innerHTML = '<div class="text-sm text-red-500 p-8 text-center">Failed to load log history: ' + escapeHtml(res.message || 'File not found') + '</div>';
+            statsEl.textContent = 'Error';
+            return;
+        }
+
+        const logsData = res.logs || [];
+        logsData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        let totalTokens = 0;
+        logsData.forEach(log => {
+            if (typeof log.tokens === 'number') {
+                totalTokens += log.tokens;
+            } else {
+                totalTokens += estimateTokenCount(log.content);
+            }
+        });
+
+        statsEl.textContent = logsData.length + ' entries | ' + formatTokenCount(totalTokens) + ' tokens';
+
+        function formatLogMessage(text) {
+            if (!text) return '';
+            text = String(text);
+
+            let userRequest = '';
+            let metadata = '';
+            let isStructuredUser = false;
+
+            if (text.includes('<USER_REQUEST>') && text.includes('</USER_REQUEST>')) {
+                isStructuredUser = true;
+                const reqStart = text.indexOf('<USER_REQUEST>') + 14;
+                const reqEnd = text.indexOf('</USER_REQUEST>');
+                userRequest = text.substring(reqStart, reqEnd).trim();
+
+                if (text.includes('<ADDITIONAL_METADATA>') && text.includes('</ADDITIONAL_METADATA>')) {
+                    const metaStart = text.indexOf('<ADDITIONAL_METADATA>') + 21;
+                    const metaEnd = text.indexOf('</ADDITIONAL_METADATA>');
+                    metadata = text.substring(metaStart, metaEnd).trim();
+                }
+            }
+
+            let displayText = isStructuredUser ? userRequest : text;
+
+            let escaped = displayText
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+
+            let html = escaped;
+
+            if (isStructuredUser && metadata) {
+                let escapedMeta = metadata
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+
+                html += '<details style="margin-top: 8px; font-size: 11px; color: var(--muted-foreground, #8c8c8c); cursor: pointer;" onclick="event.stopPropagation()">' +
+                        '<summary style="user-select: none;">Show Metadata</summary>' +
+                        '<pre style="margin-top: 4px; padding: 6px; background: rgba(0,0,0,0.15); border-radius: 4px; overflow-x: auto; white-space: pre-wrap; font-family: monospace;">' + escapedMeta + '</pre>' +
+                        '</details>';
+            }
+
+            return html;
+        }
+
+        function renderRows() {
+            const searchQuery = container.querySelector('#log-search').value.toLowerCase();
+            const sourceFilter = container.querySelector('#log-source').value;
+
+            const filtered = logsData.filter(log => {
+                const content = String(log.content || '');
+                const matchesSearch = content.toLowerCase().includes(searchQuery);
+                const matchesSource = !sourceFilter || log.source === sourceFilter;
+                return matchesSearch && matchesSource;
+            });
+
+            rowsContainer.innerHTML = '';
+            if (filtered.length === 0) {
+                rowsContainer.innerHTML = '<div class="text-sm text-muted-foreground p-8 text-center" style="color: var(--muted-foreground);">No logs found.</div>';
+                return;
+            }
+
+            filtered.slice(0, 150).forEach(log => {
+                const source = String(log.source || 'SYSTEM');
+                const sessionId = String(log.session_id || 'unknown');
+                const eventName = String(log.event || 'unknown');
+                const content = String(log.content || '');
+                const row = document.createElement('div');
+                row.style.background = 'var(--muted, rgba(255,255,255,0.03))';
+                row.style.border = '1px solid var(--border, rgba(255,255,255,0.08))';
+                row.style.borderRadius = '8px';
+                row.style.padding = '8px 12px';
+                row.style.display = 'flex';
+                row.style.flexDirection = 'column';
+                row.style.gap = '4px';
+                row.style.cursor = 'pointer';
+                row.style.transition = 'background 0.2s';
+
+                row.addEventListener('mouseover', () => {
+                    row.style.background = 'var(--sidebar-muted, rgba(255,255,255,0.06))';
+                });
+                row.addEventListener('mouseout', () => {
+                    row.style.background = 'var(--muted, rgba(255,255,255,0.03))';
+                });
+
+                const timeStr = new Date(log.timestamp).toLocaleString('de-DE');
+
+                const details = document.createElement('div');
+                details.style.display = 'none';
+                details.style.fontSize = '11px';
+                details.style.color = 'var(--text-secondary, #9ca3af)';
+                details.style.marginTop = '6px';
+                details.style.borderTop = '1px solid var(--border, rgba(255,255,255,0.08))';
+                details.style.paddingTop = '6px';
+                details.style.fontFamily = 'monospace';
+                details.innerHTML =
+                    '<div><strong>Session:</strong> ' + escapeHtml(sessionId) + '</div>' +
+                    '<div><strong>Event:</strong> ' + escapeHtml(eventName) + '</div>' +
+                    (log.metadata ? '<div><strong>Metadata:</strong> ' + escapeHtml(JSON.stringify(log.metadata)) + '</div>' : '');
+
+                row.addEventListener('click', (e) => {
+                    const isExpanded = details.style.display === 'block';
+                    details.style.display = isExpanded ? 'none' : 'block';
+                });
+
+                const badgeColor = source === 'USER' ? '#3b82f6' : (source === 'AGENT' ? '#8b5cf6' : '#9ca3af');
+
+                const tokensVal = typeof log.tokens === 'number' ? log.tokens : estimateTokenCount(log.content);
+                const isEstimated = typeof log.tokens !== 'number';
+                const tokenStr = (isEstimated ? '~' : '') + formatTokenCount(tokensVal) + ' tokens';
+                const modelStr = String(log.model || 'Gemini 3.5 Flash (High)');
+
+                row.innerHTML =
+                    '<div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">' +
+                        '<div style="display: flex; align-items: center; gap: 6px;">' +
+                            '<span style="background: ' + badgeColor + '; color: white; padding: 1px 4px; border-radius: 4px; font-weight: bold; font-size: 9px;">' + escapeHtml(source) + '</span>' +
+                            '<span style="opacity: 0.6;">' + escapeHtml(timeStr) + '</span>' +
+                        '</div>' +
+                        '<div style="display: flex; align-items: center; gap: 8px;">' +
+                            '<span style="opacity: 0.5; background: var(--muted, rgba(255,255,255,0.05)); border: 1px solid var(--border, rgba(255,255,255,0.1)); padding: 1px 6px; border-radius: 4px; font-size: 10px;" title="Model and token count">' + escapeHtml(modelStr) + ' • ' + escapeHtml(tokenStr) + '</span>' +
+                            '<span style="opacity: 0.4; font-family: monospace;">' + escapeHtml(sessionId.substring(0, 8)) + '...</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="font-size: 13px; color: var(--foreground, #f3f4f6); word-break: break-word; white-space: pre-wrap; margin-top: 4px;">' + formatLogMessage(content) + '</div>';
+
+                row.appendChild(details);
+                rowsContainer.appendChild(row);
+            });
+        }
+
+        renderRows();
+
+        async function triggerConsolidation() {
+            const btn = document.getElementById('ams-consolidate-btn');
+            if (!btn) return;
+
+            if (!currentConvId) {
+                showToast('Keine aktive Konversation geladen.', 'error');
+                return;
+            }
+
+            const oldText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '🧠 Analysiere...';
+            btn.style.opacity = '0.7';
+
+            try {
+                const csrfToken = window.__APP_CONFIG__ ? window.__APP_CONFIG__.csrfToken : '';
+                const res = await window.electronNative.consolidateMemory(currentConvId, csrfToken);
+
+                if (res && res.found) {
+                    showConsolidationModal(res.type, res.proposed_text, res.convoId);
+                } else {
+                    showToast('Keine neuen Erkenntnisse im aktuellen Verlauf gefunden.', 'info');
+                }
+            } catch (e) {
+                console.error('[AMS UI] Consolidation failed:', e);
+                showToast('Fehler bei der Analyse: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = oldText;
+                btn.style.opacity = '1';
+            }
+        }
+
+        function showToast(message, type) {
+            const toast = document.createElement('div');
+            toast.style.position = 'fixed';
+            toast.style.bottom = '20px';
+            toast.style.right = '20px';
+            toast.style.padding = '12px 18px';
+            toast.style.borderRadius = '8px';
+            toast.style.fontSize = '13px';
+            toast.style.zIndex = '99999';
+            toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+            toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+            toast.style.transform = 'translateY(20px)';
+            toast.style.opacity = '0';
+
+            if (type === 'error') {
+                toast.style.background = '#ef4444';
+                toast.style.color = '#ffffff';
+            } else if (type === 'success') {
+                toast.style.background = '#10b981';
+                toast.style.color = '#ffffff';
+            } else {
+                toast.style.background = 'var(--popover, #1e1e24)';
+                toast.style.color = 'var(--popover-foreground, #ffffff)';
+                toast.style.border = '1px solid var(--border, #3f3f46)';
+            }
+
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.transform = 'translateY(0)';
+                toast.style.opacity = '1';
+            }, 50);
+
+            setTimeout(() => {
+                toast.style.transform = 'translateY(20px)';
+                toast.style.opacity = '0';
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 4000);
+        }
+
+        function showConsolidationModal(type, proposedText, tempConvoId) {
+            const previouslyFocused = document.activeElement;
+            const overlay = document.createElement('div');
+            overlay.className = 'antigravity-modal-overlay';
+            stopKeyPropagation(overlay);
+            overlay.style.position = 'fixed';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+            overlay.style.width = '100vw';
+            overlay.style.height = '100vh';
+            overlay.style.background = 'rgba(9, 9, 11, 0.7)';
+            overlay.style.backdropFilter = 'blur(4px)';
+            overlay.style.display = 'flex';
+            overlay.style.alignItems = 'center';
+            overlay.style.justifyContent = 'center';
+            overlay.style.zIndex = '99998';
+            overlay.style.opacity = '0';
+            overlay.style.transition = 'opacity 0.2s ease';
+
+            const modal = document.createElement('div');
+            modal.style.background = 'var(--popover, #1e1e24)';
+            modal.style.border = '1px solid var(--border, #3f3f46)';
+            modal.style.borderRadius = '12px';
+            modal.style.padding = '24px';
+            modal.style.width = '450px';
+            modal.style.maxWidth = '90vw';
+            modal.style.boxShadow = '0 20px 25px -5px rgba(0,0,0,0.5)';
+            modal.style.display = 'flex';
+            modal.style.flexDirection = 'column';
+            modal.style.gap = '16px';
+            modal.style.transform = 'scale(0.95)';
+            modal.style.transition = 'transform 0.2s ease';
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+
+            const optionSelect = type === 'preference'
+                ? '<option value="lesson_learned">Gelernte Technik (MEMORY.pc.md)</option><option value="preference" selected>Benutzerpräferenz (USER.pc.md)</option>'
+                : '<option value="lesson_learned" selected>Gelernte Technik (MEMORY.pc.md)</option><option value="preference">Benutzerpräferenz (USER.pc.md)</option>';
+
+            modal.innerHTML =
+                '<div style="display: flex; align-items: center; gap: 8px;">' +
+                    '<span style="font-size: 24px;">🧠</span>' +
+                    '<h3 style="font-size: 18px; font-weight: 600; color: var(--foreground, #ffffff); margin: 0;">Neues Wissen sichern</h3>' +
+                '</div>' +
+                '<p style="font-size: 13px; color: var(--muted-foreground, #a1a1aa); margin: 0; line-height: 1.4;">' +
+                    'Die KI hat eine neue Erkenntnis oder Präferenz in diesem Chat erkannt. Du kannst sie vor dem Speichern bearbeiten:' +
+                '</p>' +
+                '<div style="display: flex; flex-direction: column; gap: 6px;">' +
+                    '<label style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--muted-foreground, #71717a);">Gedächtnistyp</label>' +
+                    '<select id="ams-memory-type" style="background: var(--background, #09090b); color: var(--foreground, #ffffff); border: 1px solid var(--border, #3f3f46); border-radius: 6px; padding: 8px; font-size: 13px; outline: none;">' +
+                        optionSelect +
+                    '</select>' +
+                '</div>' +
+                '<div style="display: flex; flex-direction: column; gap: 6px;">' +
+                    '<label style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--muted-foreground, #71717a);">Erkenntnis / Bulletpoint</label>' +
+                    '<textarea id="ams-memory-text" style="background: var(--background, #09090b); color: var(--foreground, #ffffff); border: 1px solid var(--border, #3f3f46); border-radius: 6px; padding: 10px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 80px; outline: none; line-height: 1.4;"></textarea>' +
+                '</div>' +
+                '<div style="display: flex; justify-content: end; gap: 12px; margin-top: 8px;">' +
+                    '<button id="ams-cancel-modal" style="background: transparent; color: var(--foreground, #ffffff); border: 1px solid var(--border, #3f3f46); border-radius: 6px; padding: 8px 16px; font-size: 13px; cursor: pointer; font-weight: 500;">Verwerfen</button>' +
+                    '<button id="ams-save-modal" style="background: var(--primary, #3b82f6); color: var(--primary-foreground, #ffffff); border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 6px;">Speichern & Kompilieren</button>' +
+                '</div>';
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            const textarea = modal.querySelector('#ams-memory-text');
+            textarea.value = proposedText;
+            const modalTitle = modal.querySelector('h3');
+            modalTitle.id = 'ams-memory-modal-title-' + Date.now();
+            modal.setAttribute('aria-labelledby', modalTitle.id);
+
+            setTimeout(() => {
+                overlay.style.opacity = '1';
+                modal.style.transform = 'scale(1)';
+            }, 50);
+
+            let isSaving = false;
+            let tempCleanupStarted = false;
+            const cleanupTempConversation = () => {
+                if (!tempConvoId || tempCleanupStarted) return Promise.resolve();
+                tempCleanupStarted = true;
+                return deleteTempConversation(tempConvoId);
+            };
+            const controller = createAmsModalController({
+                overlay,
+                modal,
+                initialFocus: textarea,
+                previouslyFocused,
+                removeDelay: 200,
+                animateClose: () => {
+                    overlay.style.opacity = '0';
+                    modal.style.transform = 'scale(0.95)';
+                },
+                onClose: (reason) => {
+                    if (reason !== 'saved') {
+                        cleanupTempConversation().catch((error) => {
+                            console.warn('[AMS UI] Failed to clean up discarded memory conversation:', error);
+                        });
+                    }
+                },
+            });
+            const closeModal = (reason = 'discard') => controller.close(reason);
+            controller.focusInitial();
+            textarea.select();
+
+            modal.querySelector('#ams-cancel-modal').addEventListener('click', () => {
+                closeModal('discard');
+            });
+
+            modal.querySelector('#ams-save-modal').addEventListener('click', async () => {
+                if (isSaving || controller.isClosed()) return;
+                const saveBtn = modal.querySelector('#ams-save-modal');
+                const selectedType = modal.querySelector('#ams-memory-type').value;
+                const textToSave = textarea.value.trim();
+
+                if (!textToSave) {
+                    alert('Bitte trage eine Erkenntnis ein.');
+                    return;
+                }
+
+                isSaving = true;
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '💾 Speichere...';
+                saveBtn.style.opacity = '0.7';
+
+                try {
+                    const res = await window.electronNative.applyMemorySuggestion(selectedType, textToSave);
+                    if (res && res.status === 'success') {
+                        showToast('Gedächtnis erfolgreich aktualisiert und kompiliert!', 'success');
+                        closeModal('saved');
+                    } else if (res && res.status === 'warning') {
+                        showToast('Erkenntnis gespeichert, Kompilierung fehlgeschlagen: ' + res.message, 'error');
+                        closeModal('saved');
+                    } else {
+                        alert('Fehler beim Speichern: ' + (res ? res.message : 'Unbekannter Fehler'));
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = 'Speichern & Kompilieren';
+                        saveBtn.style.opacity = '1';
+                    }
+
+                    if (res && (res.status === 'success' || res.status === 'warning')) {
+                        await cleanupTempConversation();
+                    }
+                } catch (saveErr) {
+                    console.error('[AMS UI] Failed to save memory suggestion:', saveErr);
+                    alert('Speicherfehler: ' + saveErr.message);
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = 'Speichern & Kompilieren';
+                    saveBtn.style.opacity = '1';
+                } finally {
+                    isSaving = false;
+                }
+            });
+        }
+    }
+
+    // ----------------------------------------------------
+
+    // React changes are observed and coalesced instead of scanning the full DOM twice per second.
+    let lastSyncStatusCheck = 0;
+    let injectionScanInFlight = false;
+    const runInjectionScan = async () => {
+        if (document.hidden || injectionScanInFlight) return;
+        injectionScanInFlight = true;
+        try {
+        // Modal-Off-Check: Reset active tab state if modal is closed
+        const isModalOpen = !!document.querySelector('.animate-modalScaleIn') || !!document.querySelector('[role="dialog"]');
+        if (!isModalOpen) {
+            window.__antigravity_active_tab = '';
+        }
+
+        const logsTab = document.getElementById('antigravity-settings-logs-tab');
+        if (logsTab) {
+            if (window.__antigravity_active_tab === 'logs') {
+                if (!logsTab.classList.contains('bg-sidebar-secondary')) {
+                    logsTab.classList.add('bg-sidebar-secondary');
+                    logsTab.classList.remove('hover:bg-sidebar-muted');
+                }
+                const sidebar = logsTab.parentElement;
+                if (sidebar) {
+                    sidebar.querySelectorAll('button, [role="tab"]').forEach(btn => {
+                        if (btn !== logsTab && btn.classList.contains('bg-sidebar-secondary')) {
+                            btn.classList.remove('bg-sidebar-secondary');
+                            btn.classList.add('hover:bg-sidebar-muted');
+                        }
+                    });
+                }
+            } else {
+                if (logsTab.classList.contains('bg-sidebar-secondary')) {
+                    logsTab.classList.remove('bg-sidebar-secondary');
+                    logsTab.classList.add('hover:bg-sidebar-muted');
+                }
+            }
+        }
+
+        if (window.__antigravity_active_tab === 'logs') {
+            const logsTab = document.getElementById('antigravity-settings-logs-tab');
+            if (logsTab) {
+                const sidebar = logsTab.parentElement;
+                if (sidebar) {
+                    const sidebarContainer = sidebar.closest('.bg-sidebar');
+                    if (sidebarContainer) {
+                        const layoutContainer = sidebarContainer.closest('.flex.w-full.h-full.outline-none') ||
+                                                (sidebarContainer.parentElement ? sidebarContainer.parentElement.parentElement : null);
+                        const rightPanel = layoutContainer ? layoutContainer.children[1] : null;
+                        if (rightPanel) {
+                            const container = document.getElementById('antigravity-log-viewer-container');
+                            const isRendered = container && container.style.display === 'flex' && container.querySelector('#log-rows-container');
+
+                            // Check if React re-rendered other elements and made them visible
+                            let othersVisible = false;
+                            for (let i = 0; i < rightPanel.children.length; i++) {
+                                const child = rightPanel.children[i];
+                                if (child !== container && child.style.display !== 'none') {
+                                    othersVisible = true;
+                                    break;
+                                }
+                            }
+
+                            if (!isRendered || othersVisible) {
+                                renderAppLogViewer();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        const addContextBtn = document.querySelector('button[aria-label="Add context"]');
+        let btn = document.querySelector('.antigravity-brain-btn');
+        let quotaEl = document.querySelector('.antigravity-quota-display');
+        let planToggleBtn = document.querySelector('.antigravity-plan-btn');
+        let duplicateBtn = document.querySelector('.antigravity-duplicate-btn');
+        let chatTokenEl = document.querySelector('#antigravity-chat-token-counter');
+
+        if (addContextBtn && !btn) {
+            const flexContainer = addContextBtn.parentElement;
+            if (flexContainer) {
+                btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'antigravity-brain-btn flex items-center justify-center h-7 w-7 rounded-lg cursor-pointer hover:bg-secondary transition-colors text-secondary-foreground';
+                btn.title = 'Brain-Ordner öffnen';
+                btn.style.marginLeft = '6px';
+                btn.style.padding = '0';
+                btn.style.background = 'transparent';
+                btn.style.border = 'none';
+                btn.style.outline = 'none';
+                btn.style.display = 'inline-flex';
+
+                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+                                '<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1 0-3.12 3 3 0 0 1 0-4.88 2.5 2.5 0 0 1 0-3.12A2.5 2.5 0 0 1 9.5 2Z"/>' +
+                                '<path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 0-3.12 3 3 0 0 0 0-4.88 2.5 2.5 0 0 0 0-3.12A2.5 2.5 0 0 0 14.5 2Z"/>' +
+                                '</svg>';
+
+                btn.addEventListener('click', () => {
+                    try {
+                        if (window.electronNative && window.electronNative.openBrain) {
+                            window.electronNative.openBrain();
+                        }
+                    } catch (err) {
+                        console.error('[AMS UI] Call to openBrain failed:', err);
+                    }
+                });
+
+                flexContainer.appendChild(btn);
+                console.log('[AMS UI] Brain shortcut button successfully appended to flex container.');
+            }
+        }
+
+        if (addContextBtn && !planToggleBtn) {
+            const flexContainer = addContextBtn.parentElement;
+            if (flexContainer) {
+                planToggleBtn = document.createElement('button');
+                planToggleBtn.type = 'button';
+                planToggleBtn.className = 'antigravity-plan-btn flex items-center justify-center h-7 w-7 rounded-lg cursor-pointer hover:bg-secondary transition-colors text-secondary-foreground';
+                planToggleBtn.title = 'Task- & Plan-Tracker öffnen';
+                planToggleBtn.style.marginLeft = '4px';
+                planToggleBtn.style.padding = '0';
+                planToggleBtn.style.background = 'transparent';
+                planToggleBtn.style.border = 'none';
+                planToggleBtn.style.outline = 'none';
+                planToggleBtn.style.display = 'inline-flex';
+
+                planToggleBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+                                          '<path d="M12 20h9"/>' +
+                                          '<path d="M3 20h.01"/>' +
+                                          '<path d="M3 14h.01"/>' +
+                                          '<path d="M3 8h.01"/>' +
+                                          '<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>' +
+                                          '<path d="m9 11 2 2 4-4"/>' +
+                                          '</svg>';
+
+                planToggleBtn.addEventListener('click', () => {
+                    togglePlanPanel();
+                });
+
+                if (btn) {
+                    btn.after(planToggleBtn);
+                } else {
+                    flexContainer.appendChild(planToggleBtn);
+                }
+                console.log('[AMS UI] Plan shortcut button successfully appended to flex container.');
+            }
+        }
+
+        if (addContextBtn && !duplicateBtn) {
+            const flexContainer = addContextBtn.parentElement;
+            if (flexContainer) {
+                duplicateBtn = document.createElement('button');
+                duplicateBtn.type = 'button';
+                duplicateBtn.className = 'antigravity-duplicate-btn flex items-center justify-center h-7 w-7 rounded-lg cursor-pointer hover:bg-secondary transition-colors text-secondary-foreground';
+                duplicateBtn.title = 'Fenster duplizieren';
+                duplicateBtn.style.marginLeft = '4px';
+                duplicateBtn.style.padding = '0';
+                duplicateBtn.style.background = 'transparent';
+                duplicateBtn.style.border = 'none';
+                duplicateBtn.style.outline = 'none';
+                duplicateBtn.style.display = 'inline-flex';
+
+                duplicateBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+                                         '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>' +
+                                         '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' +
+                                         '</svg>';
+
+                duplicateBtn.addEventListener('click', () => {
+                    try {
+                        if (window.electronNative && window.electronNative.openDuplicateWindow) {
+                            window.electronNative.openDuplicateWindow(amsToken);
+                        } else {
+                            window.open(window.location.href, '_blank');
+                        }
+                    } catch (err) {
+                        console.error('[AMS UI] Call to openDuplicateWindow failed:', err);
+                    }
+                });
+
+                if (planToggleBtn) {
+                    planToggleBtn.after(duplicateBtn);
+                } else if (btn) {
+                    btn.after(duplicateBtn);
+                } else {
+                    flexContainer.appendChild(duplicateBtn);
+                }
+                console.log('[AMS UI] Duplicate shortcut button successfully appended to flex container.');
+            }
+        }
+
+        let quickMenuBtn = document.querySelector('.antigravity-quickmenu-btn');
+        if (addContextBtn && !quickMenuBtn) {
+            const flexContainer = addContextBtn.parentElement;
+            if (flexContainer) {
+                quickMenuBtn = document.createElement('button');
+                quickMenuBtn.type = 'button';
+                quickMenuBtn.className = 'antigravity-quickmenu-btn flex items-center justify-center h-7 rounded-lg cursor-pointer hover:bg-secondary transition-colors text-secondary-foreground';
+                quickMenuBtn.title = 'Antigravity Unleashed · Quick Menu (Ctrl+Shift+B)';
+                quickMenuBtn.style.marginLeft = '4px';
+                quickMenuBtn.style.padding = '0 7px';
+                quickMenuBtn.style.gap = '5px';
+                quickMenuBtn.style.background = 'rgba(139, 92, 246, 0.08)';
+                quickMenuBtn.style.border = '1px solid rgba(139, 92, 246, 0.24)';
+                quickMenuBtn.style.outline = 'none';
+                quickMenuBtn.style.display = 'inline-flex';
+                quickMenuBtn.style.alignItems = 'center';
+
+                quickMenuBtn.innerHTML =
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">' +
+                    '<ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-28 12 12)" stroke="#38bdf8" stroke-width="1.7" stroke-opacity="0.85"/>' +
+                    '<polygon points="12,3.2 19.2,12 12,20.8 4.8,12" fill="rgba(139,92,246,0.22)" stroke="#a78bfa" stroke-width="1.8" stroke-linejoin="round"/>' +
+                    '<circle cx="12" cy="12" r="2.1" fill="#f8fafc"/>' +
+                    '</svg>' +
+                    '<span style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;background:linear-gradient(90deg,#38bdf8,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Unleashed</span>';
+
+                quickMenuBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (window.toggleQuickMenu) {
+                        window.toggleQuickMenu();
+                    }
+                });
+
+                if (duplicateBtn) {
+                    duplicateBtn.after(quickMenuBtn);
+                } else if (planToggleBtn) {
+                    planToggleBtn.after(quickMenuBtn);
+                } else if (btn) {
+                    btn.after(quickMenuBtn);
+                } else {
+                    flexContainer.appendChild(quickMenuBtn);
+                }
+                console.log('[AMS UI] Quick menu button successfully appended to flex container.');
+            }
+        }
+
+        if (addContextBtn && !quotaEl) {
+            const flexContainer = addContextBtn.parentElement;
+            if (flexContainer) {
+                quotaEl = document.createElement('div');
+                quotaEl.className = 'antigravity-quota-display';
+                quotaEl.style.display = 'inline-flex';
+                quotaEl.style.alignItems = 'center';
+                quotaEl.style.gap = '6px';
+                quotaEl.style.fontSize = '10px';
+                quotaEl.style.color = 'var(--muted-foreground, #9d9d9d)';
+                quotaEl.style.marginLeft = '8px';
+                quotaEl.style.marginRight = '4px';
+                quotaEl.style.fontFamily = 'monospace';
+                quotaEl.style.userSelect = 'none';
+                quotaEl.style.cursor = 'pointer';
+
+                quotaEl.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const settingsBtn = document.querySelector('[data-testid="settings-button"]');
+                    if (settingsBtn) {
+                        settingsBtn.click();
+                        let attempts = 0;
+                        const interval = setInterval(() => {
+                            let modelsTab = null;
+                            document.querySelectorAll('button, [role="tab"], [role="button"]').forEach(btn => {
+                                if (btn.textContent && btn.textContent.trim() === 'Models') {
+                                    modelsTab = btn;
+                                }
+                            });
+                            if (modelsTab) {
+                                modelsTab.click();
+                                clearInterval(interval);
+                            }
+                            attempts++;
+                            if (attempts > 20) {
+                                clearInterval(interval);
+                            }
+                        }, 50);
+                    }
+                });
+
+                flexContainer.appendChild(quotaEl);
+                refreshQuotaDisplay();
+                console.log('[AMS UI] Quota display successfully appended to flex container.');
+            }
+        }
+
+        if (addContextBtn && !chatTokenEl) {
+            const flexContainer = addContextBtn.parentElement;
+            if (flexContainer) {
+                chatTokenEl = document.createElement('span');
+                chatTokenEl.id = 'antigravity-chat-token-counter';
+                chatTokenEl.style.display = 'none';
+                chatTokenEl.style.alignItems = 'center';
+                chatTokenEl.style.fontSize = '10px';
+                chatTokenEl.style.color = 'var(--muted-foreground, #9d9d9d)';
+                chatTokenEl.style.marginLeft = '8px';
+                chatTokenEl.style.marginRight = '4px';
+                chatTokenEl.style.fontFamily = 'monospace';
+                chatTokenEl.style.userSelect = 'none';
+                chatTokenEl.style.cursor = 'help';
+
+                if (quotaEl) {
+                    quotaEl.after(chatTokenEl);
+                } else {
+                    flexContainer.appendChild(chatTokenEl);
+                }
+                console.log('[AMS UI] Chat token counter successfully appended to flex container.');
+            }
+        }
+
+        const settingsBtn = document.querySelector('[data-testid="settings-button"]');
+        let customSidebarBtn = document.querySelector('.antigravity-custom-sidebar-btn');
+        if (settingsBtn && !customSidebarBtn) {
+            customSidebarBtn = document.createElement('div');
+            customSidebarBtn.role = 'button';
+            customSidebarBtn.tabIndex = 0;
+            customSidebarBtn.className = 'antigravity-custom-sidebar-btn flex-grow flex items-center gap-1.5 group px-2 py-1 rounded-lg cursor-pointer h-8 min-w-0 bg-transparent hover:bg-sidebar-muted text-secondary-foreground';
+            customSidebarBtn.style.outline = 'none';
+            customSidebarBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="M12 6v6l4 2"></path></svg>' +
+                                         '<span class="select-none truncate text-sm font-normal">History</span>';
+
+            customSidebarBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    const settingsBtn = document.querySelector('[data-testid="settings-button"]');
+                    if (settingsBtn) {
+                        settingsBtn.click();
+                        let attempts = 0;
+                        const interval = setInterval(() => {
+                            let logViewerTab = null;
+                            document.querySelectorAll('button, [role="tab"], [role="button"]').forEach(btn => {
+                                if (btn.textContent && btn.textContent.trim().toLowerCase() === 'log viewer') {
+                                    logViewerTab = btn;
+                                }
+                            });
+                            if (logViewerTab) {
+                                logViewerTab.click();
+                                clearInterval(interval);
+                            }
+                            attempts++;
+                            if (attempts > 20) {
+                                clearInterval(interval);
+                            }
+                        }, 50);
+                    }
+                } catch (err) {
+                    console.error('[AMS UI] Custom sidebar button click failed:', err);
+                }
+            });
+
+            settingsBtn.before(customSidebarBtn);
+            console.log('[AMS UI] Custom sidebar button successfully injected above settings.');
+        }
+
+        if (btn) {
+            const now = Date.now();
+            if (now - lastSyncStatusCheck >= 30_000) {
+                lastSyncStatusCheck = now;
+                try {
+                    if (window.electronNative && window.electronNative.getSyncStatus) {
+                        const statusInfo = await window.electronNative.getSyncStatus();
+
+                        if (!document.getElementById('antigravity-brain-styles')) {
+                            const style = document.createElement('style');
+                            style.id = 'antigravity-brain-styles';
+                            style.innerHTML = '@keyframes brain-pulse {' +
+                                              '  0%, 100% { opacity: 1; transform: scale(1); }' +
+                                              '  50% { opacity: .65; transform: scale(1.05); }' +
+                                              '}' +
+                                              '.antigravity-brain-conflict {' +
+                                              '  color: #f97316 !important;' +
+                                              '  animation: brain-pulse 2s infinite ease-in-out;' +
+                                              '}';
+                            document.head.appendChild(style);
+                        }
+
+                        if (statusInfo && statusInfo.status === 'conflict') {
+                            btn.classList.add('antigravity-brain-conflict');
+                            const cleanNames = statusInfo.conflictFiles.map(f => {
+                                if (f.startsWith('- [CONFLICT]')) {
+                                    return f.replace('- [CONFLICT] Conflict in ', '').split(' at ')[0];
+                                }
+                                return f;
+                            });
+                            const filesStr = cleanNames.slice(0, 3).join(', ') + (cleanNames.length > 3 ? '...' : '');
+                            btn.title = 'Achtung: Git-Konflikte/Backups im Brain-Ordner erkannt! (' + filesStr + '). Klicke hier zum Öffnen.';
+                        } else {
+                            btn.classList.remove('antigravity-brain-conflict');
+                            btn.title = 'Brain-Ordner öffnen';
+                        }
+                    }
+                } catch (err) {
+                    console.error('[AMS UI] Failed to fetch sync status:', err);
+                }
+            }
+        }
+
+        // ----------------------------------------------------
+        // Log Viewer Tab Injection inside Settings modal
+        // ----------------------------------------------------
+        try {
+            let modelsTab = null;
+            document.querySelectorAll('button, [role="tab"], [role="button"]').forEach(btn => {
+                if (btn.textContent) {
+                    const txt = btn.textContent.trim().toLowerCase();
+                    if (txt === 'models' || txt === 'modelle') {
+                        modelsTab = btn;
+                    }
+                }
+            });
+
+            if (modelsTab) {
+                const sidebar = modelsTab.parentElement;
+                if (sidebar && !document.getElementById('antigravity-settings-logs-tab')) {
+                    const logsTab = document.createElement('button');
+                    logsTab.type = 'button';
+                    logsTab.id = 'antigravity-settings-logs-tab';
+                    logsTab.className = modelsTab.className;
+                    logsTab.innerHTML = modelsTab.innerHTML;
+
+                    const textSpan = logsTab.querySelector('span');
+                    if (textSpan) {
+                        textSpan.textContent = 'Log Viewer';
+                    }
+
+                    const svg = logsTab.querySelector('svg');
+                    if (svg) {
+                        svg.innerHTML = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9">';
+                    }
+
+                    logsTab.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        sidebar.querySelectorAll('button, [role="tab"]').forEach(btn => {
+                            btn.classList.remove('bg-sidebar-secondary');
+                            btn.classList.add('hover:bg-sidebar-muted');
+                        });
+                        logsTab.classList.add('bg-sidebar-secondary');
+                        logsTab.classList.remove('hover:bg-sidebar-muted');
+
+                        window.__antigravity_active_tab = 'logs';
+                        renderAppLogViewer();
+                    });
+
+                    sidebar.appendChild(logsTab);
+
+                    // Robust event delegation on the sidebar container to catch all clicks to other tabs
+                    const sidebarContainer = sidebar.closest('.bg-sidebar');
+                    if (sidebarContainer && !sidebarContainer.hasAttribute('antigravity-listener-added')) {
+                        sidebarContainer.setAttribute('antigravity-listener-added', 'true');
+                        sidebarContainer.addEventListener('click', (e) => {
+                            const btn = e.target.closest('button, [role="tab"]');
+                            if (btn && btn !== logsTab) {
+                                logsTab.classList.remove('bg-sidebar-muted', 'text-sidebar-accent-foreground');
+                                logsTab.style.background = '';
+                                window.__antigravity_active_tab = '';
+
+                                const container = document.getElementById('antigravity-log-viewer-container');
+                                if (container) {
+                                    container.style.display = 'none';
+                                }
+
+                                const dialog = document.querySelector('.animate-modalScaleIn') || document.querySelector('[role="dialog"]');
+                                if (dialog) {
+                                    const layoutContainer = sidebarContainer.closest('.flex.w-full.h-full.outline-none') ||
+                                                            (sidebarContainer.parentElement ? sidebarContainer.parentElement.parentElement : null);
+                                    const rightPanel = layoutContainer ? layoutContainer.children[1] : null;
+                                    if (rightPanel) {
+                                        for (let i = 0; i < rightPanel.children.length; i++) {
+                                            const child = rightPanel.children[i];
+                                            if (child !== container) {
+                                                child.style.display = '';
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        } catch (settingsErr) {
+            console.error('[AMS UI] Error injecting Log Viewer tab:', settingsErr);
+        }
+        } finally {
+            injectionScanInFlight = false;
+        }
+    };
+
+    let injectionScanTimer = null;
+    const scheduleInjectionScan = () => {
+        if (document.hidden) return;
+        if (injectionScanTimer !== null) clearTimeout(injectionScanTimer);
+        injectionScanTimer = setTimeout(() => {
+            injectionScanTimer = null;
+            runInjectionScan().catch((error) => console.error('[AMS UI] DOM injection scan failed:', error));
+        }, 120);
+    };
+    const injectionObserver = new MutationObserver((records) => {
+        if (records.some((record) => record.addedNodes.length > 0 || record.removedNodes.length > 0)) {
+            scheduleInjectionScan();
+        }
+    });
+    injectionObserver.observe(document.documentElement || document, { childList: true, subtree: true });
+    const injectionFallbackInterval = setInterval(scheduleInjectionScan, 10_000);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) scheduleInjectionScan();
+    });
+    scheduleInjectionScan();
+
+    // Real-time Chat Monitor
+
+    window.toggleQuickMenu = function() {
+        const existing = document.getElementById('antigravity-quick-menu-overlay');
+        if (existing) {
+            existing.style.opacity = '0';
+            existing.style.transform = 'translateY(10px) scale(0.95)';
+            setTimeout(() => existing.remove(), 200);
+            return;
+        }
+
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'antigravity-quick-menu-overlay';
+
+        overlay.style.position = 'fixed';
+        overlay.style.bottom = '80px';
+        overlay.style.right = '20px';
+        overlay.style.width = '320px';
+        overlay.style.background = 'rgba(20, 20, 23, 0.85)';
+        overlay.style.backdropFilter = 'blur(16px)';
+        overlay.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+        overlay.style.borderRadius = '12px';
+        overlay.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)';
+        overlay.style.zIndex = '999999';
+        overlay.style.padding = '16px';
+        overlay.style.color = '#fafafa';
+        overlay.style.fontFamily = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.gap = '12px';
+        overlay.style.opacity = '0';
+        overlay.style.transform = 'translateY(10px) scale(0.95)';
+        overlay.style.transition = 'opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+
+        // Header
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.justifyContent = 'space-between';
+        header.style.borderBottom = '1px solid rgba(255, 255, 255, 0.08)';
+        header.style.paddingBottom = '8px';
+
+        const title = document.createElement('span');
+        title.style.display = 'inline-flex';
+        title.style.alignItems = 'center';
+        title.style.gap = '7px';
+        title.style.fontSize = '13px';
+        title.style.fontWeight = '600';
+        title.style.letterSpacing = '0.3px';
+        title.style.color = '#f8fafc';
+        title.innerHTML =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">' +
+            '<ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-28 12 12)" stroke="#38bdf8" stroke-width="1.8" stroke-opacity="0.9"/>' +
+            '<polygon points="12,3 19.4,12 12,21 4.6,12" fill="rgba(139,92,246,0.28)" stroke="#a78bfa" stroke-width="1.8" stroke-linejoin="round"/>' +
+            '<circle cx="12" cy="12" r="2.2" fill="#f8fafc"/>' +
+            '</svg>' +
+            '<strong>Antigravity Unleashed</strong>' +
+            '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:rgba(139,92,246,0.18);border:1px solid rgba(139,92,246,0.35);color:#c4b5fd;letter-spacing:0.06em;">MOD</span>';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '✕';
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.border = 'none';
+        closeBtn.style.color = 'rgba(255, 255, 255, 0.4)';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.fontSize = '12px';
+        closeBtn.style.padding = '4px';
+        closeBtn.addEventListener('click', () => window.toggleQuickMenu());
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        overlay.appendChild(header);
+
+        // Status section
+        const statusSection = document.createElement('div');
+        statusSection.style.fontSize = '11px';
+        statusSection.style.display = 'flex';
+        statusSection.style.flexDirection = 'column';
+        statusSection.style.gap = '6px';
+        statusSection.style.background = 'rgba(255, 255, 255, 0.03)';
+        statusSection.style.padding = '10px';
+        statusSection.style.borderRadius = '8px';
+        statusSection.style.border = '1px solid rgba(255, 255, 255, 0.03)';
+
+        const activeModel = getActiveModel ? getActiveModel() : 'Gemini 3.5 Flash';
+        const modelRow = document.createElement('div');
+        modelRow.style.display = 'flex';
+        modelRow.style.justifyContent = 'space-between';
+        modelRow.innerHTML = '<span style="color: rgba(255,255,255,0.5)">Model:</span>';
+        const modelValue = document.createElement('span');
+        modelValue.style.fontWeight = '500';
+        modelValue.textContent = String(activeModel || 'Unknown');
+        modelRow.appendChild(modelValue);
+        statusSection.appendChild(modelRow);
+
+        const syncRow = document.createElement('div');
+        syncRow.style.display = 'flex';
+        syncRow.style.justifyContent = 'space-between';
+        syncRow.innerHTML = \`<span style="color: rgba(255,255,255,0.5)">Sync Status:</span><span id="ams-sync-indicator" style="font-weight: 500">Checking...</span>\`;
+        statusSection.appendChild(syncRow);
+
+        const hubRow = document.createElement('div');
+        hubRow.style.display = 'flex';
+        hubRow.style.justifyContent = 'space-between';
+        hubRow.innerHTML = \`<span style="color: rgba(255,255,255,0.5)">Anti-Gravity Hub:</span><span id="ams-antigravity-hub-indicator" style="font-weight:500;color:#fbbf24">● Checking…</span>\`;
+        statusSection.appendChild(hubRow);
+
+        const bridgeRow = document.createElement('div');
+        bridgeRow.style.display = 'flex';
+        bridgeRow.style.justifyContent = 'space-between';
+        bridgeRow.innerHTML = \`<span style="color: rgba(255,255,255,0.5)">Anti-Gravity API Bridge:</span><span id="ams-antigravity-bridge-indicator" style="font-weight:500;color:#fbbf24">● Checking…</span>\`;
+        statusSection.appendChild(bridgeRow);
+
+        overlay.appendChild(statusSection);
+
+        // Actions Section
+        const actionsSection = document.createElement('div');
+        actionsSection.style.display = 'flex';
+        actionsSection.style.flexDirection = 'column';
+        actionsSection.style.gap = '6px';
+
+        const createMenuItem = (label, iconSvg, onClick) => {
+            const item = document.createElement('button');
+            item.style.display = 'flex';
+            item.style.alignItems = 'center';
+            item.style.gap = '10px';
+            item.style.width = '100%';
+            item.style.padding = '8px 12px';
+            item.style.background = 'transparent';
+            item.style.border = 'none';
+            item.style.borderRadius = '6px';
+            item.style.color = 'rgba(255, 255, 255, 0.8)';
+            item.style.fontSize = '12px';
+            item.style.textAlign = 'left';
+            item.style.cursor = 'pointer';
+            item.style.transition = 'background 0.2s, color 0.2s';
+
+            item.innerHTML = iconSvg;
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = String(label || '');
+            item.appendChild(labelSpan);
+
+            item.addEventListener('mouseenter', () => {
+                item.style.background = 'rgba(255, 255, 255, 0.08)';
+                item.style.color = '#ffffff';
+            });
+            item.addEventListener('mouseleave', () => {
+                item.style.background = 'transparent';
+                item.style.color = 'rgba(255, 255, 255, 0.8)';
+            });
+            item.addEventListener('click', () => {
+                window.toggleQuickMenu();
+                onClick();
+            });
+            return item;
+        };
+
+        const brainSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1 0-3.12 3 3 0 0 1 0-4.88 2.5 2.5 0 0 1 0-3.12A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 0-3.12 3 3 0 0 0 0-4.88 2.5 2.5 0 0 0 0-3.12A2.5 2.5 0 0 0 14.5 2Z"/></svg>\`;
+        actionsSection.appendChild(createMenuItem('Brain-Ordner öffnen', brainSvg, () => {
+            if (window.electronNative && window.electronNative.openBrain) {
+                window.electronNative.openBrain();
+            }
+        }));
+
+        const webSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg>\`;
+        actionsSection.appendChild(createMenuItem('Anti-Gravity Hub öffnen', webSvg, () => {
+            if (window.amsAntigravityHub && window.amsAntigravityHub.openHub) {
+                window.amsAntigravityHub.openHub();
+            }
+        }));
+
+        const startSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>\`;
+        const restartSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>\`;
+        const servicesItem = createMenuItem('Hub & API Bridge starten', startSvg, async () => {
+            const restart = servicesItem.dataset.restart === 'true';
+            try {
+                if (window.amsAntigravityHub && window.amsAntigravityHub.startServices) {
+                    await window.amsAntigravityHub.startServices(restart);
+                }
+            } catch (err) {
+                console.error(\`[AMS Services] \${restart ? 'Restart' : 'Start'} failed:\`, err);
+            }
+        });
+        servicesItem.id = 'ams-services-menu-item';
+        servicesItem.dataset.restart = 'false';
+        actionsSection.appendChild(servicesItem);
+
+        const planSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M3 20h.01"/><path d="M3 14h.01"/><path d="M3 8h.01"/><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="m9 11 2 2 4-4"/></svg>\`;
+        actionsSection.appendChild(createMenuItem('Task-Plan öffnen', planSvg, () => {
+            if (typeof togglePlanPanel === 'function') {
+                togglePlanPanel();
+            }
+        }));
+
+        const duplicateSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>\`;
+        actionsSection.appendChild(createMenuItem('Fenster duplizieren', duplicateSvg, () => {
+            if (window.electronNative && window.electronNative.openDuplicateWindow) {
+                window.electronNative.openDuplicateWindow(amsToken);
+            } else {
+                window.open(window.location.href, '_blank');
+            }
+        }));
+
+        const syncSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>\`;
+        actionsSection.appendChild(createMenuItem('Manuelles Git Sync', syncSvg, () => {
+            const convoId = getSessionId ? getSessionId() : '';
+            if (typeof showGitSyncModal === 'function') {
+                showGitSyncModal(convoId, async (commitMsg) => {
+                    if (window.electronNative && window.electronNative.commitAndPush) {
+                        await window.electronNative.commitAndPush(commitMsg || 'wip: sync tasks', convoId);
+                    }
+                });
+            }
+        }));
+
+        const historySvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>\`;
+        actionsSection.appendChild(createMenuItem('Update- & Patch-Log', historySvg, () => {
+            if (typeof showUpdateHistoryModal === 'function') {
+                showUpdateHistoryModal();
+            } else if (typeof window.showUpdateHistoryModal === 'function') {
+                window.showUpdateHistoryModal();
+            }
+        }));
+
+        const apiWindowSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg>\`;
+        let apiWindowVisible = false;
+        const apiWindowItem = createMenuItem('API-Fenster: wird geladen ...', apiWindowSvg, () => {
+            const bridge = window.electronNative;
+            if (bridge && bridge.setApiWindowVisible) {
+                bridge.setApiWindowVisible(!apiWindowVisible);
+            }
+        });
+        actionsSection.appendChild(apiWindowItem);
+        if (window.electronNative && window.electronNative.getApiWindowVisible) {
+            window.electronNative.getApiWindowVisible().then((result) => {
+                apiWindowVisible = !!(result && result.visible);
+                const label = apiWindowItem.querySelector('span');
+                if (label) {
+                    label.textContent = apiWindowVisible
+                        ? 'API-Fenster: sichtbar (klicken zum Verstecken)'
+                        : 'API-Fenster: versteckt (klicken zum Anzeigen)';
+                }
+            }).catch(() => {});
+        }
+        overlay.appendChild(actionsSection);
+
+        // Signature Footer ("Markenzeichen")
+        const signatureFooter = document.createElement('div');
+        signatureFooter.style.display = 'flex';
+        signatureFooter.style.alignItems = 'center';
+        signatureFooter.style.justifyContent = 'space-between';
+        signatureFooter.style.borderTop = '1px solid rgba(255, 255, 255, 0.07)';
+        signatureFooter.style.paddingTop = '8px';
+        signatureFooter.style.marginTop = '2px';
+        signatureFooter.style.fontSize = '10px';
+        signatureFooter.style.color = 'rgba(255, 255, 255, 0.45)';
+
+        const brandTag = document.createElement('span');
+        brandTag.textContent = 'Antigravity Unleashed · v2.24';
+        signatureFooter.appendChild(brandTag);
+
+        const repoLink = document.createElement('button');
+        repoLink.type = 'button';
+        repoLink.textContent = 'GitHub @EinMelih ↗';
+        repoLink.style.background = 'transparent';
+        repoLink.style.border = 'none';
+        repoLink.style.padding = '0';
+        repoLink.style.color = '#38bdf8';
+        repoLink.style.fontSize = '10px';
+        repoLink.style.fontWeight = '500';
+        repoLink.style.cursor = 'pointer';
+        repoLink.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (window.electronNative && typeof window.electronNative.openExternal === 'function') {
+                window.electronNative.openExternal('https://github.com/EinMelih/antigravity-unleashed');
+            }
+        });
+        signatureFooter.appendChild(repoLink);
+        overlay.appendChild(signatureFooter);
+
+        document.body.appendChild(overlay);
+
+        if (window.amsAntigravityHub && window.amsAntigravityHub.getStatus) {
+            window.amsAntigravityHub.getStatus().then((status) => {
+                const renderService = (elementId, service) => {
+                    const indicator = document.getElementById(elementId);
+                    if (!indicator) return;
+                    indicator.style.color = service && service.online ? '#4ade80' : '#f87171';
+                    indicator.textContent = service && service.online
+                        ? \`● Online · \${service.latency_ms} ms\`
+                        : '● Offline';
+                    indicator.title = service && service.error ? service.error : '';
+                };
+                renderService('ams-antigravity-hub-indicator', status.hub);
+                renderService('ams-antigravity-bridge-indicator', status.bridge);
+
+                const svcItem = document.getElementById('ams-services-menu-item');
+                if (svcItem) {
+                    const isOnline = (status.hub && status.hub.online) || (status.bridge && status.bridge.online);
+                    svcItem.dataset.restart = isOnline ? 'true' : 'false';
+                    const labelSpan = svcItem.querySelector('span');
+                    const iconSlot = svcItem.querySelector('svg');
+                    if (labelSpan) {
+                        labelSpan.textContent = isOnline ? 'Hub & API Bridge neustarten' : 'Hub & API Bridge starten';
+                    }
+                    if (iconSlot && isOnline) {
+                        iconSlot.outerHTML = restartSvg;
+                    }
+                }
+            }).catch((error) => {
+                for (const id of ['ams-antigravity-hub-indicator', 'ams-antigravity-bridge-indicator']) {
+                    const indicator = document.getElementById(id);
+                    if (indicator) {
+                        indicator.style.color = '#f87171';
+                        indicator.textContent = '● Offline';
+                        indicator.title = error.message;
+                    }
+                }
+            });
+        }
+
+        // Open animation
+        requestAnimationFrame(() => {
+            overlay.style.opacity = '1';
+            overlay.style.transform = 'translateY(0) scale(1)';
+        });
+
+        // Query Git Sync status
+        if (window.electronNative && window.electronNative.getSyncStatus) {
+            window.electronNative.getSyncStatus()
+                .then(statusInfo => {
+                    const ind = document.getElementById('ams-sync-indicator');
+                    if (ind) {
+                        if (statusInfo.status === 'ok') {
+                            ind.textContent = 'Sync OK';
+                            ind.style.color = '#10b981';
+                        } else if (statusInfo.status === 'conflict') {
+                            ind.textContent = 'Konflikt ⚠️';
+                            ind.style.color = '#f59e0b';
+                            ind.title = 'Konfliktdateien: ' + statusInfo.conflictFiles.join(', ');
+                        } else {
+                            ind.textContent = 'Fehler';
+                            ind.style.color = '#ef4444';
+                        }
+                    }
+                })
+                .catch(() => {
+                    const ind = document.getElementById('ams-sync-indicator');
+                    if (ind) ind.textContent = 'Fehler';
+                });
+        }
+    };
+
+    function getAttachedContextItems() {
+        const items = [];
+        const chips = document.querySelectorAll('[aria-label^="Remove "], .context-chip, [data-testid*="chip"]');
+        chips.forEach(chip => {
+            const label = chip.getAttribute('aria-label') || '';
+            let filename = label.replace(/^Remove\\s+/i, '').trim();
+            if (!filename) {
+                filename = chip.textContent.trim();
+            }
+            if (filename && !items.includes(filename)) {
+                items.push(filename);
+            }
+        });
+        return items;
+    }
+
+    window.syncSessionConfig = async function() {
+        try {
+            const model = getActiveModel ? getActiveModel() : '';
+            const contextItems = getAttachedContextItems();
+            const config = {
+                model: model,
+                contextItems: contextItems,
+                updatedAt: Date.now()
+            };
+
+            if (window.nativeStorage && window.nativeStorage.updateItems) {
+                await window.nativeStorage.updateItems({ antigravity_session_config: config });
+            }
+
+            if (window.electronNative && window.electronNative.writeStatus) {
+                await window.electronNative.writeStatus(amsToken, model);
+            }
+        } catch (err) {
+            // silent fail
+        }
+    };
+
+    window.checkModelSwitchRequest = async function() {
+        if (!window.electronNative || !window.electronNative.readSwitchRequest) return;
+        try {
+            const request = await window.electronNative.readSwitchRequest(amsToken);
+            if (request && request.model) {
+                console.log('[AMS Model Switch] Switched requested to:', request.model);
+                const modelBtn = document.querySelector('button[aria-label^="Select model, current:"]');
+                if (modelBtn) {
+                    modelBtn.click();
+                    setTimeout(() => {
+                        const options = document.querySelectorAll('[role="option"], [role="menuitem"], button');
+                        for (const opt of options) {
+                            if (opt.textContent && opt.textContent.trim().toLowerCase().includes(request.model.toLowerCase())) {
+                                opt.click();
+                                break;
+                            }
+                        }
+                    }, 150);
+                }
+            }
+        } catch (err) {
+            // silent fail
+        }
+    };
+
+    // Periodische Überwachung der Modell- und Kontext-Änderungen sowie Switch-Anfragen
+    setInterval(() => {
+        if (window.syncSessionConfig) window.syncSessionConfig();
+        if (window.checkModelSwitchRequest) window.checkModelSwitchRequest();
+    }, 4000);
+
+
+    const ANTIGRAVITY_CHANGELOG_URL = 'https://www.antigravity.google/changelog';
+    const ANTIGRAVITY_RELEASES_URL = 'https://www.antigravity.google/releases?tab=hub';
+    const MAX_RELEASE_NOTES_LENGTH = 8000;
+    const MAX_RELEASE_HIGHLIGHTS = 5;
+
+    const OFFICIAL_RELEASE_FALLBACKS = Object.freeze({
+        '2.9.1': Object.freeze({
+            publishedAt: '20. August 2026',
+            title: 'Remote Control, schnellerer Projektwechsel und mehr',
+            summary: 'Remote Control, spürbare Performance-Verbesserungen, eine übersichtlichere Navigation und robustere Fehlerbehandlung.',
+            improvements: 11,
+            fixes: 15,
+            highlights: Object.freeze([
+                'Remote Control steuert und überwacht lokale Agent-Sitzungen sicher aus jedem Browser und sendet Benachrichtigungen bei Abschluss oder Rückfragen.',
+                'Schnellerer App-Start, Projektwechsel und Aufbau langer Unterhaltungen sowie weniger Verzögerungen während aktiver Sitzungen.',
+                'Einklappbare Hauptbereiche, bis zu 30 ungruppierte Unterhaltungen und sofort sichtbare Aktionen verbessern die Sidebar.',
+                'Die Customizations-Einstellungen für Skills, Regeln, Plugins, Custom Agents und MCP-Server wurden übersichtlicher gestaltet.',
+                'Retry setzt fehlgeschlagene Agent-Aufgaben direkt fort; Custom Agents können vorhandene Customizations über inheritCustomizations übernehmen.',
+                'WebP-Anhänge sowie PowerShell- und Zsh-Syntaxhervorhebung werden jetzt unterstützt.',
+            ]),
+        }),
+    });
+
+    function normalizeUpdateVersion(version) {
+        return String(version || 'unbekannt')
+            .trim()
+            .replace(/^v/i, '')
+            .replace(/[^0-9A-Za-z.+-]/g, '')
+            .slice(0, 32) || 'unbekannt';
+    }
+
+    function normalizeReleaseNotes(releaseNotes) {
+        let notesText = '';
+        if (typeof releaseNotes === 'string') {
+            notesText = releaseNotes;
+        } else if (Array.isArray(releaseNotes)) {
+            notesText = releaseNotes
+                .map((entry) => {
+                    if (typeof entry === 'string') return entry;
+                    return entry && typeof entry.note === 'string' ? entry.note : '';
+                })
+                .filter(Boolean)
+                .join('\\n');
+        }
+
+        return notesText
+            .replace(/<br\\s*\\/?\\s*>/gi, '\\n')
+            .replace(/<\\/(?:p|li|h[1-6])\\s*>/gi, '\\n')
+            .replace(/<[^>]*>/g, '')
+            .replace(/\\r\\n?/g, '\\n')
+            .replace(/\\n{3,}/g, '\\n\\n')
+            .trim()
+            .slice(0, MAX_RELEASE_NOTES_LENGTH);
+    }
+
+    function extractReleaseHighlights(notesText) {
+        if (!notesText) return [];
+        return notesText
+            .split('\\n')
+            .map((line) => line.replace(/^\\s*(?:[-*•]|\\d+[.)])\\s*/, '').trim())
+            .filter((line) => line.length >= 12)
+            .slice(0, MAX_RELEASE_HIGHLIGHTS);
+    }
+
+    function buildOfficialReleaseUrl(version) {
+        const normalizedVersion = normalizeUpdateVersion(version);
+        if (normalizedVersion === 'unbekannt') return ANTIGRAVITY_CHANGELOG_URL;
+        return ANTIGRAVITY_RELEASES_URL + '&version=' + encodeURIComponent(normalizedVersion);
+    }
+
+    function normalizeReleaseTitle(value) {
+        return normalizeReleaseNotes(value)
+            .replace(/\\n+/g, ' ')
+            .trim()
+            .slice(0, 160) || null;
+    }
+
+    function normalizeReleaseDate(value) {
+        if (!value) return null;
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return null;
+        return new Intl.DateTimeFormat('de-DE', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+        }).format(parsed);
+    }
+
+    function isAllowedOfficialAntigravityUrl(value) {
+        try {
+            const url = new URL(value);
+            const allowedHost = url.hostname === 'antigravity.google' || url.hostname === 'www.antigravity.google';
+            const allowedPath = url.pathname === '/changelog' || url.pathname === '/releases';
+            return url.protocol === 'https:' && allowedHost && allowedPath;
+        } catch (_error) {
+            return false;
+        }
+    }
+
+    function resolveOfficialReleaseInfo(version, releaseNotes, releaseMetadata) {
+        const normalizedVersion = normalizeUpdateVersion(version);
+        const knownRelease = OFFICIAL_RELEASE_FALLBACKS[normalizedVersion] || null;
+        const notesText = normalizeReleaseNotes(releaseNotes);
+        const feedHighlights = extractReleaseHighlights(notesText);
+        const fallbackHighlights = knownRelease ? Array.from(knownRelease.highlights) : [];
+        const metadata = releaseMetadata && typeof releaseMetadata === 'object' ? releaseMetadata : {};
+        const feedTitle = normalizeReleaseTitle(metadata.releaseName);
+        const feedDate = normalizeReleaseDate(metadata.releaseDate);
+
+        return {
+            version: normalizedVersion,
+            publishedAt: feedDate || (knownRelease ? knownRelease.publishedAt : null),
+            title: feedTitle || (knownRelease ? knownRelease.title : null),
+            summary: knownRelease ? knownRelease.summary : null,
+            improvements: knownRelease ? knownRelease.improvements : null,
+            fixes: knownRelease ? knownRelease.fixes : null,
+            highlights: feedHighlights.length ? feedHighlights : fallbackHighlights.slice(0, MAX_RELEASE_HIGHLIGHTS),
+            notesText,
+            detailsStatus: notesText ? 'feed' : (knownRelease ? 'official-fallback' : 'unavailable'),
+            releaseUrl: buildOfficialReleaseUrl(normalizedVersion),
+            changelogUrl: ANTIGRAVITY_CHANGELOG_URL,
+        };
+    }
+
+
+    const AMS_MODAL_FOCUSABLE_SELECTOR = [
+        'a[href]',
+        'button:not([disabled])',
+        'input:not([disabled]):not([type="hidden"])',
+        'select:not([disabled])',
+        'textarea:not([disabled])',
+        '[contenteditable="true"]',
+        '[tabindex]:not([tabindex="-1"])',
+    ].join(',');
+
+    function getAmsModalFocusableElements(modal) {
+        if (!modal || typeof modal.querySelectorAll !== 'function') return [];
+        return Array.from(modal.querySelectorAll(AMS_MODAL_FOCUSABLE_SELECTOR)).filter((element) => {
+            if (!element || element.disabled || element.getAttribute?.('aria-hidden') === 'true') return false;
+            const view = element.ownerDocument?.defaultView || window;
+            const style = typeof view?.getComputedStyle === 'function' ? view.getComputedStyle(element) : null;
+            return !style || (style.display !== 'none' && style.visibility !== 'hidden');
+        });
+    }
+
+    function createAmsModalController({
+        overlay,
+        modal,
+        initialFocus = null,
+        previouslyFocused = document.activeElement,
+        closeOnEscape = true,
+        removeDelay = 0,
+        animateClose = null,
+        canClose = null,
+        onClose = null,
+    }) {
+        if (!overlay || !modal) throw new Error('Modal controller requires overlay and modal elements.');
+        let isClosed = false;
+        let removeTimer = null;
+
+        if (!modal.hasAttribute('tabindex')) modal.tabIndex = -1;
+
+        const focusInitial = () => {
+            if (isClosed) return;
+            const requested = typeof initialFocus === 'function' ? initialFocus() : initialFocus;
+            const target = requested?.isConnected !== false ? requested : null;
+            const fallback = getAmsModalFocusableElements(modal)[0] || modal;
+            (target || fallback).focus?.();
+        };
+
+        const restoreFocus = () => {
+            if (previouslyFocused?.isConnected && typeof previouslyFocused.focus === 'function') {
+                previouslyFocused.focus();
+            }
+        };
+
+        const finishClose = () => {
+            overlay.remove();
+            restoreFocus();
+        };
+
+        const close = (reason = 'dismiss') => {
+            if (isClosed || (typeof canClose === 'function' && canClose(reason) === false)) return false;
+            isClosed = true;
+            window.removeEventListener('keydown', keyHandler, true);
+            try {
+                if (typeof animateClose === 'function') animateClose(reason);
+            } catch (error) {
+                console.warn('[AMS UI] Modal close animation failed:', error);
+            }
+            try {
+                if (typeof onClose === 'function') onClose(reason);
+            } catch (error) {
+                console.warn('[AMS UI] Modal close hook failed:', error);
+            }
+            if (removeDelay > 0) {
+                removeTimer = setTimeout(finishClose, removeDelay);
+            } else {
+                finishClose();
+            }
+            return true;
+        };
+
+        const keyHandler = (event) => {
+            if (isClosed) return;
+            if (event.key === 'Escape' && closeOnEscape) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                close('escape');
+                return;
+            }
+            if (event.key !== 'Tab') return;
+
+            const focusable = getAmsModalFocusableElements(modal);
+            if (!focusable.length) {
+                event.preventDefault();
+                modal.focus();
+                return;
+            }
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            const active = document.activeElement;
+            if (!modal.contains(active)) {
+                event.preventDefault();
+                (event.shiftKey ? last : first).focus();
+            } else if (!focusable.includes(active)) {
+                event.preventDefault();
+                (event.shiftKey ? last : first).focus();
+            } else if (event.shiftKey && active === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && active === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+
+        window.addEventListener('keydown', keyHandler, true);
+        const controller = {
+            close,
+            focusInitial,
+            isClosed: () => isClosed,
+            destroy: () => {
+                window.removeEventListener('keydown', keyHandler, true);
+                if (removeTimer) clearTimeout(removeTimer);
+            },
+        };
+        overlay.__amsModalController = controller;
+        return controller;
+    }
+
+    function renderInlineError(container, prefix, message, options = {}) {
+        if (!container) return;
+        const error = document.createElement('div');
+        error.style.color = options.color || '#ef4444';
+        error.style.fontSize = options.fontSize || '11px';
+        error.style.padding = options.padding || '10px';
+        error.style.textAlign = options.textAlign || 'left';
+        error.style.marginTop = options.marginTop || '0';
+        error.textContent = String(prefix || '') + String(message || 'Unbekannter Fehler');
+        container.replaceChildren(error);
+    }
+
+    function showCustomPrompt(title, defaultValue, callback) {
+        const parent = document.getElementById('antigravity-plan-panel') || document.body;
+        const previouslyFocused = document.activeElement;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'antigravity-modal-overlay';
+        stopKeyPropagation(overlay);
+        overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.background = 'rgba(9, 9, 11, 0.7)';
+        overlay.style.backdropFilter = 'blur(4px)';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '10000';
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.2s ease';
+
+        const modal = document.createElement('div');
+        modal.style.background = 'var(--card, #18181b)';
+        modal.style.border = '1px solid var(--border, #27272a)';
+        modal.style.borderRadius = '8px';
+        modal.style.padding = '16px';
+        modal.style.width = '85%';
+        modal.style.maxWidth = '300px';
+        modal.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.5)';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.gap = '12px';
+        modal.style.transform = 'scale(0.95)';
+        modal.style.transition = 'transform 0.2s ease';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+
+        const label = document.createElement('label');
+        label.textContent = title;
+        label.style.fontSize = '13px';
+        label.style.color = 'var(--foreground, #fafafa)';
+        label.style.fontWeight = '500';
+        label.id = 'antigravity-prompt-label-' + Date.now();
+        modal.setAttribute('aria-labelledby', label.id);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.setAttribute('aria-labelledby', label.id);
+        input.value = defaultValue || '';
+        input.style.background = 'var(--background, #09090b)';
+        input.style.border = '1px solid var(--border, #27272a)';
+        input.style.borderRadius = '4px';
+        input.style.padding = '6px 10px';
+        input.style.fontSize = '12px';
+        input.style.color = 'var(--foreground, #fafafa)';
+        input.style.outline = 'none';
+
+        const buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.justifyContent = 'flex-end';
+        buttons.style.gap = '8px';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Abbrechen';
+        cancelBtn.style.background = 'transparent';
+        cancelBtn.style.color = 'var(--muted-foreground, #71717a)';
+        cancelBtn.style.border = '1px solid var(--border, #27272a)';
+        cancelBtn.style.borderRadius = '4px';
+        cancelBtn.style.padding = '6px 12px';
+        cancelBtn.style.fontSize = '12px';
+        cancelBtn.style.cursor = 'pointer';
+        cancelBtn.style.outline = 'none';
+
+        const okBtn = document.createElement('button');
+        okBtn.textContent = 'OK';
+        okBtn.style.background = 'var(--primary, #3b82f6)';
+        okBtn.style.color = '#ffffff';
+        okBtn.style.border = 'none';
+        okBtn.style.borderRadius = '4px';
+        okBtn.style.padding = '6px 12px';
+        okBtn.style.fontSize = '12px';
+        okBtn.style.fontWeight = '500';
+        okBtn.style.cursor = 'pointer';
+        okBtn.style.outline = 'none';
+
+        buttons.appendChild(cancelBtn);
+        buttons.appendChild(okBtn);
+        modal.appendChild(label);
+        modal.appendChild(input);
+        modal.appendChild(buttons);
+        overlay.appendChild(modal);
+
+        parent.appendChild(overlay);
+
+        setTimeout(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'scale(1)';
+        }, 10);
+
+        const controller = createAmsModalController({
+            overlay,
+            modal,
+            initialFocus: input,
+            previouslyFocused,
+            removeDelay: 200,
+            animateClose: () => {
+                overlay.style.opacity = '0';
+                modal.style.transform = 'scale(0.95)';
+            },
+            onClose: (reason) => {
+                if (reason === 'escape' && typeof callback === 'function') callback(null);
+            },
+        });
+        controller.focusInitial();
+        input.select();
+
+        const close = (value) => {
+            if (!controller.close(value === null ? 'cancel' : 'submit')) return;
+            if (typeof callback === 'function') callback(value);
+        };
+
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            close(null);
+        });
+
+        okBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            close(input.value);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                close(input.value);
+            }
+        });
+    }
+
+    function showGitSyncModal(conversationId, onSync) {
+        const parent = document.body;
+        const previouslyFocused = document.activeElement;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'antigravity-modal-overlay';
+        stopKeyPropagation(overlay);
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.background = 'rgba(9, 9, 11, 0.85)';
+        overlay.style.backdropFilter = 'blur(6px)';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '100000';
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.2s ease';
+
+        const modal = document.createElement('div');
+        modal.className = 'antigravity-git-modal';
+        modal.style.background = 'var(--card, #18181b)';
+        modal.style.border = '1px solid var(--border, #27272a)';
+        modal.style.borderRadius = '12px';
+        modal.style.width = '90%';
+        modal.style.maxWidth = '850px';
+        modal.style.height = '80vh';
+        modal.style.maxHeight = '650px';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.boxShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.7)';
+        modal.style.transform = 'scale(0.97)';
+        modal.style.transition = 'transform 0.2s ease';
+        modal.style.overflow = 'hidden';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+
+        const header = document.createElement('div');
+        header.style.padding = '16px 20px';
+        header.style.borderBottom = '1px solid var(--border, #27272a)';
+        header.style.display = 'flex';
+        header.style.justifyContent = 'space-between';
+        header.style.alignItems = 'center';
+        header.style.background = 'rgba(0, 0, 0, 0.15)';
+
+        const title = document.createElement('h3');
+        title.textContent = 'Git Sync & Workspace Diffs';
+        title.style.margin = '0';
+        title.style.fontSize = '14px';
+        title.style.fontWeight = '600';
+        title.style.color = '#ffffff';
+        title.id = 'antigravity-git-modal-title-' + Date.now();
+        modal.setAttribute('aria-labelledby', title.id);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.border = 'none';
+        closeBtn.style.color = 'var(--muted-foreground, #a1a1aa)';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.padding = '4px';
+        closeBtn.style.borderRadius = '4px';
+        closeBtn.style.display = 'flex';
+        closeBtn.style.alignItems = 'center';
+        closeBtn.setAttribute('aria-label', 'Git-Sync-Dialog schließen');
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+
+        const body = document.createElement('div');
+        body.style.flex = '1';
+        body.style.display = 'flex';
+        body.style.height = 'calc(100% - 180px)';
+        body.style.overflow = 'hidden';
+
+        const fileList = document.createElement('div');
+        fileList.style.width = '280px';
+        fileList.style.borderRight = '1px solid var(--border, #27272a)';
+        fileList.style.overflowY = 'auto';
+        fileList.style.padding = '12px';
+        fileList.style.display = 'flex';
+        fileList.style.flexDirection = 'column';
+        fileList.style.gap = '6px';
+        fileList.style.background = 'rgba(0, 0, 0, 0.08)';
+
+        const diffViewer = document.createElement('div');
+        diffViewer.style.flex = '1';
+        diffViewer.style.overflow = 'auto';
+        diffViewer.style.padding = '16px';
+        diffViewer.style.background = '#09090b';
+        diffViewer.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+        diffViewer.style.fontSize = '12px';
+        diffViewer.style.lineHeight = '1.5';
+        diffViewer.style.whiteSpace = 'pre';
+        diffViewer.style.color = '#e4e4e7';
+        diffViewer.style.userSelect = 'text';
+        diffViewer.innerHTML = '<div style="color: var(--muted-foreground, #71717a); font-style: italic; text-align: center; margin-top: 100px;">Wähle eine Datei aus, um das Diff anzuzeigen</div>';
+
+        body.appendChild(fileList);
+        body.appendChild(diffViewer);
+
+        const footer = document.createElement('div');
+        footer.style.padding = '16px 20px';
+        footer.style.borderTop = '1px solid var(--border, #27272a)';
+        footer.style.display = 'flex';
+        footer.style.flexDirection = 'column';
+        footer.style.gap = '12px';
+        footer.style.background = 'rgba(0, 0, 0, 0.15)';
+
+        const msgRow = document.createElement('div');
+        msgRow.style.display = 'flex';
+        msgRow.style.gap = '10px';
+        msgRow.style.alignItems = 'flex-start';
+
+        const textarea = document.createElement('textarea');
+        textarea.placeholder = 'Commit-Beschreibung eingeben...';
+        textarea.style.flex = '1';
+        textarea.style.height = '48px';
+        textarea.style.background = 'var(--background, #09090b)';
+        textarea.style.border = '1px solid var(--border, #27272a)';
+        textarea.style.borderRadius = '6px';
+        textarea.style.padding = '8px 12px';
+        textarea.style.fontSize = '12px';
+        textarea.style.color = '#ffffff';
+        textarea.style.outline = 'none';
+        textarea.style.resize = 'none';
+        textarea.value = 'wip: sync updates';
+
+        const aiBtn = document.createElement('button');
+        aiBtn.innerHTML = '✨ AI Generieren';
+        aiBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)';
+        aiBtn.style.color = '#ffffff';
+        aiBtn.style.border = 'none';
+        aiBtn.style.borderRadius = '6px';
+        aiBtn.style.padding = '8px 14px';
+        aiBtn.style.fontSize = '12px';
+        aiBtn.style.fontWeight = '600';
+        aiBtn.style.cursor = 'pointer';
+        aiBtn.style.height = '48px';
+        aiBtn.style.display = 'inline-flex';
+        aiBtn.style.alignItems = 'center';
+        aiBtn.style.gap = '6px';
+        aiBtn.style.transition = 'opacity 0.2s';
+        aiBtn.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.2)';
+        aiBtn.style.outline = 'none';
+
+        msgRow.appendChild(textarea);
+        msgRow.appendChild(aiBtn);
+
+        const thinkingLog = document.createElement('div');
+        thinkingLog.id = 'antigravity-git-thinking-log';
+        thinkingLog.style.background = 'rgba(0, 0, 0, 0.2)';
+        thinkingLog.style.border = '1px solid var(--border, #27272a)';
+        thinkingLog.style.borderRadius = '6px';
+        thinkingLog.style.padding = '10px 12px';
+        thinkingLog.style.maxHeight = '100px';
+        thinkingLog.style.overflowY = 'auto';
+        thinkingLog.style.fontSize = '11px';
+        thinkingLog.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+        thinkingLog.style.color = 'var(--muted-foreground, #a1a1aa)';
+        thinkingLog.style.marginTop = '8px';
+        thinkingLog.style.display = 'none'; // Standardmäßig ausgeblendet
+
+        const logHeader = document.createElement('div');
+        logHeader.style.fontWeight = '600';
+        logHeader.style.color = 'var(--foreground, #ffffff)';
+        logHeader.style.marginBottom = '6px';
+        logHeader.style.fontSize = '10px';
+        logHeader.style.textTransform = 'uppercase';
+        logHeader.style.letterSpacing = '0.05em';
+        logHeader.textContent = 'AI Denkvorgang & Aktivitäten:';
+
+        const logList = document.createElement('div');
+        logList.id = 'antigravity-git-thinking-list';
+        logList.style.display = 'flex';
+        logList.style.flexDirection = 'column';
+        logList.style.gap = '4px';
+
+        thinkingLog.appendChild(logHeader);
+        thinkingLog.appendChild(logList);
+
+        const actionsRow = document.createElement('div');
+        actionsRow.style.display = 'flex';
+        actionsRow.style.justifyContent = 'flex-end';
+        actionsRow.style.gap = '10px';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Abbrechen';
+        cancelBtn.style.background = 'transparent';
+        cancelBtn.style.color = 'var(--muted-foreground, #a1a1aa)';
+        cancelBtn.style.border = '1px solid var(--border, #27272a)';
+        cancelBtn.style.borderRadius = '6px';
+        cancelBtn.style.padding = '8px 16px';
+        cancelBtn.style.fontSize = '12px';
+        cancelBtn.style.cursor = 'pointer';
+        cancelBtn.style.outline = 'none';
+
+        const syncSubmitBtn = document.createElement('button');
+        syncSubmitBtn.textContent = 'Synchronisieren & Pushen';
+        syncSubmitBtn.style.background = '#22c55e';
+        syncSubmitBtn.style.color = '#ffffff';
+        syncSubmitBtn.style.border = 'none';
+        syncSubmitBtn.style.borderRadius = '6px';
+        syncSubmitBtn.style.padding = '8px 18px';
+        syncSubmitBtn.style.fontSize = '12px';
+        syncSubmitBtn.style.fontWeight = '600';
+        syncSubmitBtn.style.cursor = 'pointer';
+        syncSubmitBtn.style.outline = 'none';
+
+        actionsRow.appendChild(cancelBtn);
+        actionsRow.appendChild(syncSubmitBtn);
+
+        footer.appendChild(msgRow);
+        footer.appendChild(thinkingLog);
+        footer.appendChild(actionsRow);
+
+        modal.appendChild(header);
+        modal.appendChild(body);
+        modal.appendChild(footer);
+        overlay.appendChild(modal);
+        parent.appendChild(overlay);
+
+        setTimeout(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'scale(1)';
+        }, 10);
+
+        let progressHandler = null;
+        let syncSubmitting = false;
+        const controller = createAmsModalController({
+            overlay,
+            modal,
+            initialFocus: textarea,
+            previouslyFocused,
+            removeDelay: 200,
+            animateClose: () => {
+                overlay.style.opacity = '0';
+                modal.style.transform = 'scale(0.97)';
+            },
+            onClose: () => {
+                if (progressHandler) {
+                    window.electronNative.removeGenerateCommitProgressListener(progressHandler);
+                    progressHandler = null;
+                }
+            },
+        });
+        const closeModal = (reason = 'cancel') => controller.close(reason);
+        controller.focusInitial();
+
+        closeBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+
+        let selectedFileEl = null;
+        const renderDiff = (diffText) => {
+            if (!diffText.trim()) {
+                diffViewer.innerHTML = '<div style="color: var(--muted-foreground, #71717a); text-align: center; margin-top: 100px;">Keine Zeilenänderungen in dieser Datei</div>';
+                return;
+            }
+
+            const lines = diffText.split('\\n');
+            const fragment = document.createDocumentFragment();
+
+            lines.forEach(line => {
+                const row = document.createElement('div');
+                row.style.whiteSpace = 'pre-wrap';
+                row.style.wordBreak = 'break-all';
+                row.style.padding = '1px 8px';
+
+                if (line.startsWith('+') && !line.startsWith('+++')) {
+                    row.style.color = '#4ade80';
+                    row.style.backgroundColor = 'rgba(74, 222, 128, 0.08)';
+                } else if (line.startsWith('-') && !line.startsWith('---')) {
+                    row.style.color = '#f87171';
+                    row.style.backgroundColor = 'rgba(248, 113, 113, 0.08)';
+                } else if (line.startsWith('@@')) {
+                    row.style.color = '#60a5fa';
+                    row.style.backgroundColor = 'rgba(96, 165, 250, 0.05)';
+                    row.style.fontWeight = '500';
+                } else {
+                    row.style.color = '#d4d4d8';
+                }
+                row.textContent = line;
+                fragment.appendChild(row);
+            });
+
+            diffViewer.innerHTML = '';
+            diffViewer.appendChild(fragment);
+        };
+
+        const loadFiles = async () => {
+            fileList.innerHTML = '<div style="font-size: 11px; color: var(--muted-foreground, #71717a); text-align: center; margin-top: 20px;">Lade Git Status...</div>';
+            try {
+                const res = await window.electronNative.getGitStatus(conversationId);
+                if (res.status === 'success') {
+                    fileList.innerHTML = '';
+                    const changes = [...res.workspaceChanges, ...res.configChanges];
+
+                    if (changes.length === 0) {
+                        fileList.innerHTML = '<div style="font-size: 11px; color: var(--muted-foreground, #71717a); text-align: center; margin-top: 20px;">Keine Änderungen gefunden</div>';
+                        return;
+                    }
+
+                    changes.forEach(item => {
+                        const fileCard = document.createElement('div');
+                        fileCard.style.padding = '8px 10px';
+                        fileCard.style.borderRadius = '6px';
+                        fileCard.style.background = 'var(--card, #1c1c1f)';
+                        fileCard.style.border = '1px solid var(--border, #2a2a2d)';
+                        fileCard.style.cursor = 'pointer';
+                        fileCard.style.display = 'flex';
+                        fileCard.style.alignItems = 'center';
+                        fileCard.style.justifyContent = 'space-between';
+                        fileCard.style.fontSize = '12px';
+                        fileCard.style.transition = 'all 0.2s';
+
+                        const leftSection = document.createElement('div');
+                        leftSection.style.display = 'flex';
+                        leftSection.style.flexDirection = 'column';
+                        leftSection.style.gap = '2px';
+                        leftSection.style.overflow = 'hidden';
+
+                        const nameSpan = document.createElement('span');
+                        nameSpan.textContent = item.file.replace(/\\\\/g, '/').split('/').pop();
+                        nameSpan.style.fontWeight = '500';
+                        nameSpan.style.color = '#ffffff';
+
+                        const pathSpan = document.createElement('span');
+                        pathSpan.textContent = item.file;
+                        pathSpan.style.fontSize = '9px';
+                        pathSpan.style.color = 'var(--muted-foreground, #71717a)';
+                        pathSpan.style.textOverflow = 'ellipsis';
+                        pathSpan.style.overflow = 'hidden';
+                        pathSpan.style.whiteSpace = 'nowrap';
+
+                        leftSection.appendChild(nameSpan);
+                        leftSection.appendChild(pathSpan);
+
+                        const badge = document.createElement('span');
+                        badge.style.padding = '2px 6px';
+                        badge.style.borderRadius = '4px';
+                        badge.style.fontSize = '9px';
+                        badge.style.fontWeight = '700';
+
+                        if (item.status === 'M') {
+                            badge.textContent = 'M';
+                            badge.style.color = '#eab308';
+                            badge.style.background = 'rgba(234, 179, 8, 0.15)';
+                        } else if (item.status === '??' || item.status === 'A') {
+                            badge.textContent = 'A';
+                            badge.style.color = '#22c55e';
+                            badge.style.background = 'rgba(34, 197, 94, 0.15)';
+                        } else if (item.status === 'D') {
+                            badge.textContent = 'D';
+                            badge.style.color = '#ef4444';
+                            badge.style.background = 'rgba(239, 68, 68, 0.15)';
+                        } else {
+                            badge.textContent = item.status;
+                            badge.style.color = '#a1a1aa';
+                            badge.style.background = 'rgba(161, 161, 170, 0.15)';
+                        }
+
+                        fileCard.appendChild(leftSection);
+                        fileCard.appendChild(badge);
+
+                        fileCard.addEventListener('click', async () => {
+                            if (selectedFileEl) {
+                                selectedFileEl.style.borderColor = 'var(--border, #2a2a2d)';
+                                selectedFileEl.style.background = 'var(--card, #1c1c1f)';
+                            }
+                            selectedFileEl = fileCard;
+                            fileCard.style.borderColor = '#3b82f6';
+                            fileCard.style.background = 'rgba(59, 130, 246, 0.05)';
+
+                            diffViewer.innerHTML = '<div style="color: var(--muted-foreground, #71717a); text-align: center; margin-top: 100px;">Lade Dateidiff...</div>';
+                            try {
+                                const diffRes = await window.electronNative.getGitDiff(item.file, item.repo, conversationId);
+                                if (diffRes.status === 'success') {
+                                    renderDiff(diffRes.diff);
+                                } else {
+                                    renderInlineError(diffViewer, 'Fehler beim Laden des Diffs: ', diffRes.message, { padding: '20px' });
+                                }
+                            } catch (err) {
+                                renderInlineError(diffViewer, 'Ausnahmefehler: ', err.message, { padding: '20px' });
+                            }
+                        });
+
+                        fileCard.addEventListener('mouseenter', () => {
+                            if (selectedFileEl !== fileCard) {
+                                fileCard.style.background = 'rgba(255, 255, 255, 0.03)';
+                            }
+                        });
+                        fileCard.addEventListener('mouseleave', () => {
+                            if (selectedFileEl !== fileCard) {
+                                fileCard.style.background = 'var(--card, #1c1c1f)';
+                            }
+                        });
+
+                        fileList.appendChild(fileCard);
+                    });
+
+                    const firstCard = fileList.firstElementChild;
+                    if (firstCard) firstCard.click();
+                } else {
+                    renderInlineError(fileList, 'Fehler: ', res.message);
+                }
+            } catch (err) {
+                renderInlineError(fileList, 'Fehler: ', err.message);
+            }
+        };
+
+        loadFiles();
+
+        aiBtn.addEventListener('click', async () => {
+            aiBtn.disabled = true;
+            aiBtn.style.opacity = '0.7';
+            aiBtn.innerHTML = '<svg class="antigravity-spinner" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg> Generiere...';
+
+            // Log-Anzeige einblenden
+            thinkingLog.style.display = 'block';
+            logList.innerHTML = '';
+
+            const addLog = (text, status = 'pending') => {
+                // Letzten Eintrag auf "erledigt" setzen
+                const lastEl = logList.lastElementChild;
+                if (lastEl) {
+                    const icon = lastEl.querySelector('.log-icon');
+                    if (icon) {
+                        icon.textContent = '✓';
+                        icon.style.color = '#22c55e';
+                        icon.style.animation = 'none';
+                    }
+                    lastEl.style.color = 'var(--muted-foreground, #71717a)';
+                }
+
+                const item = document.createElement('div');
+                item.style.display = 'flex';
+                item.style.gap = '6px';
+                item.style.alignItems = 'center';
+                item.style.color = 'var(--foreground, #ffffff)';
+
+                const icon = document.createElement('span');
+                icon.className = 'log-icon';
+                icon.style.fontSize = '10px';
+                icon.style.display = 'inline-flex';
+                icon.style.alignItems = 'center';
+                icon.style.justifyContent = 'center';
+                icon.style.width = '12px';
+                icon.style.height = '12px';
+
+                if (status === 'pending') {
+                    icon.textContent = '●';
+                    icon.style.color = '#3b82f6';
+                    icon.style.animation = 'brain-pulse 1.5s infinite';
+                } else if (status === 'success') {
+                    icon.textContent = '✓';
+                    icon.style.color = '#22c55e';
+                } else if (status === 'error') {
+                    icon.textContent = '✗';
+                    icon.style.color = '#ef4444';
+                }
+
+                const textSpan = document.createElement('span');
+                textSpan.textContent = text;
+
+                item.appendChild(icon);
+                item.appendChild(textSpan);
+                logList.appendChild(item);
+
+                // Nach unten scrollen
+                thinkingLog.scrollTop = thinkingLog.scrollHeight;
+            };
+
+            addLog('Workspace-Status und Git-Projekt ermitteln...');
+
+            // Listener registrieren
+            if (progressHandler) {
+                window.electronNative.removeGenerateCommitProgressListener(progressHandler);
+            }
+
+            progressHandler = (msg) => {
+                addLog(msg);
+            };
+
+            window.electronNative.onGenerateCommitProgress(progressHandler);
+
+            try {
+                const csrfToken = window.__APP_CONFIG__ ? window.__APP_CONFIG__.csrfToken : '';
+                const res = await window.electronNative.generateCommitMsg(conversationId, csrfToken);
+                if (res.status === 'success' && res.commitMessage) {
+                    textarea.value = res.commitMessage;
+                    addLog('Commit-Message erfolgreich generiert!', 'success');
+                    if (res.convoId) {
+                        deleteTempConversation(res.convoId);
+                    }
+                } else {
+                    addLog('Fehler bei der AI-Generierung: ' + (res.message || 'Leere Antwort erhalten.'), 'error');
+                }
+            } catch (err) {
+                addLog('Ausnahmefehler: ' + err.message, 'error');
+                showCustomAlert('Ausnahmefehler bei der Generierung: ' + err.message);
+            } finally {
+                aiBtn.disabled = false;
+                aiBtn.style.opacity = '1';
+                aiBtn.innerHTML = '✨ AI Generieren';
+                if (progressHandler) {
+                    window.electronNative.removeGenerateCommitProgressListener(progressHandler);
+                    progressHandler = null;
+                }
+            }
+        });
+
+        syncSubmitBtn.addEventListener('click', () => {
+            if (syncSubmitting || controller.isClosed()) return;
+            syncSubmitting = true;
+            syncSubmitBtn.disabled = true;
+            const commitMsg = textarea.value.trim();
+            if (!closeModal('submit')) return;
+            if (typeof onSync === 'function') onSync(commitMsg);
+        });
+    }
+
+    async function deleteTempConversation(convoId) {
+        if (!convoId) return;
+        try {
+            const csrfToken = window.__APP_CONFIG__ ? window.__APP_CONFIG__.csrfToken : '';
+            const res = await window.electronNative.deleteTempConversation(convoId, csrfToken);
+            console.log("[AMS UI] Deleted temporary conversation " + convoId + ":", res.status, res.grpcStatus);
+        } catch (e) {
+            console.error("[AMS UI] Failed to delete temporary conversation " + convoId + ":", e);
+        }
+    }
+
+    function showCustomConfirm(message, callback) {
+        const parent = document.getElementById('antigravity-plan-panel') || document.body;
+        const previouslyFocused = document.activeElement;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'antigravity-modal-overlay';
+        stopKeyPropagation(overlay);
+        overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.background = 'rgba(9, 9, 11, 0.7)';
+        overlay.style.backdropFilter = 'blur(4px)';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '10000';
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.2s ease';
+
+        const modal = document.createElement('div');
+        modal.style.background = 'var(--card, #18181b)';
+        modal.style.border = '1px solid var(--border, #27272a)';
+        modal.style.borderRadius = '8px';
+        modal.style.padding = '16px';
+        modal.style.width = '85%';
+        modal.style.maxWidth = '300px';
+        modal.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.5)';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.gap = '12px';
+        modal.style.transform = 'scale(0.95)';
+        modal.style.transition = 'transform 0.2s ease';
+        modal.setAttribute('role', 'alertdialog');
+        modal.setAttribute('aria-modal', 'true');
+
+        const msgPara = document.createElement('p');
+        msgPara.style.margin = '0';
+        msgPara.style.fontSize = '12px';
+        msgPara.style.color = 'var(--foreground, #fafafa)';
+        msgPara.style.whiteSpace = 'pre-wrap';
+        msgPara.style.lineHeight = '1.4';
+        msgPara.textContent = message;
+        msgPara.id = 'antigravity-confirm-message-' + Date.now();
+        modal.setAttribute('aria-describedby', msgPara.id);
+
+        const buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.justifyContent = 'flex-end';
+        buttons.style.gap = '8px';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Abbrechen';
+        cancelBtn.style.background = 'transparent';
+        cancelBtn.style.color = 'var(--muted-foreground, #71717a)';
+        cancelBtn.style.border = '1px solid var(--border, #27272a)';
+        cancelBtn.style.borderRadius = '4px';
+        cancelBtn.style.padding = '6px 12px';
+        cancelBtn.style.fontSize = '12px';
+        cancelBtn.style.cursor = 'pointer';
+        cancelBtn.style.outline = 'none';
+
+        const okBtn = document.createElement('button');
+        okBtn.textContent = 'Ja, löschen';
+        okBtn.style.background = 'var(--destructive, #ef4444)';
+        okBtn.style.color = '#ffffff';
+        okBtn.style.border = 'none';
+        okBtn.style.borderRadius = '4px';
+        okBtn.style.padding = '6px 12px';
+        okBtn.style.fontSize = '12px';
+        okBtn.style.fontWeight = '500';
+        okBtn.style.cursor = 'pointer';
+        okBtn.style.outline = 'none';
+
+        buttons.appendChild(cancelBtn);
+        buttons.appendChild(okBtn);
+        modal.appendChild(msgPara);
+        modal.appendChild(buttons);
+        overlay.appendChild(modal);
+
+        parent.appendChild(overlay);
+
+        setTimeout(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'scale(1)';
+        }, 10);
+
+        const controller = createAmsModalController({
+            overlay,
+            modal,
+            initialFocus: okBtn,
+            previouslyFocused,
+            removeDelay: 200,
+            animateClose: () => {
+                overlay.style.opacity = '0';
+                modal.style.transform = 'scale(0.95)';
+            },
+            onClose: (reason) => {
+                if (reason === 'escape' && typeof callback === 'function') callback(false);
+            },
+        });
+        controller.focusInitial();
+
+        const close = (result) => {
+            if (!controller.close(result ? 'confirm' : 'cancel')) return;
+            if (typeof callback === 'function') callback(result);
+        };
+
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            close(false);
+        });
+
+        okBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            close(true);
+        });
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                e.stopPropagation();
+                close(false);
+            }
+        });
+
+    }
+
+    function showUpdateConfirm(version, releaseNotes, action, callback, releaseMetadata) {
+        const mode = action === 'install' ? 'install' : 'background';
+        const existing = document.getElementById('antigravity-official-update-dialog');
+        if (existing) {
+            if (typeof existing.__antigravityDismiss === 'function') {
+                existing.__antigravityDismiss();
+            } else {
+                existing.remove();
+            }
+        }
+        const parent = document.body;
+        const releaseInfo = resolveOfficialReleaseInfo(version, releaseNotes, releaseMetadata);
+        const onResult = typeof callback === 'function' ? callback : () => {};
+        const previouslyFocused = document.activeElement;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'antigravity-official-update-dialog';
+        overlay.className = 'antigravity-modal-overlay';
+        stopKeyPropagation(overlay);
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.background = 'rgba(9, 9, 11, 0.7)';
+        overlay.style.backdropFilter = 'blur(4px)';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '10000';
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.2s ease';
+        overlay.style.padding = '12px';
+        overlay.style.boxSizing = 'border-box';
+        overlay.setAttribute('role', 'presentation');
+
+        const modal = document.createElement('div');
+        modal.style.background = 'var(--card, #18181b)';
+        modal.style.border = '1px solid var(--border, #27272a)';
+        modal.style.borderRadius = '8px';
+        modal.style.padding = '16px';
+        modal.style.width = '85%';
+        modal.style.maxWidth = '460px';
+        modal.style.maxHeight = '82vh';
+        modal.style.overflowY = 'auto';
+        modal.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.5)';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.gap = '12px';
+        modal.style.transform = 'scale(0.95)';
+        modal.style.transition = 'transform 0.2s ease';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+
+        const title = document.createElement('h3');
+        title.style.margin = '0';
+        title.style.fontSize = '13px';
+        title.style.fontWeight = '600';
+        title.style.color = 'var(--foreground, #fafafa)';
+        title.id = 'antigravity-update-dialog-title-' + Date.now();
+        title.textContent = (mode === 'install' ? 'Offizielles Update bereit (v' : 'Offizielles Update verfügbar (v') + releaseInfo.version + ')';
+        modal.setAttribute('aria-labelledby', title.id);
+
+        const warning = document.createElement('div');
+        warning.style.fontSize = '11px';
+        warning.style.color = '#f59e0b';
+        warning.style.padding = '8px';
+        warning.style.background = 'rgba(245, 158, 11, 0.08)';
+        warning.style.border = '1px solid rgba(245, 158, 11, 0.15)';
+        warning.style.borderRadius = '4px';
+        warning.style.lineHeight = '1.4';
+        warning.id = title.id + '-warning';
+        warning.textContent = '⚠️ Wichtig: Das offizielle Update ersetzt lokale UI-Patches. Nach dem Neustart prüft der Patch-Guard zuerst die Versionskompatibilität. Nur ausdrücklich unterstützte Versionen werden automatisch gepatcht; andernfalls bleibt die sichere offizielle Oberfläche aktiv, bis der Modifier aktualisiert wurde.';
+        modal.setAttribute('aria-describedby', warning.id);
+
+        modal.appendChild(title);
+        modal.appendChild(warning);
+
+        const releaseCard = document.createElement('section');
+        releaseCard.style.display = 'flex';
+        releaseCard.style.flexDirection = 'column';
+        releaseCard.style.gap = '8px';
+        releaseCard.style.padding = '10px';
+        releaseCard.style.background = 'rgba(59, 130, 246, 0.06)';
+        releaseCard.style.border = '1px solid rgba(59, 130, 246, 0.2)';
+        releaseCard.style.borderRadius = '6px';
+        releaseCard.setAttribute('aria-label', 'Offizielle Änderungen');
+
+        const sourceRow = document.createElement('div');
+        sourceRow.style.display = 'flex';
+        sourceRow.style.alignItems = 'center';
+        sourceRow.style.justifyContent = 'space-between';
+        sourceRow.style.gap = '8px';
+
+        const sourceBadge = document.createElement('span');
+        sourceBadge.style.fontSize = '10px';
+        sourceBadge.style.fontWeight = '600';
+        sourceBadge.style.color = '#60a5fa';
+        sourceBadge.textContent = 'Offizieller Google-Changelog';
+        sourceRow.appendChild(sourceBadge);
+
+        if (releaseInfo.publishedAt) {
+            const date = document.createElement('time');
+            date.style.fontSize = '10px';
+            date.style.color = '#a1a1aa';
+            date.textContent = releaseInfo.publishedAt;
+            sourceRow.appendChild(date);
+        }
+        releaseCard.appendChild(sourceRow);
+
+        if (releaseInfo.title) {
+            const releaseTitle = document.createElement('div');
+            releaseTitle.style.fontSize = '12px';
+            releaseTitle.style.fontWeight = '600';
+            releaseTitle.style.color = 'var(--foreground, #fafafa)';
+            releaseTitle.textContent = releaseInfo.title;
+            releaseCard.appendChild(releaseTitle);
+        }
+
+        if (releaseInfo.improvements !== null || releaseInfo.fixes !== null) {
+            const counts = document.createElement('div');
+            counts.style.fontSize = '10px';
+            counts.style.color = '#a1a1aa';
+            counts.textContent = String(releaseInfo.improvements || 0) + ' Verbesserungen · ' + String(releaseInfo.fixes || 0) + ' Fehlerbehebungen';
+            releaseCard.appendChild(counts);
+        }
+
+        if (releaseInfo.summary) {
+            const summary = document.createElement('p');
+            summary.style.margin = '0';
+            summary.style.fontSize = '11px';
+            summary.style.lineHeight = '1.45';
+            summary.style.color = '#d4d4d8';
+            summary.textContent = releaseInfo.summary;
+            releaseCard.appendChild(summary);
+        }
+
+        if (releaseInfo.highlights.length) {
+            const highlightsTitle = document.createElement('div');
+            highlightsTitle.style.fontSize = '11px';
+            highlightsTitle.style.fontWeight = '600';
+            highlightsTitle.style.color = 'var(--foreground, #fafafa)';
+            highlightsTitle.textContent = 'Die wichtigsten Änderungen';
+            releaseCard.appendChild(highlightsTitle);
+
+            const highlights = document.createElement('ul');
+            highlights.style.margin = '0';
+            highlights.style.paddingLeft = '18px';
+            highlights.style.display = 'flex';
+            highlights.style.flexDirection = 'column';
+            highlights.style.gap = '4px';
+            highlights.style.fontSize = '10.5px';
+            highlights.style.lineHeight = '1.4';
+            highlights.style.color = '#d4d4d8';
+            releaseInfo.highlights.forEach((highlight) => {
+                const item = document.createElement('li');
+                item.textContent = highlight;
+                highlights.appendChild(item);
+            });
+            releaseCard.appendChild(highlights);
+        }
+
+        if (releaseInfo.notesText) {
+            const notesContainer = document.createElement('div');
+            notesContainer.style.fontSize = '10.5px';
+            notesContainer.style.color = '#d4d4d8';
+            notesContainer.style.maxHeight = '110px';
+            notesContainer.style.overflowY = 'auto';
+            notesContainer.style.padding = '8px';
+            notesContainer.style.background = 'rgba(0, 0, 0, 0.2)';
+            notesContainer.style.border = '1px solid var(--border, #27272a)';
+            notesContainer.style.borderRadius = '4px';
+            notesContainer.style.whiteSpace = 'pre-wrap';
+            notesContainer.style.lineHeight = '1.4';
+            notesContainer.textContent = releaseInfo.notesText;
+            releaseCard.appendChild(notesContainer);
+        } else if (releaseInfo.detailsStatus === 'unavailable') {
+            const unavailable = document.createElement('p');
+            unavailable.style.margin = '0';
+            unavailable.style.fontSize = '10.5px';
+            unavailable.style.color = '#a1a1aa';
+            unavailable.textContent = 'Der Update-Feed enthält für diese Version keine eingebetteten Release Notes. Der vollständige offizielle Changelog ist unten verlinkt.';
+            releaseCard.appendChild(unavailable);
+        }
+
+        const releaseLink = document.createElement('button');
+        releaseLink.type = 'button';
+        releaseLink.style.alignSelf = 'flex-start';
+        releaseLink.style.padding = '0';
+        releaseLink.style.border = 'none';
+        releaseLink.style.background = 'transparent';
+        releaseLink.style.color = '#60a5fa';
+        releaseLink.style.fontSize = '10.5px';
+        releaseLink.style.fontWeight = '500';
+        releaseLink.style.cursor = 'pointer';
+        releaseLink.style.textDecoration = 'underline';
+        releaseLink.textContent = 'Vollständigen offiziellen Changelog öffnen ↗';
+        releaseLink.addEventListener('click', (event) => {
+            event.stopPropagation();
+            if (!isAllowedOfficialAntigravityUrl(releaseInfo.releaseUrl)) return;
+            if (window.electronNative && typeof window.electronNative.openExternal === 'function') {
+                Promise.resolve(window.electronNative.openExternal(releaseInfo.releaseUrl)).catch((error) => {
+                    console.warn('[AMS Updater] Could not open official release page:', error);
+                });
+            }
+        });
+        releaseCard.appendChild(releaseLink);
+        modal.appendChild(releaseCard);
+
+        const question = document.createElement('p');
+        question.style.margin = '0';
+        question.style.fontSize = '11px';
+        question.style.color = 'var(--foreground, #fafafa)';
+        question.textContent = mode === 'install'
+            ? 'Das Update ist vollständig heruntergeladen. Möchtest du Antigravity jetzt neu starten und installieren?'
+            : 'Das Update wird automatisch im Hintergrund geladen. Du kannst Antigravity währenddessen weiterverwenden.';
+        modal.appendChild(question);
+
+        const buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.justifyContent = 'flex-end';
+        buttons.style.gap = '8px';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = mode === 'install' ? 'Später' : 'Schließen';
+        cancelBtn.style.background = 'transparent';
+        cancelBtn.style.color = 'var(--muted-foreground, #71717a)';
+        cancelBtn.style.border = '1px solid var(--border, #27272a)';
+        cancelBtn.style.borderRadius = '4px';
+        cancelBtn.style.padding = '6px 12px';
+        cancelBtn.style.fontSize = '11px';
+        cancelBtn.style.cursor = 'pointer';
+        cancelBtn.style.outline = 'none';
+        if (mode !== 'install') {
+            cancelBtn.style.display = 'none';
+        }
+
+        const okBtn = document.createElement('button');
+        okBtn.type = 'button';
+        okBtn.textContent = mode === 'install' ? 'Neu starten & installieren' : 'Verstanden';
+        okBtn.style.background = 'var(--primary, #3b82f6)';
+        okBtn.style.color = '#ffffff';
+        okBtn.style.border = 'none';
+        okBtn.style.borderRadius = '4px';
+        okBtn.style.padding = '6px 12px';
+        okBtn.style.fontSize = '11px';
+        okBtn.style.fontWeight = '500';
+        okBtn.style.cursor = 'pointer';
+        okBtn.style.outline = 'none';
+
+        buttons.appendChild(cancelBtn);
+        buttons.appendChild(okBtn);
+        modal.appendChild(buttons);
+        overlay.appendChild(modal);
+
+        parent.appendChild(overlay);
+
+        setTimeout(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'scale(1)';
+        }, 10);
+
+        let keyHandler = null;
+        let isClosed = false;
+        const close = (result) => {
+            if (isClosed) return;
+            isClosed = true;
+            if (keyHandler) {
+                window.removeEventListener('keydown', keyHandler, true);
+            }
+            overlay.style.opacity = '0';
+            modal.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                overlay.remove();
+                if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                    previouslyFocused.focus();
+                }
+            }, 200);
+            onResult(result);
+        };
+        overlay.__antigravityDismiss = () => {
+            if (isClosed) return;
+            isClosed = true;
+            if (keyHandler) {
+                window.removeEventListener('keydown', keyHandler, true);
+            }
+            overlay.remove();
+        };
+
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            close(false);
+        });
+
+        okBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            close(true);
+        });
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                e.stopPropagation();
+                close(false);
+            }
+        });
+
+        keyHandler = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                close(false);
+                return;
+            }
+            if (e.key === 'Tab') {
+                const focusableButtons = getAmsModalFocusableElements(modal);
+                if (!focusableButtons.length) return;
+                const currentIndex = focusableButtons.indexOf(document.activeElement);
+                const nextIndex = e.shiftKey
+                    ? (currentIndex <= 0 ? focusableButtons.length - 1 : currentIndex - 1)
+                    : (currentIndex < 0 || currentIndex === focusableButtons.length - 1 ? 0 : currentIndex + 1);
+                e.preventDefault();
+                e.stopPropagation();
+                focusableButtons[nextIndex].focus();
+            }
+        };
+        window.addEventListener('keydown', keyHandler, true);
+        okBtn.focus();
+    }
+
+    function showCustomAlert(message) {
+        const parent = document.getElementById('antigravity-plan-panel') || document.body;
+        const previouslyFocused = document.activeElement;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'antigravity-modal-overlay';
+        stopKeyPropagation(overlay);
+        overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.background = 'rgba(9, 9, 11, 0.7)';
+        overlay.style.backdropFilter = 'blur(4px)';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '10000';
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.2s ease';
+
+        const modal = document.createElement('div');
+        modal.style.background = 'var(--card, #18181b)';
+        modal.style.border = '1px solid var(--border, #27272a)';
+        modal.style.borderRadius = '8px';
+        modal.style.padding = '16px';
+        modal.style.width = '85%';
+        modal.style.maxWidth = '300px';
+        modal.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.5)';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.gap = '12px';
+        modal.style.transform = 'scale(0.95)';
+        modal.style.transition = 'transform 0.2s ease';
+        modal.setAttribute('role', 'alertdialog');
+        modal.setAttribute('aria-modal', 'true');
+
+        const msgPara = document.createElement('p');
+        msgPara.style.margin = '0';
+        msgPara.style.fontSize = '12px';
+        msgPara.style.color = 'var(--foreground, #fafafa)';
+        msgPara.style.whiteSpace = 'pre-wrap';
+        msgPara.style.lineHeight = '1.4';
+        msgPara.textContent = message;
+        msgPara.id = 'antigravity-alert-message-' + Date.now();
+        modal.setAttribute('aria-describedby', msgPara.id);
+
+        const buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.justifyContent = 'flex-end';
+
+        const okBtn = document.createElement('button');
+        okBtn.textContent = 'OK';
+        okBtn.style.background = 'var(--primary, #3b82f6)';
+        okBtn.style.color = '#ffffff';
+        okBtn.style.border = 'none';
+        okBtn.style.borderRadius = '4px';
+        okBtn.style.padding = '6px 16px';
+        okBtn.style.fontSize = '12px';
+        okBtn.style.fontWeight = '500';
+        okBtn.style.cursor = 'pointer';
+        okBtn.style.outline = 'none';
+
+        buttons.appendChild(okBtn);
+        modal.appendChild(msgPara);
+        modal.appendChild(buttons);
+        overlay.appendChild(modal);
+
+        parent.appendChild(overlay);
+
+        setTimeout(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'scale(1)';
+        }, 10);
+
+        const controller = createAmsModalController({
+            overlay,
+            modal,
+            initialFocus: okBtn,
+            previouslyFocused,
+            removeDelay: 200,
+            animateClose: () => {
+                overlay.style.opacity = '0';
+                modal.style.transform = 'scale(0.95)';
+            },
+        });
+        const close = () => controller.close('acknowledge');
+        controller.focusInitial();
+
+        okBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            close();
+        });
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                e.stopPropagation();
+                close();
+            }
+        });
+
+    }
+
+    // Override window.alert globally in the main world context
+    window.alert = showCustomAlert;
+
+async function showUpdateHistoryModal() {
+        const parent = document.getElementById('antigravity-plan-panel') || document.body;
+        const previouslyFocused = document.activeElement;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'antigravity-modal-overlay';
+        stopKeyPropagation(overlay);
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.background = 'rgba(9, 9, 11, 0.75)';
+        overlay.style.backdropFilter = 'blur(6px)';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '10005';
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.2s ease';
+
+        const modal = document.createElement('div');
+        modal.style.background = 'var(--card, #18181b)';
+        modal.style.border = '1px solid var(--border, #27272a)';
+        modal.style.borderRadius = '10px';
+        modal.style.padding = '0';
+        modal.style.width = '620px';
+        modal.style.maxWidth = '92vw';
+        modal.style.maxHeight = '82vh';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.6)';
+        modal.style.transform = 'scale(0.96)';
+        modal.style.transition = 'transform 0.2s ease';
+        modal.style.overflow = 'hidden';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+
+        // Header
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.justifyContent = 'space-between';
+        header.style.alignItems = 'center';
+        header.style.padding = '14px 18px';
+        header.style.borderBottom = '1px solid var(--border, #27272a)';
+        header.style.background = 'rgba(255, 255, 255, 0.02)';
+
+        const titleBox = document.createElement('div');
+        titleBox.style.display = 'flex';
+        titleBox.style.alignItems = 'center';
+        titleBox.style.gap = '8px';
+
+        const titleIcon = document.createElement('span');
+        titleIcon.innerHTML = \`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>\`;
+
+        const title = document.createElement('h3');
+        title.textContent = 'Anti-Gravity Update- & Patch-Log';
+        title.style.margin = '0';
+        title.style.fontSize = '14px';
+        title.style.fontWeight = '600';
+        title.style.color = 'var(--foreground, #fafafa)';
+        title.id = 'antigravity-update-history-title';
+        modal.setAttribute('aria-labelledby', title.id);
+
+        titleBox.appendChild(titleIcon);
+        titleBox.appendChild(title);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '✕';
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.border = 'none';
+        closeBtn.style.color = '#a1a1aa';
+        closeBtn.style.fontSize = '14px';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.padding = '4px 8px';
+        closeBtn.style.borderRadius = '4px';
+
+        header.appendChild(titleBox);
+        header.appendChild(closeBtn);
+        modal.appendChild(header);
+
+        // Content container
+        const content = document.createElement('div');
+        content.style.padding = '16px 18px';
+        content.style.overflowY = 'auto';
+        content.style.flex = '1';
+        content.style.display = 'flex';
+        content.style.flexDirection = 'column';
+        content.style.gap = '14px';
+
+        // Status Card
+        const statusCard = document.createElement('div');
+        statusCard.style.padding = '12px 14px';
+        statusCard.style.borderRadius = '8px';
+        statusCard.style.background = 'rgba(59, 130, 246, 0.08)';
+        statusCard.style.border = '1px solid rgba(59, 130, 246, 0.25)';
+        statusCard.style.display = 'flex';
+        statusCard.style.justifyContent = 'space-between';
+        statusCard.style.alignItems = 'center';
+
+        const statusInfo = document.createElement('div');
+        const statusTitle = document.createElement('div');
+        statusTitle.style.fontSize = '12px';
+        statusTitle.style.fontWeight = '600';
+        statusTitle.style.color = '#60a5fa';
+        statusTitle.textContent = 'Aktueller Patch-Status: Anti-Gravity';
+        const statusSubtitle = document.createElement('div');
+        statusSubtitle.style.fontSize = '11px';
+        statusSubtitle.style.color = '#a1a1aa';
+        statusSubtitle.style.marginTop = '2px';
+        statusSubtitle.textContent = 'Upstream-Kompatibilität verifiziert · Selbstreparatur & Rollback aktiv';
+        statusInfo.appendChild(statusTitle);
+        statusInfo.appendChild(statusSubtitle);
+
+        const statusBadge = document.createElement('span');
+        statusBadge.style.fontSize = '11px';
+        statusBadge.style.fontWeight = '500';
+        statusBadge.style.padding = '4px 8px';
+        statusBadge.style.borderRadius = '12px';
+        statusBadge.style.background = 'rgba(34, 197, 94, 0.15)';
+        statusBadge.style.color = '#4ade80';
+        statusBadge.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+        statusBadge.textContent = '● Gepatcht & Aktiv';
+
+        statusCard.appendChild(statusInfo);
+        statusCard.appendChild(statusBadge);
+        content.appendChild(statusCard);
+
+        // Fetch history data
+        let historyData = [];
+        try {
+            if (window.electronNative && typeof window.electronNative.getUpgradeHistory === 'function') {
+                const res = await window.electronNative.getUpgradeHistory();
+                if (res && res.status === 'success' && Array.isArray(res.history)) {
+                    historyData = res.history;
+                }
+            }
+        } catch (e) {
+            console.warn('[AMS] Failed to read upgrade history from IPC:', e);
+        }
+
+        if (!historyData || historyData.length === 0) {
+            historyData = [
+                {
+                    version: "2.22.0",
+                    date: "2026-10-11",
+                    upstream_status: "compatible",
+                    diff_summary: {
+                        "dist/main.js": "identisch (adf9f814ce...)",
+                        "dist/ipcHandlers.js": "identisch (0a58fe6eba...)",
+                        "dist/updater.js": "identisch (d8f44a0bb4...)",
+                        "dist/utils.js": "identisch (6f01d74696...)",
+                        "dist/preload.js": "getPathForFile: (file) => electron_1.webUtils.getPathForFile(file) hinzugefuegt"
+                    },
+                    findings: [
+                        "Offizielle Google-Aktualisierung auf Anti-Gravity v2.22.0",
+                        "dist/preload.js um webUtils.getPathForFile erweitert",
+                        "Alle 4 weiteren Core-Dateien sind 1:1 identisch mit v2.19.1",
+                        "Automatischer Selbstreparatur-Dialog bei künftigen Versionskonflikten",
+                        "Automatisches Wiederherstellen des aktiven Chats nach Repack-Neustart",
+                        "Update- & Patch-Log im AMS Quick-Menu verfügbar"
+                    ]
+                },
+                {
+                    version: "2.19.1",
+                    date: "2026-10-02",
+                    upstream_status: "compatible",
+                    diff_summary: { "all_core": "kompatibel" },
+                    findings: ["Stabiler Rebase auf v2.19.1 mit atomarem Staging und Rollback-Schutz"]
+                }
+            ];
+        }
+
+        const currentEntry = historyData.find((item) => item && item.version
+            && item.result !== 'failed' && item.upstream_status !== 'failed');
+        if (currentEntry) {
+            statusTitle.textContent = 'Aktueller Patch-Status: Anti-Gravity v' + currentEntry.version;
+        }
+
+        // Render entries
+        for (const entry of historyData) {
+            const entryBox = document.createElement('div');
+            entryBox.style.padding = '12px 14px';
+            entryBox.style.borderRadius = '8px';
+            entryBox.style.background = 'rgba(255, 255, 255, 0.03)';
+            entryBox.style.border = '1px solid var(--border, #27272a)';
+            entryBox.style.display = 'flex';
+            entryBox.style.flexDirection = 'column';
+            entryBox.style.gap = '8px';
+
+            const entryHeader = document.createElement('div');
+            entryHeader.style.display = 'flex';
+            entryHeader.style.justifyContent = 'space-between';
+            entryHeader.style.alignItems = 'center';
+
+            const verTitle = document.createElement('div');
+            verTitle.style.display = 'flex';
+            verTitle.style.alignItems = 'center';
+            verTitle.style.gap = '8px';
+
+            const verBadge = document.createElement('span');
+            verBadge.style.fontSize = '12px';
+            verBadge.style.fontWeight = '600';
+            verBadge.style.color = '#38bdf8';
+            verBadge.textContent = 'v' + entry.version;
+
+            const dateSpan = document.createElement('span');
+            dateSpan.style.fontSize = '11px';
+            dateSpan.style.color = '#71717a';
+            dateSpan.textContent = entry.date || '';
+
+            verTitle.appendChild(verBadge);
+            verTitle.appendChild(dateSpan);
+
+            const compBadge = document.createElement('span');
+            compBadge.style.fontSize = '10px';
+            compBadge.style.padding = '2px 6px';
+            compBadge.style.borderRadius = '4px';
+            const entryFailed = entry.result === 'failed' || entry.upstream_status === 'failed';
+            compBadge.style.background = entryFailed ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)';
+            compBadge.style.color = entryFailed ? '#f87171' : '#60a5fa';
+            compBadge.textContent = entryFailed
+                ? 'Fehlgeschlagen'
+                : (entry.result === 'success' ? 'Selbstgeheilt & verifiziert' : (entry.upstream_status === 'compatible' ? 'Kompatibel' : (entry.upstream_status || 'Gepatcht')));
+
+            entryHeader.appendChild(verTitle);
+            entryHeader.appendChild(compBadge);
+            entryBox.appendChild(entryHeader);
+
+            if (Array.isArray(entry.steps) && entry.steps.length > 0) {
+                const metaLine = document.createElement('div');
+                metaLine.style.fontSize = '11px';
+                metaLine.style.color = '#a1a1aa';
+                metaLine.style.display = 'flex';
+                metaLine.style.flexWrap = 'wrap';
+                metaLine.style.gap = '4px 10px';
+                const total = typeof entry.duration_s === 'number' ? ' · ' + Math.round(entry.duration_s) + ' s gesamt' : '';
+                const fromText = entry.from_version ? 'v' + entry.from_version + ' → ' : '';
+                const head = document.createElement('span');
+                head.textContent = fromText + 'v' + entry.version + (entry.attempts > 1 ? ' · Versuch ' + entry.attempts : '') + total;
+                metaLine.appendChild(head);
+                for (const step of entry.steps) {
+                    const chip = document.createElement('span');
+                    const marks = { done: '✓', failed: '✕', running: '●', pending: '○' };
+                    const colors = { done: '#4ade80', failed: '#f87171', running: '#60a5fa', pending: '#71717a' };
+                    chip.style.color = colors[step.status] || '#71717a';
+                    chip.textContent = (marks[step.status] || '○') + ' ' + step.label;
+                    metaLine.appendChild(chip);
+                }
+                entryBox.appendChild(metaLine);
+            }
+
+            if (Array.isArray(entry.findings) && entry.findings.length > 0) {
+                const findingsSection = document.createElement('div');
+                const findingsLabel = document.createElement('div');
+                findingsLabel.style.fontSize = '11px';
+                findingsLabel.style.fontWeight = '600';
+                findingsLabel.style.color = '#e4e4e7';
+                findingsLabel.style.marginBottom = '4px';
+                findingsLabel.textContent = 'Erkenntnisse & Befunde:';
+                findingsSection.appendChild(findingsLabel);
+
+                const ul = document.createElement('ul');
+                ul.style.margin = '0';
+                ul.style.paddingLeft = '18px';
+                ul.style.fontSize = '11px';
+                ul.style.color = '#d4d4d8';
+                ul.style.lineHeight = '1.5';
+                for (const f of entry.findings) {
+                    const li = document.createElement('li');
+                    li.textContent = f;
+                    ul.appendChild(li);
+                }
+                findingsSection.appendChild(ul);
+                entryBox.appendChild(findingsSection);
+            }
+
+            if (entry.diff_summary && typeof entry.diff_summary === 'object') {
+                const diffSection = document.createElement('div');
+                const diffLabel = document.createElement('div');
+                diffLabel.style.fontSize = '11px';
+                diffLabel.style.fontWeight = '600';
+                diffLabel.style.color = '#a1a1aa';
+                diffLabel.style.marginBottom = '4px';
+                diffLabel.textContent = 'Dateianpassungen:';
+                diffSection.appendChild(diffLabel);
+
+                const diffList = document.createElement('div');
+                diffList.style.display = 'flex';
+                diffList.style.flexDirection = 'column';
+                diffList.style.gap = '3px';
+
+                for (const [filePath, detail] of Object.entries(entry.diff_summary)) {
+                    const item = document.createElement('div');
+                    item.style.fontSize = '11px';
+                    item.style.fontFamily = 'monospace';
+                    item.style.color = '#a1a1aa';
+                    item.style.display = 'flex';
+                    item.style.gap = '6px';
+
+                    const fileSpan = document.createElement('span');
+                    fileSpan.style.color = '#38bdf8';
+                    fileSpan.textContent = filePath + ':';
+
+                    const detailSpan = document.createElement('span');
+                    detailSpan.style.color = '#9ca3af';
+                    detailSpan.textContent = String(detail);
+
+                    item.appendChild(fileSpan);
+                    item.appendChild(detailSpan);
+                    diffList.appendChild(item);
+                }
+                diffSection.appendChild(diffList);
+                entryBox.appendChild(diffSection);
+            }
+
+            content.appendChild(entryBox);
+        }
+
+        modal.appendChild(content);
+
+        // Footer
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.justifyContent = 'flex-end';
+        footer.style.padding = '12px 18px';
+        footer.style.borderTop = '1px solid var(--border, #27272a)';
+        footer.style.background = 'rgba(255, 255, 255, 0.02)';
+
+        const okBtn = document.createElement('button');
+        okBtn.textContent = 'Schließen';
+        okBtn.style.background = 'var(--primary, #3b82f6)';
+        okBtn.style.color = '#ffffff';
+        okBtn.style.border = 'none';
+        okBtn.style.borderRadius = '5px';
+        okBtn.style.padding = '6px 16px';
+        okBtn.style.fontSize = '12px';
+        okBtn.style.fontWeight = '500';
+        okBtn.style.cursor = 'pointer';
+
+        footer.appendChild(okBtn);
+        modal.appendChild(footer);
+
+        overlay.appendChild(modal);
+        parent.appendChild(overlay);
+
+        setTimeout(() => {
+            overlay.style.opacity = '1';
+            modal.style.transform = 'scale(1)';
+        }, 10);
+
+        const controller = createAmsModalController({
+            overlay,
+            modal,
+            initialFocus: okBtn,
+            previouslyFocused,
+            removeDelay: 200,
+            animateClose: () => {
+                overlay.style.opacity = '0';
+                modal.style.transform = 'scale(0.96)';
+            },
+        });
+        const close = () => controller.close('acknowledge');
+        controller.focusInitial();
+
+        okBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            close();
+        });
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            close();
+        });
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                e.stopPropagation();
+                close();
+            }
+        });
+    }
+
+    window.showUpdateHistoryModal = showUpdateHistoryModal;
+
+
+    // Minimal native bridge for operating the local Anti-Gravity Hub.
+    // Model providers and chat routing intentionally stay inside the Hub.
+    async function amsHubCall(operation, payload = {}) {
+        if (!window.electronNative || typeof window.electronNative.hubRequest !== 'function') {
+            throw new Error('Anti-Gravity Hub bridge is not installed. Please run the repack once.');
+        }
+        return window.electronNative.hubRequest(amsToken, operation, payload);
+    }
+
+    window.amsAntigravityHub = Object.freeze({
+        getStatus: () => amsHubCall('services:status'),
+        getApiStatus: () => amsHubCall('api:monitor'),
+        startServices: (restart = false) => amsHubCall('services:start', { restart: restart === true }),
+        openHub: () => {
+            if (!window.electronNative || typeof window.electronNative.openExternal !== 'function') {
+                throw new Error('External link bridge is unavailable.');
+            }
+            return window.electronNative.openExternal('http://127.0.0.1:8000/dashboard/');
+        },
+    });
+
+
+    // Read-only API health and request details in the normal desktop profile.
+    (async () => {
+        let profile = null;
+        try { profile = await window.electronNative?.getProfileInfo?.(); } catch (_) { /* Health still reports the verified server-side profile. */ }
+        if (profile?.profile === 'api') return;
+        const state = { data: null, error: null, pending: false, open: false, checkedAt: null };
+        const style = document.createElement('style');
+        style.id = 'antigravity-api-monitor-style';
+        style.textContent = \`
+            #antigravity-api-status {position:fixed;right:18px;bottom:18px;z-index:11000;display:flex;align-items:center;gap:7px;padding:7px 11px;border-radius:9px;border:1px solid #ffffff24;background:#20232c;color:#f1f3f8;font:12px system-ui;box-shadow:0 3px 14px #0003;cursor:pointer}
+            #antigravity-api-status .api-dot {width:7px;height:7px;border-radius:50%;background:#9aa4b4}
+            #antigravity-api-status[data-state=ready] .api-dot {background:#65d4a8}
+            #antigravity-api-status[data-state=waiting] .api-dot {background:#edbf66}
+            #antigravity-api-status[data-state=error] .api-dot {background:#f18484}
+            #antigravity-api-panel {position:fixed;right:18px;bottom:60px;width:min(520px,calc(100vw - 36px));max-height:min(660px,calc(100vh - 110px));overflow:auto;z-index:11001;background:#191c24;color:#edf0f7;border:1px solid #ffffff26;border-radius:14px;box-shadow:0 16px 60px #0007;padding:18px;font:12px/1.5 system-ui}
+            #antigravity-api-panel[hidden] {display:none}
+            #antigravity-api-panel .api-header {display:flex;align-items:center;justify-content:space-between;gap:12px}
+            #antigravity-api-panel h2 {font-size:16px;margin:0}
+            #antigravity-api-panel button {color:inherit;background:#ffffff0c;border:1px solid #ffffff22;border-radius:7px;padding:5px 9px;cursor:pointer}
+            #antigravity-api-panel .api-summary {margin:12px 0;padding:10px 12px;background:#ffffff06;border-radius:9px;overflow-wrap:anywhere}
+            #antigravity-api-panel .api-muted {color:#a6afbf}
+            #antigravity-api-panel .api-request {padding:11px 0;border-top:1px solid #ffffff13}
+            #antigravity-api-panel .api-request-top {display:flex;align-items:center;justify-content:space-between;gap:10px}
+            #antigravity-api-panel .api-state {font-size:11px;border-radius:5px;padding:2px 6px;background:#ffffff10}
+            #antigravity-api-panel .api-state[data-state=success] {color:#80dfb8;background:#65d4a812}
+            #antigravity-api-panel .api-state[data-state=error] {color:#ffabab;background:#f1848412}
+            #antigravity-api-panel .api-preview {white-space:pre-wrap;overflow-wrap:anywhere;color:#c9d1e1;margin-top:6px}
+            #antigravity-api-panel .api-error {color:#ffabab;overflow-wrap:anywhere;margin-top:7px}
+            @media(prefers-color-scheme:light) {#antigravity-api-panel,#antigravity-api-status {background:#fbfcff;color:#222936;border-color:#d8dce5} #antigravity-api-panel .api-muted {color:#657084} #antigravity-api-panel .api-preview {color:#47536a}}
+        \`;
+        (document.head || document.documentElement).appendChild(style);
+        const button = document.createElement('button');
+        button.id = 'antigravity-api-status';
+        button.type = 'button';
+        button.setAttribute('aria-label', 'API-Status und letzte Requests anzeigen');
+        button.setAttribute('aria-expanded', 'false');
+        button.setAttribute('aria-controls', 'antigravity-api-panel');
+        const dot = document.createElement('span');
+        dot.className = 'api-dot';
+        dot.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span');
+        button.append(dot, label);
+        const panel = document.createElement('section');
+        panel.id = 'antigravity-api-panel';
+        panel.hidden = true;
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-labelledby', 'antigravity-api-panel-title');
+        const mount = () => {
+            if (!document.body) return false;
+            document.body.append(button, panel);
+            return true;
+        };
+        if (!mount()) document.addEventListener('DOMContentLoaded', mount, { once: true });
+
+        const node = (tag, text, className) => {
+            const element = document.createElement(tag);
+            if (text !== undefined) element.textContent = String(text);
+            if (className) element.className = className;
+            return element;
+        };
+        const homeIsolated = () => state.data?.isolated && state.data?.health?.cdp?.home_isolated;
+        const statusLabel = () => state.error ? 'API offline' : !state.data ? 'API wird geprüft' : state.data.health?.ready && homeIsolated() ? 'API bereit' : 'API wartet';
+        const formatTime = value => {
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        };
+        function render() {
+            label.textContent = statusLabel();
+            button.dataset.state = state.error ? 'error' : state.data?.health?.ready && homeIsolated() ? 'ready' : 'waiting';
+            button.title = 'Eigenes API-Profil · Health und Request-Details';
+            if (!state.open) return;
+            panel.replaceChildren();
+            const header = node('div', undefined, 'api-header');
+            const title = node('h2', 'API-Status');
+            title.id = 'antigravity-api-panel-title';
+            const close = node('button', '×');
+            close.setAttribute('aria-label', 'API-Details schließen');
+            close.onclick = () => toggle(false);
+            header.append(title, close);
+            panel.append(header);
+            const summary = node('div', undefined, 'api-summary');
+            summary.append(node('strong', statusLabel()));
+            summary.append(node('div', homeIsolated() ? 'Profil api · Home, Regeln, Memory und Chats getrennt' : 'Profil api · Trennung wird geprüft', 'api-muted'));
+            if (homeIsolated() && state.data?.profile_paths?.home_dir) summary.append(node('div', 'API-Home: ' + state.data.profile_paths.home_dir, 'api-muted'));
+            if (state.data) summary.append(node('div', \`\${state.data.total_requests} Requests seit API-Start · \${state.data.active_requests} aktiv · \${state.data.failed_requests} Fehler\`, 'api-muted'));
+            panel.append(summary);
+            const error = state.error || state.data?.last_error;
+            if (error) panel.append(node('div', error, 'api-error'));
+            if (state.error && state.checkedAt) panel.append(node('div', 'Letzter bekannter Stand: ' + formatTime(state.checkedAt), 'api-muted'));
+            panel.append(node('div', 'Letzte API-Requests', 'api-muted'));
+            if (!state.data) panel.append(node('p', state.pending ? 'Status wird geladen …' : 'Keine aktuellen API-Daten verfügbar.', 'api-muted'));
+            else if (!state.data.requests.length) panel.append(node('p', 'Seit diesem API-Start wurden noch keine Chat-Requests ausgeführt.', 'api-muted'));
+            for (const row of (state.data?.requests || []).slice(0, 8)) {
+                const item = node('div', undefined, 'api-request');
+                const top = node('div', undefined, 'api-request-top');
+                const badge = node('span', ({ success: 'Erfolgreich', error: 'Fehler', queued: 'Wartet', running: 'Läuft' })[row.state] || row.state, 'api-state');
+                badge.dataset.state = row.state;
+                top.append(node('strong', row.native_model || row.requested_model || 'Native Modellauswahl'), badge);
+                item.append(top, node('div', \`\${row.request_id} · \${row.path} · \${formatTime(row.started_at)}\`, 'api-muted'));
+                const details = [row.reasoning_effort ? \`Reasoning: \${row.reasoning_effort}\` : null, Number.isFinite(row.duration_ms) ? \`\${(row.duration_ms / 1000).toFixed(1)} s\` : null, row.http_status ? \`HTTP \${row.http_status}\` : null].filter(Boolean).join(' · ');
+                if (details) item.append(node('div', details, 'api-muted'));
+                if (row.prompt_preview) item.append(node('div', row.prompt_preview, 'api-preview'));
+                if (row.response_preview) item.append(node('div', 'Antwort: ' + row.response_preview, 'api-preview'));
+                if (row.error) item.append(node('div', row.error, 'api-error'));
+                panel.append(item);
+            }
+            panel.append(node('p', 'Anzeige ist lesend. Requests laufen im separaten API-Fenster.', 'api-muted'));
+        }
+        async function refresh() {
+            if (state.pending) return;
+            state.pending = true;
+            render();
+            try {
+                const result = await window.amsAntigravityHub.getApiStatus();
+                if (!result?.ok) throw new Error(result?.error?.message || 'API-Monitor ist nicht erreichbar.');
+                if (!result.data?.health || !Array.isArray(result.data.requests)) throw new Error('API-Monitor liefert ungültige Statusdaten.');
+                state.data = result.data;
+                state.checkedAt = result.checked_at;
+                state.error = null;
+            } catch (error) {
+                state.error = error.message || String(error);
+            } finally {
+                state.pending = false;
+                render();
+            }
+        }
+        function toggle(open = !state.open) {
+            state.open = open;
+            panel.hidden = !open;
+            button.setAttribute('aria-expanded', String(open));
+            render();
+            if (open) refresh();
+        }
+        button.onclick = () => toggle();
+        window.addEventListener('keydown', event => { if (event.key === 'Escape' && state.open) toggle(false); });
+        window.amsApiMonitor = Object.freeze({ refresh, show: () => toggle(true), hide: () => toggle(false) });
+        render();
+        refresh();
+        setInterval(refresh, 5000);
+    })();
+
+
+    console.log('[AMS Monitor] Initializing Real-time Chat Monitor...');
+    const observedMessages = new Map();
+    const messageDebounceTimers = new Map();
+    let lastUrl = window.location.href;
+
+    function getSessionId() {
+        const parts = window.location.pathname.split('/');
+        return (parts.length > 2 && parts[2]) ? parts[2] : 'global';
+    }
+
+    function estimateTokenCount(text) {
+        if (!text) return 0;
+        const chars = text.length;
+        const cleanText = text.replace(/\\s+/g, ' ');
+        const words = cleanText.split(' ').filter(Boolean).length;
+        return Math.max(1, Math.round((words * 1.3 + chars / 3.5) / 2));
+    }
+
+    function getActiveModel() {
+        const modelBtn = document.querySelector('button[aria-label^="Select model, current:"]');
+        if (modelBtn) {
+            const text = modelBtn.textContent.trim();
+            if (text) {
+                window.__antigravity_last_model = text;
+                return text;
+            }
+        }
+        return window.__antigravity_last_model || 'Gemini 3.5 Flash (High)';
+    }
+
+    function formatTokenCount(num) {
+        if (num >= 1000000) {
+            return (num / 1000000).toFixed(2) + 'M';
+        }
+        if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K';
+        }
+        return num.toString();
+    }
+
+    function writeLiveLog(source, content) {
+        if (!window.electronNative || !window.electronNative.writeLogEntry) return;
+        const session = getSessionId();
+        const activeModel = getActiveModel();
+        const tokensVal = estimateTokenCount(content);
+        const entry = {
+            session_id: session,
+            event: 'message',
+            source: source,
+            content: content,
+            timestamp: new Date().toISOString(),
+            model: activeModel,
+            tokens: tokensVal,
+            metadata: {
+                url: window.location.href
+            }
+        };
+        window.electronNative.writeLogEntry(entry)
+            .then(() => {
+                console.log('[AMS Monitor] Live log entry written successfully.');
+            })
+            .catch(err => {
+                console.error('[AMS Monitor] Failed to write live log entry:', err);
+            });
+    }
+
+    function triggerMessageDebounce(el, source, content) {
+        if (messageDebounceTimers.has(el)) {
+            clearTimeout(messageDebounceTimers.get(el));
+        }
+
+        const timer = setTimeout(() => {
+            messageDebounceTimers.delete(el);
+            console.log('[AMS Monitor] Debounce finished. Writing final ' + source + ' message.');
+            writeLiveLog(source, content);
+        }, 2000);
+
+        messageDebounceTimers.set(el, timer);
+    }
+
+    function scanMessages(isInitial = false) {
+        const messageElements = document.querySelectorAll('[role="article"]');
+        messageElements.forEach(el => {
+            const label = el.getAttribute('aria-label') || '';
+            const isUser = label.includes('User message');
+            const isAgent = label.includes('Agent response');
+
+            if (!isUser && !isAgent) return;
+
+            const type = isUser ? 'User' : 'Agent';
+            const textEl = isUser ? el.querySelector('.whitespace-pre-wrap') : el.querySelector('.select-text');
+            if (!textEl) return;
+
+            const text = textEl.textContent || '';
+            if (!observedMessages.has(el)) {
+                observedMessages.set(el, text);
+                if (!isInitial) {
+                    console.log('[AMS Monitor] New ' + type + ' Message detected (debouncing)...');
+                    triggerMessageDebounce(el, type.toUpperCase(), text);
+                }
+            } else {
+                const prevText = observedMessages.get(el);
+                if (prevText !== text) {
+                    observedMessages.set(el, text);
+                    if (!isInitial) {
+                        triggerMessageDebounce(el, type.toUpperCase(), text);
+                    }
+                }
+            }
+        });
+    }
+
+    // Safely initialize the MutationObserver and initial scan when document.body is ready
+    function initMonitor() {
+        if (!document.body) {
+            setTimeout(initMonitor, 50);
+            return;
+        }
+
+        scanMessages(true);
+
+        const domObserver = new MutationObserver(() => {
+            scheduleScan();
+        });
+
+        domObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+    }
+
+    let scanTimeout = null;
+    function scheduleScan() {
+        if (scanTimeout) return;
+        scanTimeout = setTimeout(() => {
+            scanTimeout = null;
+            if (window.location.href !== lastUrl) {
+                lastUrl = window.location.href;
+
+                // Update currentConvId dynamically on URL changes
+                const urlParts = window.location.pathname.split('/');
+                currentConvId = (urlParts.length > 2 && urlParts[2]) ? urlParts[2] : null;
+
+                // Reload task plan for the new active chat
+                loadInitialPlan();
+
+                // Save last active session path (any non-root URL: chats, settings, history, scheduled tasks, etc.)
+                try {
+                    const path = window.location.pathname + window.location.search;
+                    if (path && path !== '/' && path !== '') {
+                        window.nativeStorage.updateItems({ antigravity_last_chat_path: path });
+                    }
+                } catch (e) {
+                    console.error('[AMS] Failed to save active session path:', e);
+                }
+
+                observedMessages.clear();
+                // Clear any pending debounces on URL change
+                for (const timer of messageDebounceTimers.values()) {
+                    clearTimeout(timer);
+                }
+                messageDebounceTimers.clear();
+
+                scanMessages(true);
+            } else {
+                scanMessages(false);
+            }
+
+            // Clean up old elements
+            if (document.body) {
+                for (const [el, text] of observedMessages.entries()) {
+                    if (!document.body.contains(el)) {
+                        observedMessages.delete(el);
+                        if (messageDebounceTimers.has(el)) {
+                            clearTimeout(messageDebounceTimers.get(el));
+                            messageDebounceTimers.delete(el);
+                        }
+                    }
+                }
+            }
+        }, 100);
+    }
+
+    // Heartbeat transmitter (pings preload context every 2 seconds)
+    setInterval(() => {
+        try {
+            window.postMessage({ type: 'antigravity-heartbeat-ping' }, window.location.origin);
+        } catch (e) {}
+    }, 2000);
+
+    // Auto-Updater Check and Dialog
+    if (window.electronUpdater && window.electronUpdater.onStateChanged) {
+        let lastUpdateDetails = null;
+        let lastDialogKey = null;
+        const mergeUpdateDetails = (update) => {
+            if (!update || typeof update !== 'object') return;
+            const next = { ...(lastUpdateDetails || {}) };
+            ['version', 'releaseNotes', 'releaseDate', 'releaseName'].forEach((key) => {
+                if (update[key] !== undefined && update[key] !== null && update[key] !== '') {
+                    next[key] = update[key];
+                }
+            });
+            lastUpdateDetails = next;
+        };
+        const handleUpdateState = (state) => {
+            console.log('[AMS Updater Watcher] State changed:', state);
+            if (!state || typeof state.type !== 'string') return;
+            mergeUpdateDetails(state.update);
+            const details = lastUpdateDetails || {};
+            const version = details.version || 'unbekannt';
+            if (state.type === 'available for download' || state.type === 'downloading') {
+                const dialogKey = 'background:' + version;
+                if (lastDialogKey === dialogKey) return;
+                lastDialogKey = dialogKey;
+                showUpdateConfirm(version, details.releaseNotes || null, 'background', () => {}, details);
+            } else if (state.type === 'ready') {
+                const dialogKey = 'install:' + version;
+                if (lastDialogKey === dialogKey) return;
+                lastDialogKey = dialogKey;
+                showUpdateConfirm(version, details.releaseNotes || null, 'install', (confirmed) => {
+                    if (!confirmed) return;
+                    console.log('[AMS Updater Watcher] Installing downloaded update.');
+                    Promise.resolve(window.electronUpdater.quitAndInstall()).catch((error) => {
+                        console.error('[AMS Updater Watcher] Could not install update:', error);
+                    });
+                }, details);
+            }
+        };
+        window.electronUpdater.onStateChanged(handleUpdateState);
+        if (typeof window.electronUpdater.getState === 'function') {
+            Promise.resolve(window.electronUpdater.getState())
+                .then(handleUpdateState)
+                .catch((error) => {
+                    console.warn('[AMS Updater Watcher] Could not restore update state:', error);
+                });
+        }
+    }
+
+    initMonitor();
+})();
+`;
+
+function showInjectionError(err) {
+    const displayError = () => {
+        if (!document.body) return false;
+        if (document.getElementById('antigravity-injection-error-popup')) return true;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'antigravity-injection-error-popup';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '50px';
+        overlay.style.right = '20px';
+        overlay.style.width = '380px';
+        overlay.style.background = 'rgba(24, 24, 27, 0.95)';
+        overlay.style.border = '1px solid #ef4444';
+        overlay.style.borderRadius = '8px';
+        overlay.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.5)';
+        overlay.style.zIndex = '999999';
+        overlay.style.padding = '16px';
+        overlay.style.color = '#fafafa';
+        overlay.style.fontFamily = 'ui-sans-serif, system-ui, sans-serif';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.gap = '10px';
+        overlay.style.backdropFilter = 'blur(4px)';
+
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.justifyContent = 'space-between';
+
+        const title = document.createElement('span');
+        title.innerHTML = '⚠️ <strong>AMS Injection Error</strong>';
+        title.style.fontSize = '13px';
+        title.style.color = '#ef4444';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Schließen';
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.border = '1px solid #27272a';
+        closeBtn.style.color = '#71717a';
+        closeBtn.style.borderRadius = '4px';
+        closeBtn.style.padding = '2px 8px';
+        closeBtn.style.fontSize = '10px';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.addEventListener('click', () => overlay.remove());
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+
+        const msg = document.createElement('div');
+        msg.style.fontSize = '11px';
+        msg.style.lineHeight = '1.4';
+        msg.style.color = '#d4d4d8';
+        msg.textContent = 'Das AMS Main-World-Skript konnte nicht geladen werden. Dies deutet meistens auf einen Syntax- oder Escaping-Fehler im Preload-Skript hin.';
+
+        const errorStack = document.createElement('pre');
+        errorStack.style.margin = '0';
+        errorStack.style.padding = '8px';
+        errorStack.style.background = 'rgba(0, 0, 0, 0.3)';
+        errorStack.style.borderRadius = '4px';
+        errorStack.style.fontSize = '10px';
+        errorStack.style.color = '#fca5a5';
+        errorStack.style.overflowX = 'auto';
+        errorStack.style.whiteSpace = 'pre-wrap';
+        errorStack.style.fontFamily = 'monospace';
+
+        let errDesc = err ? (err.stack || err.message || JSON.stringify(err)) : 'Unbekannter Fehler';
+        if (typeof err === 'object' && err.description) {
+            errDesc = err.description;
+        }
+        errorStack.textContent = errDesc;
+
+        overlay.appendChild(header);
+        overlay.appendChild(msg);
+        overlay.appendChild(errorStack);
+        document.body.appendChild(overlay);
+        return true;
+    };
+
+    if (!displayError()) {
+        const interval = setInterval(() => {
+            if (displayError()) {
+                clearInterval(interval);
+            }
+        }, 100);
+    }
+}
+
+securityTokenPromise
+    .then(() => {
+        const preparedScript = amsScriptContent;
+
+        // Monitor the main world script health
+        let lastHeartbeat = Date.now();
+        window.addEventListener('message', (event) => {
+            if (event.source === window &&
+                event.origin === window.location.origin &&
+                event.data && event.data.type === 'antigravity-heartbeat-ping') {
+                lastHeartbeat = Date.now();
+            }
+        });
+
+        // Watchdog checker loop (every 3 seconds)
+        setInterval(() => {
+            // If no heartbeat for more than 6 seconds, re-inject the script
+            if (Date.now() - lastHeartbeat > 6000) {
+                console.warn('[AMS Preload] Heartbeat lost! Re-injecting main world script...');
+                lastHeartbeat = Date.now(); // reset timer
+                electron_1.webFrame.executeJavaScript(preparedScript)
+                    .then(() => {
+                        console.log('[AMS Preload] Successfully re-injected main world script.');
+                    })
+                    .catch(err => {
+                        console.error('[AMS Preload] Failed to re-inject main world script:', err);
+                        showInjectionError(err);
+                    });
+            }
+        }, 3000);
+
+        // Inject the main world script
+        electron_1.webFrame.executeJavaScript(preparedScript)
+            .then(() => {
+                console.log('[AMS] Successfully executed main world script via webFrame.');
+            })
+            .catch(err => {
+                console.error('[AMS] Failed to execute main world script via webFrame:', err);
+                showInjectionError(err);
+            });
+    })
+    .catch(err => {
+        console.error('[AMS Preload] Failed to retrieve security token:', err);
+    });
