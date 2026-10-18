@@ -729,6 +729,26 @@ def create_app(backend_port=None) -> web.Application:
     app.router.add_get('/api/browse', browse_handler)
     app.router.add_get('/api/files/preview', file_preview_handler)
 
+    from src.api_handlers import (
+        api_audit_log_detail_handler,
+        api_audit_logs_clear_handler,
+        api_audit_logs_export_handler,
+        api_audit_logs_list_handler,
+        api_audit_logs_stats_handler,
+        api_audit_reverts_list_handler,
+        api_engine_mode_handler,
+        revert_chat_handler,
+    )
+    app.router.add_get('/api/logs/stats', api_audit_logs_stats_handler)
+    app.router.add_get('/api/logs/reverts', api_audit_reverts_list_handler)
+    app.router.add_get('/api/logs/export', api_audit_logs_export_handler)
+    app.router.add_get('/api/logs', api_audit_logs_list_handler)
+    app.router.add_delete('/api/logs', api_audit_logs_clear_handler)
+    app.router.add_get('/api/logs/{req_id}', api_audit_log_detail_handler)
+    app.router.add_get('/api/engine-mode', api_engine_mode_handler)
+    app.router.add_post('/api/engine-mode', api_engine_mode_handler)
+    app.router.add_post('/v1/chat/revert', revert_chat_handler)
+
     async def hub_health_handler(request):
         backend = request.app.get(BACKEND_PORT_KEY)
         connected = False

@@ -12,6 +12,7 @@ import type {
 export type ControlPlaneDocumentId =
   | "operator"
   | "index"
+  | "anti-ban"
   | "api"
   | "database"
   | "codebase"

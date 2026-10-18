@@ -516,6 +516,76 @@ Generiert am <span id="genDate"></span>
 <script>
 document.getElementById('genDate').textContent = new Date().toLocaleDateString('de-DE');
 
+const EN_MAP = {
+  'Übersicht': 'Overview',
+  '🔑 Authentifizierung': '🔑 Authentication',
+  '🛡️ Rate Limiting': '🛡️ Rate Limiting',
+  '❌ Fehlerbehandlung': '❌ Error Handling',
+  'Service-Info & Quickstart': 'Service Info & Quickstart',
+  'OpenAI-kompatibel + Streaming': 'OpenAI-Compatible + Streaming',
+  'Einfaches JSON-Format': 'Simple JSON Format',
+  'Verfügbare Modelle': 'Available Models',
+  'Token-Verbrauch abfragen & buchen': 'Query & Record Token Usage',
+  'Request-Logs ansehen': 'View Request Logs',
+  'Logs löschen': 'Clear Logs',
+  'Service-Status': 'Service Status',
+  'CDP-Diagnose (detailliert)': 'CDP Diagnostics (Detailed)',
+  'Alle Sessions': 'All Sessions',
+  'Session registrieren': 'Register Session',
+  'Session entfernen': 'Remove Session',
+  'Pool-Statistiken': 'Pool Statistics',
+  'Healing-Status': 'Healing Status',
+  'Manueller Heal-Zyklus': 'Manual Heal Cycle',
+  'Healing-Verlauf': 'Healing History',
+  'Alle Services': 'All Services',
+  'Uptime-Statistiken': 'Uptime Statistics',
+  'Alert-Verlauf': 'Alert History',
+  'Test-Alert senden': 'Send Test Alert',
+  'Nutze dein Antigravity-Abo als vollständige OpenAI-kompatible REST-API. Kein externer API-Key nötig.': 'Use your Antigravity subscription as a complete OpenAI-compatible REST API. No external API key required.',
+  '🔑 Authentifizierung': '🔑 Authentication',
+  'Alle API-Endpoints (außer /health und /) erfordern einen Auth-Token:': 'All API endpoints (except /health and /) require an Auth Token:',
+  '🚀 Ausprobieren': '🚀 Try it',
+  '🚀 Senden': '🚀 Send',
+  '🗑️ Logs löschen': '🗑️ Clear Logs'
+};
+const DE_MAP = Object.fromEntries(Object.entries(EN_MAP).map(([k, v]) => [v, k]));
+
+function setApiDocsLang(lang) {
+  localStorage.setItem('antigravity_hub_lang', lang);
+  const en = lang === 'en';
+  document.documentElement.lang = lang;
+  const map = en ? EN_MAP : DE_MAP;
+  document.querySelectorAll('.nav-group-title, .nav-item, .desc, h2, h3, p, button.btn').forEach(el => {
+    if (el.children.length === 0) {
+      const txt = el.textContent.trim();
+      if (map[txt]) el.textContent = map[txt];
+    }
+  });
+  const bDe = document.getElementById('docs-lang-de');
+  const bEn = document.getElementById('docs-lang-en');
+  if (bDe && bEn) {
+    bDe.style.background = !en ? 'var(--accent)' : 'var(--surface2)';
+    bDe.style.color = !en ? '#fff' : 'var(--text2)';
+    bEn.style.background = en ? 'var(--accent)' : 'var(--surface2)';
+    bEn.style.color = en ? '#fff' : 'var(--text2)';
+  }
+}
+
+(function initDocsLangBar() {
+  const logo = document.querySelector('.logo');
+  if (logo && !document.getElementById('docs-lang-de')) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:10px;display:inline-flex;gap:4px;background:var(--surface2);padding:3px;border-radius:6px;border:1px solid var(--border)';
+    wrap.innerHTML = '<button id="docs-lang-de" onclick="setApiDocsLang(\'de\')" style="border:none;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer">DE</button><button id="docs-lang-en" onclick="setApiDocsLang(\'en\')" style="border:none;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer">EN</button>';
+    logo.appendChild(wrap);
+  }
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'antigravity-lang') setApiDocsLang(e.data.lang);
+  });
+  const initial = new URLSearchParams(window.location.search).get('lang') || localStorage.getItem('antigravity_hub_lang') || 'de';
+  setApiDocsLang(initial);
+})();
+
 function scrollTo(id) {
   const el = document.getElementById(id);
   if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }

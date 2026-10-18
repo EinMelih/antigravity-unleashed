@@ -5,6 +5,7 @@ import { LoadingState } from "@/components/states";
 import { usePageEntrance } from "@/hooks/use-page-entrance";
 import { useHubRoute } from "@/lib/routing";
 
+const ApiLogsPage = lazy(() => import("@/pages/api-logs-page").then((module) => ({ default: module.ApiLogsPage })));
 const AutomationPage = lazy(() => import("@/pages/automation-page").then((module) => ({ default: module.AutomationPage })));
 const ChatsPage = lazy(() => import("@/pages/chats-page").then((module) => ({ default: module.ChatsPage })));
 const HelpPage = lazy(() => import("@/pages/help-page").then((module) => ({ default: module.HelpPage })));
@@ -52,6 +53,9 @@ function CurrentPage() {
         break;
       case "/knowledge":
         content = <KnowledgePage />;
+        break;
+      case "/api-logs":
+        content = <ApiLogsPage />;
         break;
       case "/studio":
       default:

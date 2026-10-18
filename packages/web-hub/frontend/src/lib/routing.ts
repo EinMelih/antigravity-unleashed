@@ -10,6 +10,7 @@ export const hubRoutes = [
   "/system",
   "/settings",
   "/knowledge",
+  "/api-logs",
 ] as const;
 
 export type HubRoute = (typeof hubRoutes)[number];

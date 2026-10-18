@@ -2,21 +2,52 @@ import { ChevronDown, Menu, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { useHubLanguage } from "@/lib/i18n";
 import { routeHref, type AppRoute, type HubRoute, useHubRoute } from "@/lib/routing";
+import { cn } from "@/lib/utils";
 
-const primaryItems: ReadonlyArray<{ label: string; to: HubRoute }> = [
-  { label: "Studio", to: "/studio" },
-  { label: "Chats", to: "/chats" },
-  { label: "Automation", to: "/automation" },
+const primaryItems: ReadonlyArray<{
+  labelDe: string;
+  labelEn: string;
+  to: HubRoute;
+}> = [
+  { labelDe: "Studio", labelEn: "Studio", to: "/studio" },
+  { labelDe: "Chats", labelEn: "Chats", to: "/chats" },
+  { labelDe: "Automation", labelEn: "Automation", to: "/automation" },
+  { labelDe: "API-Logs", labelEn: "API-Logs", to: "/api-logs" },
 ];
 
-const moreItems: ReadonlyArray<{ label: string; to: HubRoute }> = [
-  { label: "Scheduled Tasks", to: "/scheduled-tasks" },
-  { label: "Hilfe & Dokumentation", to: "/help" },
-  { label: "Systemstatus & Diagnose", to: "/system" },
-  { label: "Einstellungen", to: "/settings" },
-  { label: "Wissen & Lessons Learned", to: "/knowledge" },
+const moreItems: ReadonlyArray<{
+  labelDe: string;
+  labelEn: string;
+  to: HubRoute;
+}> = [
+  {
+    labelDe: "API & Audit-Logs",
+    labelEn: "API & Audit Logs",
+    to: "/api-logs",
+  },
+  {
+    labelDe: "Scheduled Tasks",
+    labelEn: "Scheduled Tasks",
+    to: "/scheduled-tasks",
+  },
+  {
+    labelDe: "Hilfe & Dokumentation",
+    labelEn: "Help & Documentation",
+    to: "/help",
+  },
+  {
+    labelDe: "Systemstatus & Diagnose",
+    labelEn: "System Status & Diagnostics",
+    to: "/system",
+  },
+  { labelDe: "Einstellungen", labelEn: "Settings", to: "/settings" },
+  {
+    labelDe: "Wissen & Lessons Learned",
+    labelEn: "Knowledge & Lessons Learned",
+    to: "/knowledge",
+  },
 ];
 
 function NavigationLink({
@@ -47,8 +78,47 @@ function NavigationLink({
   );
 }
 
+export function LanguageSwitch() {
+  const [lang, setLang] = useHubLanguage();
+  return (
+    <div
+      aria-label={lang === "de" ? "Sprache wechseln" : "Switch language"}
+      className="inline-flex items-center rounded-lg border border-border bg-muted/60 p-0.5 text-xs font-semibold"
+      role="group"
+    >
+      <button
+        aria-pressed={lang === "de"}
+        className={cn(
+          "rounded-md px-2 py-1 transition-colors",
+          lang === "de"
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+        onClick={() => setLang("de")}
+        type="button"
+      >
+        DE
+      </button>
+      <button
+        aria-pressed={lang === "en"}
+        className={cn(
+          "rounded-md px-2 py-1 transition-colors",
+          lang === "en"
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+        onClick={() => setLang("en")}
+        type="button"
+      >
+        EN
+      </button>
+    </div>
+  );
+}
+
 export function PrimaryNavigation() {
   const currentRoute = useHubRoute();
+  const [lang] = useHubLanguage();
   const menuRef = useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -86,13 +156,17 @@ export function PrimaryNavigation() {
 
   return (
     <>
-      <nav aria-label="Hauptnavigation" className="hidden items-center gap-1 md:flex">
+      <nav
+        aria-label="Hauptnavigation"
+        className="hidden items-center gap-1 md:flex"
+      >
         {primaryItems.map((item) => (
           <NavigationLink
             currentRoute={currentRoute}
             key={item.to}
+            label={lang === "en" ? item.labelEn : item.labelDe}
             onNavigate={closeNavigation}
-            {...item}
+            to={item.to}
           />
         ))}
         <div className="relative" ref={menuRef}>
@@ -103,7 +177,7 @@ export function PrimaryNavigation() {
             size="sm"
             variant="ghost"
           >
-            Mehr
+            {lang === "en" ? "More" : "Mehr"}
             <ChevronDown className="size-4" />
           </Button>
           {moreOpen ? (
@@ -115,26 +189,34 @@ export function PrimaryNavigation() {
                 <NavigationLink
                   currentRoute={currentRoute}
                   key={item.to}
+                  label={lang === "en" ? item.labelEn : item.labelDe}
                   onNavigate={closeNavigation}
-                  {...item}
+                  to={item.to}
                 />
               ))}
             </div>
           ) : null}
         </div>
+        <div className="ml-2">
+          <LanguageSwitch />
+        </div>
       </nav>
 
-      <Button
-        aria-controls="mobile-navigation"
-        aria-expanded={mobileOpen}
-        aria-label={mobileOpen ? "Navigation schließen" : "Navigation öffnen"}
-        className="md:hidden"
-        onClick={() => setMobileOpen((open) => !open)}
-        size="icon"
-        variant="secondary"
-      >
-        {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-      </Button>
+      <div className="flex items-center gap-2 md:hidden">
+        <LanguageSwitch />
+        <Button
+          aria-controls="mobile-navigation"
+          aria-expanded={mobileOpen}
+          aria-label={
+            mobileOpen ? "Navigation schließen" : "Navigation öffnen"
+          }
+          onClick={() => setMobileOpen((open) => !open)}
+          size="icon"
+          variant="secondary"
+        >
+          {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+        </Button>
+      </div>
 
       {mobileOpen ? (
         <nav
@@ -146,8 +228,9 @@ export function PrimaryNavigation() {
             <NavigationLink
               currentRoute={currentRoute}
               key={item.to}
+              label={lang === "en" ? item.labelEn : item.labelDe}
               onNavigate={closeNavigation}
-              {...item}
+              to={item.to}
             />
           ))}
         </nav>

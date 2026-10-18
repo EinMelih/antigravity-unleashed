@@ -27,10 +27,19 @@ from src.api_helpers import (
     sanitize_error_response
 )
 from src.api_handlers import (
+    api_audit_log_detail_handler,
+    api_audit_logs_clear_handler,
+    api_audit_logs_export_handler,
+    api_audit_logs_list_handler,
+    api_audit_logs_stats_handler,
+    api_audit_reverts_list_handler,
+    api_engine_mode_handler,
     chat_completions_handler,
-    simple_chat_handler,
+    models_handler,
+    openai_responses_handler,
+    revert_chat_handler,
     send_parallel_handler,
-    models_handler
+    simple_chat_handler,
 )
 from src.api_monitor import APIRequestMonitor
 
@@ -139,7 +148,7 @@ async def cors_middleware(request: web.Request, handler) -> web.Response:
         headers = {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Api-Key',
+            'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Api-Key, X-Source-Framework, X-Client-Framework, X-Client-Ip, X-Conversation-Id',
         }
         headers.update(security_headers)
         return web.Response(status=200, headers=headers)
@@ -339,11 +348,26 @@ def main() -> None:
     # Routes
     app.router.add_get('/', root_handler)
     app.router.add_post('/v1/chat/completions', chat_completions_handler)
+    app.router.add_post('/v1/responses', openai_responses_handler)
+    app.router.add_post('/v1/chat/revert', revert_chat_handler)
     app.router.add_get('/v1/models', models_handler)
+    for src_prefix in ('openclaw', 'hermes', 'openwebui', 'dokploy', 'ich', 'user', 'me', 'local'):
+        app.router.add_post(f'/{src_prefix}/v1/chat/completions', chat_completions_handler)
+        app.router.add_post(f'/{src_prefix}/v1/responses', openai_responses_handler)
+        app.router.add_post(f'/{src_prefix}/v1/chat/revert', revert_chat_handler)
+        app.router.add_get(f'/{src_prefix}/v1/models', models_handler)
     app.router.add_post('/api/chat', simple_chat_handler)
     app.router.add_post('/api/send_parallel', send_parallel_handler)
     app.router.add_get('/api/chat/logs', chat_logs_handler)
     app.router.add_delete('/api/chat/logs', clear_logs_handler)
+    app.router.add_get('/api/logs/stats', api_audit_logs_stats_handler)
+    app.router.add_get('/api/logs/reverts', api_audit_reverts_list_handler)
+    app.router.add_get('/api/logs/export', api_audit_logs_export_handler)
+    app.router.add_get('/api/logs', api_audit_logs_list_handler)
+    app.router.add_delete('/api/logs', api_audit_logs_clear_handler)
+    app.router.add_get('/api/logs/{req_id}', api_audit_log_detail_handler)
+    app.router.add_get('/api/engine-mode', api_engine_mode_handler)
+    app.router.add_post('/api/engine-mode', api_engine_mode_handler)
     app.router.add_get('/api/stats', stats_handler)
     app.router.add_post('/api/stats', stats_handler)
     app.router.add_get('/health', health_handler)

@@ -1,8 +1,9 @@
-import { BookOpen, CalendarClock, Lightbulb, Settings, Stethoscope } from "lucide-react";
+import { BookOpen, CalendarClock, Lightbulb, Settings, ShieldCheck, Stethoscope } from "lucide-react";
 
 import { routeHref, type HubRoute } from "@/lib/routing";
 
 const destinations = [
+  { icon: ShieldCheck, label: "API-Logs & Anti-Ban-Schilde", to: "/api-logs" },
   { icon: CalendarClock, label: "Scheduled Tasks", to: "/scheduled-tasks" },
   { icon: BookOpen, label: "Hilfe & Dokumentation", to: "/help" },
   { icon: Stethoscope, label: "Systemstatus & Diagnose", to: "/system" },

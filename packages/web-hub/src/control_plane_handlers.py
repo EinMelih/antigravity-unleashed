@@ -14,6 +14,7 @@ CONTROL_DOC_PATH = BASE_DIR / "docs" / "antigravity-control-plane.md"
 CONTROL_DOC_PATHS = {
     "operator": CONTROL_DOC_PATH,
     "index": BASE_DIR / "docs" / "README.md",
+    "anti-ban": BASE_DIR / "docs" / "HERMES_OPENCLAW_ANTI_BAN_ARCHITECTURE.md",
     "api": BASE_DIR / "docs" / "API_REFERENCE.md",
     "database": BASE_DIR / "docs" / "DATABASE_SCHEMA.md",
     "codebase": BASE_DIR / "docs" / "CODEBASE_GUIDE.md",

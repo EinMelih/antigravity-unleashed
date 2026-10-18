@@ -84,10 +84,16 @@ class APIProfileRuntime:
             raise ConnectionError("Desktop profile isolation has not been verified for the installed archive. Run the updated injector.")
 
     def _seed_authentication_once(self) -> None:
-        for directory in (self.app_data_dir, self.user_data_dir, self.user_data_dir / "logs", self.config_dir, self.workspace_dir, self.profile_home / "AppData/Local/Temp"):
+        for directory in (self.app_data_dir, self.user_data_dir, self.user_data_dir / "logs", self.user_data_dir / "User", self.config_dir, self.workspace_dir, self.profile_home / "AppData/Local/Temp"):
             directory.mkdir(parents=True, exist_ok=True)
         initial_files = {
             self.config_dir / "config.json": json.dumps({"plugins": {}, "sidecars": {}, "userSettings": {}}),
+            self.user_data_dir / "User/settings.json": json.dumps({
+                "telemetry.telemetryLevel": "off",
+                "telemetry.enableTelemetry": False,
+                "telemetry.enableCrashReporter": False,
+                "antigravity.disableTelemetry": True,
+            }),
             self.config_dir / "AGENTS.md": (
                 "# API profile rules\n\n"
                 "This environment has its own home, Gemini configuration, memory and workspace.\n"
@@ -242,3 +248,99 @@ $owned | ForEach-Object { $_ }
         for directory in (self.app_data_dir, self.user_data_dir, self.config_dir, self.workspace_dir):
             if not directory.resolve().is_relative_to(home):
                 raise ConnectionError('API profile directories must stay inside the API home.')
+
+    def _resolve_language_server_binary(self) -> Optional[Path]:
+        explicit = os.environ.get("ANTIGRAVITY_LANGUAGE_SERVER_BIN")
+        if explicit and Path(explicit).is_file():
+            return Path(explicit).resolve()
+        install_dir = self.executable.parent
+        candidates = [
+            install_dir / "resources/app/extensions/antigravity/bin/language_server_windows_x64.exe",
+            install_dir / "resources/bin/language_server.exe",
+            install_dir / "resources/app/extensions/antigravity/bin/language_server_linux_x64",
+            Path("/opt/antigravity/bin/language_server_linux_x64"),
+            Path("/usr/local/bin/language_server"),
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate.resolve()
+        return None
+
+    def ensure_rpc_ready(self) -> None:
+        """Ensure the isolated API profile's `language_server` is running for `rpc` mode.
+
+        Supports both Windows desktop profile launch and standalone headless execution
+        on Linux / Docker / Dokploy containers.
+        """
+        if os.name == "nt" and not os.environ.get("ANTIGRAVITY_STANDALONE_RPC"):
+            try:
+                self.ensure_started()
+                return
+            except Exception as win_err:
+                print(f"[API Profile] Desktop launch fallback to standalone language_server: {win_err}", flush=True)
+
+        with _START_LOCK:
+            self._verify_path_separation()
+            self._seed_authentication_once()
+            ls_bin = self._resolve_language_server_binary()
+            if ls_bin is None:
+                if os.name == "nt":
+                    self.ensure_started()
+                    return
+                raise ConnectionError(
+                    "No language_server binary found for standalone headless RPC mode. "
+                    "Set ANTIGRAVITY_LANGUAGE_SERVER_BIN or mount the binary in the container."
+                )
+
+            state_file = self.app_data_dir / "scratch/rpc_connection.json"
+            state_file.parent.mkdir(parents=True, exist_ok=True)
+            if state_file.is_file():
+                try:
+                    info = json.loads(state_file.read_text(encoding="utf-8"))
+                    with socket.socket() as probe:
+                        if probe.connect_ex(("127.0.0.1", int(info.get("port", 0)))) == 0:
+                            return
+                except Exception:
+                    pass
+
+            with socket.socket() as sock:
+                sock.bind(("127.0.0.1", 0))
+                rpc_port = sock.getsockname()[1]
+
+            import uuid
+            csrf_token = str(uuid.uuid4())
+            environment = os.environ.copy()
+            home = str(self.profile_home)
+            environment.update({
+                "HOME": home,
+                "USERPROFILE": home,
+                "ANTIGRAVITY_PROFILE": self.profile,
+                "ANTIGRAVITY_NO_HUB_AUTOSTART": "1",
+                "ANTIGRAVITY_DATA_DIR": str(self.app_data_dir),
+            })
+            log_file = self.app_data_dir / "scratch/language_server_rpc.log"
+            with log_file.open("a", encoding="utf-8") as log_handle:
+                subprocess.Popen(
+                    [
+                        str(ls_bin),
+                        "--standalone",
+                        "--headless",
+                        f"--https_server_port={rpc_port}",
+                        f"--csrf_token={csrf_token}",
+                        "--override_ide_name=antigravity",
+                        "--subclient_type=hub",
+                        "--override_ide_version=2.24.0",
+                        f"--app_data_dir={self.app_data_dir}",
+                    ],
+                    cwd=self.workspace_dir,
+                    env=environment,
+                    stdout=log_handle,
+                    stderr=subprocess.STDOUT,
+                    close_fds=True,
+                )
+            state_file.write_text(
+                json.dumps({"port": rpc_port, "csrf_token": csrf_token, "started_at": time.time()}),
+                encoding="utf-8",
+            )
+            self._last_launch = time.monotonic()
+

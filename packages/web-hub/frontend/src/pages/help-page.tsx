@@ -17,6 +17,7 @@ const DEFAULT_DOCUMENT: { id: ControlPlaneDocumentId; label: string } = {
 
 const DOCUMENTS: ReadonlyArray<{ id: ControlPlaneDocumentId; label: string }> = [
   DEFAULT_DOCUMENT,
+  { id: "anti-ban", label: "Anti-Ban & Hermes/OpenClaw Architektur" },
   { id: "operator", label: "Operator-Handbuch" },
   { id: "api", label: "API-Referenz" },
   { id: "database", label: "Datenbank" },

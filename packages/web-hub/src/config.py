@@ -75,7 +75,22 @@ DEFAULT_CONFIG = {
     "github_owner": "",
     "github_webhook_secret": "",
     "projects_base_dir": DEFAULT_PROJECTS_BASE_DIR,
-    "default_repo_visibility": "private"
+    "default_repo_visibility": "private",
+    "api_engine": {
+        "mode": "rpc",
+        "max_parallel_streams": 4,
+        "slot_count": 10,
+        "stagger_min_ms": 400,
+        "stagger_max_ms": 1200,
+        "adaptive_pacing_enabled": True,
+        "heartbeat_blocker_enabled": True,
+        "keyword_firewall_enabled": True,
+        "quota_breaker_enabled": True,
+        "quota_min_fraction": 0.05,
+        "max_turns_per_session": 20,
+        "local_ip_is_user": True,
+        "source_ip_map": {},
+    },
 }
 
 
@@ -260,6 +275,84 @@ class ConfigurationManager:
     def github_configured(self) -> bool:
         return bool(self.github_token and self.github_owner)
 
+    @property
+    def api_engine(self) -> Dict[str, Any]:
+        raw = self.config_dict.get("api_engine")
+        legacy_api = self.config_dict.get("api")
+        merged = dict(DEFAULT_CONFIG["api_engine"])
+        if isinstance(legacy_api, dict):
+            merged.update(legacy_api)
+        if isinstance(raw, dict):
+            merged.update(raw)
+        mode = str(os.environ.get("ANTIGRAVITY_API_MODE") or merged.get("mode", "rpc")).strip().lower()
+        if mode not in ("rpc", "ui"):
+            mode = "rpc"
+        max_parallel = validate_positive_int(
+            merged.get("max_parallel_streams"), "api_engine.max_parallel_streams", 4
+        )
+        max_parallel = max(1, min(10, max_parallel))
+        slot_count = validate_positive_int(
+            merged.get("slot_count"), "api_engine.slot_count", 10
+        )
+        slot_count = max(1, min(32, slot_count))
+        try:
+            quota_min = float(merged.get("quota_min_fraction", 0.05))
+            quota_min = max(0.0, min(0.5, quota_min))
+        except (TypeError, ValueError):
+            quota_min = 0.05
+        raw_ip_map = merged.get("source_ip_map")
+        clean_ip_map: Dict[str, str] = {}
+        if isinstance(raw_ip_map, dict):
+            for ip_key, src_val in raw_ip_map.items():
+                k_str = str(ip_key or "").strip()
+                v_str = str(src_val or "").strip().lower()
+                if k_str and v_str:
+                    clean_ip_map[k_str] = v_str
+        return {
+            "mode": mode,
+            "max_parallel_streams": max_parallel,
+            "slot_count": slot_count,
+            "stagger_min_ms": validate_positive_int(merged.get("stagger_min_ms"), "api_engine.stagger_min_ms", 400),
+            "stagger_max_ms": validate_positive_int(merged.get("stagger_max_ms"), "api_engine.stagger_max_ms", 1200),
+            "adaptive_pacing_enabled": bool(merged.get("adaptive_pacing_enabled", True)),
+            "heartbeat_blocker_enabled": bool(merged.get("heartbeat_blocker_enabled", True)),
+            "keyword_firewall_enabled": bool(merged.get("keyword_firewall_enabled", True)),
+            "quota_breaker_enabled": bool(merged.get("quota_breaker_enabled", True)),
+            "quota_min_fraction": quota_min,
+            "max_turns_per_session": validate_positive_int(
+                merged.get("max_turns_per_session"), "api_engine.max_turns_per_session", 20
+            ),
+            "local_ip_is_user": bool(merged.get("local_ip_is_user", True)),
+            "source_ip_map": clean_ip_map,
+        }
+
+    @property
+    def api_mode(self) -> str:
+        return str(self.api_engine["mode"])
+
+    def update_api_engine_settings(self, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """Update api_engine settings in memory and persist to CONFIG_PATH if possible."""
+        current = dict(self.api_engine)
+        for key, value in (updates or {}).items():
+            if key in current:
+                current[key] = value
+        self.config_dict["api_engine"] = current
+        try:
+            if CONFIG_PATH.exists():
+                with open(CONFIG_PATH, "r", encoding="utf-8") as handle:
+                    on_disk = json.load(handle)
+            else:
+                on_disk = {}
+            if isinstance(on_disk, dict):
+                on_disk["api_engine"] = self.api_engine
+                CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+                with open(CONFIG_PATH, "w", encoding="utf-8") as handle:
+                    json.dump(on_disk, handle, indent=2, ensure_ascii=False)
+        except Exception as err:
+            print(f"[CONFIG] [WARN] Could not persist api_engine update to {CONFIG_PATH}: {err}", flush=True)
+        return self.api_engine
+
 
 # Singleton config instance
 config = ConfigurationManager()
+

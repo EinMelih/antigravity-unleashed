@@ -35,6 +35,18 @@ CORE_INDEX_QUERIES = (
     CREATE INDEX IF NOT EXISTS idx_managed_antigravity_conversations_state_updated
     ON managed_antigravity_conversations(state, updated_at DESC)
     """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_api_request_logs_created_at
+    ON api_request_logs(created_at DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_api_request_logs_conversation_id
+    ON api_request_logs(conversation_id, created_at DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_api_revert_events_conversation_id
+    ON api_revert_events(conversation_id, created_at DESC)
+    """,
 )
 
 
@@ -279,6 +291,55 @@ class Database:
                 last_verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE SET NULL,
                 CHECK(state IN ('active', 'archived', 'deleted'))
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS api_request_logs (
+                req_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                client_ip TEXT NOT NULL DEFAULT '',
+                user_agent TEXT NOT NULL DEFAULT '',
+                api_key_name TEXT NOT NULL DEFAULT '',
+                source_framework TEXT NOT NULL DEFAULT 'openai',
+                endpoint TEXT NOT NULL DEFAULT '/v1/chat/completions',
+                engine_mode TEXT NOT NULL DEFAULT 'rpc',
+                workspace_slot TEXT NOT NULL DEFAULT '',
+                conversation_id TEXT NOT NULL DEFAULT '',
+                model_requested TEXT NOT NULL DEFAULT '',
+                model_actual TEXT NOT NULL DEFAULT '',
+                reasoning_effort TEXT NOT NULL DEFAULT '',
+                stream INTEGER NOT NULL DEFAULT 0,
+                status_code INTEGER NOT NULL DEFAULT 200,
+                duration_ms REAL NOT NULL DEFAULT 0,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                cached_tokens INTEGER NOT NULL DEFAULT 0,
+                thinking_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                context_used_tokens INTEGER NOT NULL DEFAULT 0,
+                context_max_tokens INTEGER NOT NULL DEFAULT 0,
+                token_source TEXT NOT NULL DEFAULT 'exact_rpc',
+                messages_json TEXT NOT NULL DEFAULT '[]',
+                system_prompt TEXT NOT NULL DEFAULT '',
+                user_prompt_preview TEXT NOT NULL DEFAULT '',
+                response_text TEXT NOT NULL DEFAULT '',
+                tool_calls_json TEXT NOT NULL DEFAULT '[]',
+                shield_metadata_json TEXT NOT NULL DEFAULT '{}',
+                error_text TEXT NOT NULL DEFAULT '',
+                reverted_at TEXT DEFAULT NULL,
+                reverted_to_step INTEGER DEFAULT NULL
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS api_revert_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                target_step_index INTEGER NOT NULL,
+                previous_step_count INTEGER NOT NULL DEFAULT 0,
+                reason TEXT NOT NULL DEFAULT '',
+                triggered_by_ip TEXT NOT NULL DEFAULT '',
+                engine_mode TEXT NOT NULL DEFAULT 'rpc'
             );
             """
         ]
@@ -1412,6 +1473,240 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
 
+    # --- Persistent API Audit Logs & Revert Events ---
+    def insert_api_request_log(self, entry: Dict[str, Any]) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO api_request_logs (
+                    req_id, created_at, client_ip, user_agent, api_key_name,
+                    source_framework, endpoint, engine_mode, workspace_slot,
+                    conversation_id, model_requested, model_actual, reasoning_effort,
+                    stream, status_code, duration_ms, prompt_tokens, completion_tokens,
+                    cached_tokens, thinking_tokens, total_tokens, context_used_tokens,
+                    context_max_tokens, token_source, messages_json, system_prompt,
+                    user_prompt_preview, response_text, tool_calls_json,
+                    shield_metadata_json, error_text, reverted_at, reverted_to_step
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                (
+                    str(entry.get("req_id") or ""),
+                    str(entry.get("created_at") or datetime.utcnow().isoformat() + "Z"),
+                    str(entry.get("client_ip") or ""),
+                    str(entry.get("user_agent") or ""),
+                    str(entry.get("api_key_name") or ""),
+                    str(entry.get("source_framework") or "openai"),
+                    str(entry.get("endpoint") or "/v1/chat/completions"),
+                    str(entry.get("engine_mode") or "rpc"),
+                    str(entry.get("workspace_slot") or ""),
+                    str(entry.get("conversation_id") or ""),
+                    str(entry.get("model_requested") or ""),
+                    str(entry.get("model_actual") or ""),
+                    str(entry.get("reasoning_effort") or ""),
+                    1 if entry.get("stream") else 0,
+                    int(entry.get("status_code") or 200),
+                    float(entry.get("duration_ms") or 0.0),
+                    int(entry.get("prompt_tokens") or 0),
+                    int(entry.get("completion_tokens") or 0),
+                    int(entry.get("cached_tokens") or 0),
+                    int(entry.get("thinking_tokens") or 0),
+                    int(entry.get("total_tokens") or 0),
+                    int(entry.get("context_used_tokens") or 0),
+                    int(entry.get("context_max_tokens") or 0),
+                    str(entry.get("token_source") or "exact_rpc"),
+                    json.dumps(entry.get("messages") or [], ensure_ascii=False)
+                    if not isinstance(entry.get("messages_json"), str)
+                    else entry["messages_json"],
+                    str(entry.get("system_prompt") or ""),
+                    str(entry.get("user_prompt_preview") or ""),
+                    str(entry.get("response_text") or ""),
+                    json.dumps(entry.get("tool_calls") or [], ensure_ascii=False)
+                    if not isinstance(entry.get("tool_calls_json"), str)
+                    else entry["tool_calls_json"],
+                    json.dumps(entry.get("shield_metadata") or {}, ensure_ascii=False)
+                    if not isinstance(entry.get("shield_metadata_json"), str)
+                    else entry["shield_metadata_json"],
+                    str(entry.get("error_text") or ""),
+                    entry.get("reverted_at"),
+                    entry.get("reverted_to_step"),
+                ),
+            )
+            conn.commit()
+
+    def list_api_request_logs(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        model: Optional[str] = None,
+        status: Optional[str] = None,
+        framework: Optional[str] = None,
+        engine_mode: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        clauses: List[str] = []
+        params: List[Any] = []
+        if model:
+            clauses.append("(lower(model_requested) LIKE lower(?) OR lower(model_actual) LIKE lower(?))")
+            params.extend([f"%{model}%", f"%{model}%"])
+        if status == "reverted":
+            clauses.append("reverted_at IS NOT NULL")
+        elif status == "error":
+            clauses.append("status_code >= 400")
+        elif status == "ok":
+            clauses.append("status_code < 400")
+        elif status and status.isdigit():
+            clauses.append("status_code = ?")
+            params.append(int(status))
+        if framework:
+            clauses.append("lower(source_framework) = lower(?)")
+            params.append(framework)
+        if engine_mode:
+            clauses.append("lower(engine_mode) = lower(?)")
+            params.append(engine_mode)
+        if conversation_id:
+            clauses.append("conversation_id = ?")
+            params.append(conversation_id)
+        if search:
+            clauses.append(
+                "(lower(user_prompt_preview) LIKE lower(?) OR lower(response_text) LIKE lower(?) "
+                "OR lower(conversation_id) LIKE lower(?) OR lower(req_id) LIKE lower(?))"
+            )
+            params.extend([f"%{search}%"] * 4)
+
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        query = f"SELECT * FROM api_request_logs{where} ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([max(1, min(limit, 1000)), max(0, offset)])
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_api_request_log(self, req_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM api_request_logs WHERE req_id = ?", (req_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def mark_conversation_logs_reverted(
+        self,
+        conversation_id: str,
+        target_step_index: int,
+        reverted_at: str,
+        *,
+        previous_step_count: int = 0,
+        reason: str = "",
+        triggered_by_ip: str = "",
+        engine_mode: str = "rpc",
+    ) -> None:
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO api_revert_events (
+                    created_at, conversation_id, target_step_index,
+                    previous_step_count, reason, triggered_by_ip, engine_mode
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    reverted_at,
+                    conversation_id,
+                    int(target_step_index),
+                    int(previous_step_count),
+                    reason,
+                    triggered_by_ip,
+                    engine_mode,
+                ),
+            )
+            conn.execute(
+                """
+                UPDATE api_request_logs
+                SET reverted_at = ?, reverted_to_step = ?
+                WHERE conversation_id = ? AND reverted_at IS NULL
+                """,
+                (reverted_at, int(target_step_index), conversation_id),
+            )
+            conn.commit()
+
+    def list_api_revert_events(
+        self, *, limit: int = 100, conversation_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        query = "SELECT * FROM api_revert_events"
+        params: List[Any] = []
+        if conversation_id:
+            query += " WHERE conversation_id = ?"
+            params.append(conversation_id)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(max(1, min(limit, 500)))
+        with self._get_connection() as conn:
+            return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    def get_api_logs_stats(self) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            totals = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS total_requests,
+                    SUM(CASE WHEN status_code < 400 THEN 1 ELSE 0 END) AS success_requests,
+                    SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) AS error_requests,
+                    SUM(CASE WHEN reverted_at IS NOT NULL THEN 1 ELSE 0 END) AS reverted_requests,
+                    COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                    COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                    COALESCE(SUM(cached_tokens), 0) AS cached_tokens,
+                    COALESCE(SUM(thinking_tokens), 0) AS thinking_tokens,
+                    COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                    COALESCE(AVG(duration_ms), 0) AS avg_duration_ms
+                FROM api_request_logs
+                """
+            ).fetchone()
+            by_model_rows = conn.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(model_actual, ''), NULLIF(model_requested, ''), 'unknown') AS model,
+                    COUNT(*) AS requests,
+                    COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                    COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                    COALESCE(SUM(cached_tokens), 0) AS cached_tokens,
+                    COALESCE(SUM(thinking_tokens), 0) AS thinking_tokens,
+                    COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                    COALESCE(AVG(duration_ms), 0) AS avg_duration_ms
+                FROM api_request_logs
+                GROUP BY model
+                ORDER BY total_tokens DESC
+                """
+            ).fetchall()
+            by_framework_rows = conn.execute(
+                """
+                SELECT
+                    source_framework,
+                    COUNT(*) AS requests,
+                    COALESCE(SUM(total_tokens), 0) AS total_tokens
+                FROM api_request_logs
+                GROUP BY source_framework
+                ORDER BY requests DESC
+                """
+            ).fetchall()
+            reverts_count = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM api_revert_events"
+            ).fetchone()
+
+        return {
+            "totals": dict(totals) if totals else {},
+            "by_model": [dict(r) for r in by_model_rows],
+            "by_framework": [dict(r) for r in by_framework_rows],
+            "total_revert_events": int(reverts_count["cnt"]) if reverts_count else 0,
+        }
+
+    def clear_api_request_logs(self) -> None:
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM api_request_logs")
+            conn.execute("DELETE FROM api_revert_events")
+            conn.commit()
+
 
 # Singleton instance
 db = Database()
+
