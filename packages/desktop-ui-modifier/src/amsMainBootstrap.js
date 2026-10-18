@@ -5,6 +5,7 @@ exports.getProfileInfo = getProfileInfo;
 exports.startHubServices = startHubServices;
 exports.resolveInitialWindowUrl = resolveInitialWindowUrl;
 exports.openRepackTriggerWindow = openRepackTriggerWindow;
+exports.hardenStorageManager = hardenStorageManager;
 
 const electron_1 = require("electron");
 const child_process_1 = require("child_process");
@@ -169,4 +170,97 @@ function openRepackTriggerWindow(baseUrl, storageManager, createWindow) {
         console.error("[AMS Repack] Could not open the trigger conversation:", error);
         return undefined;
     }
+}
+
+function hardenStorageManager(storageManager) {
+    if (!storageManager || storageManager.__amsHardened) {
+        return storageManager;
+    }
+    storageManager.__amsHardened = true;
+    const fsp = fs.promises;
+    let writeQueue = Promise.resolve();
+    let lastValidItems = null;
+
+    const origGetRawItems = storageManager.getRawItems.bind(storageManager);
+    storageManager.getRawItems = async function () {
+        try {
+            if (!fs.existsSync(this.storagePath)) {
+                return lastValidItems ? { ...lastValidItems } : {};
+            }
+            const content = await fsp.readFile(this.storagePath, "utf-8");
+            if (!content || content.trim() === "") {
+                return lastValidItems ? { ...lastValidItems } : {};
+            }
+            const parsed = JSON.parse(content);
+            if (parsed && typeof parsed === "object") {
+                lastValidItems = { ...parsed };
+                return parsed;
+            }
+            return lastValidItems ? { ...lastValidItems } : {};
+        }
+        catch (err) {
+            console.warn("[AMS StorageGuard] Recovered from transient storage read error:", err.message);
+            if (lastValidItems) {
+                return { ...lastValidItems };
+            }
+            return origGetRawItems();
+        }
+    };
+
+    storageManager.updateItems = function (changes) {
+        if (!changes || typeof changes !== "object") {
+            return Promise.resolve();
+        }
+        const runUpdate = async () => {
+            const currentItems = await this.getRawItems();
+            let modified = false;
+            for (const [key, value] of Object.entries(changes)) {
+                if (value === null) {
+                    if (Object.prototype.hasOwnProperty.call(currentItems, key)) {
+                        delete currentItems[key];
+                        modified = true;
+                    }
+                }
+                else if (currentItems[key] !== value) {
+                    currentItems[key] = value;
+                    modified = true;
+                }
+            }
+            if (!modified) {
+                return;
+            }
+            lastValidItems = { ...currentItems };
+            const dir = path.dirname(this.storagePath);
+            if (!fs.existsSync(dir)) {
+                await fsp.mkdir(dir, { recursive: true });
+            }
+            const payload = JSON.stringify(currentItems, null, 2);
+            const tmpPath = `${this.storagePath}.tmp.${process.pid}`;
+            try {
+                await fsp.writeFile(tmpPath, payload, "utf-8");
+                await fsp.rename(tmpPath, this.storagePath);
+            }
+            catch (_renameErr) {
+                await fsp.writeFile(this.storagePath, payload, "utf-8");
+                try {
+                    if (fs.existsSync(tmpPath)) {
+                        await fsp.unlink(tmpPath);
+                    }
+                }
+                catch (_unlinkErr) {}
+            }
+            const windows = electron_1.BrowserWindow.getAllWindows();
+            for (const win of windows) {
+                if (!win.isDestroyed()) {
+                    win.webContents.send("storage:changed", changes);
+                }
+            }
+            this.emitter.emit("changed", changes);
+        };
+        const next = writeQueue.then(runUpdate, runUpdate);
+        writeQueue = next.catch(() => {});
+        return next;
+    };
+
+    return storageManager;
 }

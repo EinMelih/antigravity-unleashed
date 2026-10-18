@@ -83,6 +83,7 @@ function buildContextMenuTemplate(items, onSelect) {
  * Registers all IPC handlers for the main process.
  */
 function registerIpcHandlers(storageManager) {
+    amsMainBootstrap.hardenStorageManager(storageManager);
     const crypto = require('crypto');
     const path = require('path');
     const fs_std = require('fs');

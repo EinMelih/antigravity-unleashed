@@ -168,6 +168,7 @@ electron_1.app
     (0, amsMainBootstrap_1.startHubServices)();
     const storagePath = (0, paths_1.getAppStoragePath)();
     storageManager = new storage_1.StorageManager(storagePath, settingsService_1.DEFAULTS);
+    (0, amsMainBootstrap_1.hardenStorageManager)(storageManager);
     settingsService = new settingsService_1.SettingsService(storageManager);
     // Handle deep link URL from command line arguments (All platforms)
     const deepLinkFromArg = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));

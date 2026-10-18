@@ -1,12 +1,17 @@
+    let lastSavedDraft = (typeof nativeStorageItems === 'object' && nativeStorageItems && typeof nativeStorageItems.antigravity_message_input_draft === 'string')
+        ? nativeStorageItems.antigravity_message_input_draft
+        : '';
+    let draftDebounceTimer = null;
+
     function saveMessageDraft() {
         try {
             const input = document.querySelector('[role="combobox"][aria-label="Message input"]');
             if (input) {
-                const val = input.value !== undefined ? input.value : (input.innerText || '');
-                if (val.trim()) {
-                    window.nativeStorage.updateItems({ antigravity_message_input_draft: val });
-                } else {
-                    window.nativeStorage.updateItems({ antigravity_message_input_draft: '' });
+                const rawVal = input.value !== undefined ? input.value : (input.innerText || '');
+                const normalized = rawVal.trim() ? rawVal : '';
+                if (normalized !== lastSavedDraft) {
+                    lastSavedDraft = normalized;
+                    window.nativeStorage.updateItems({ antigravity_message_input_draft: normalized });
                 }
             }
         } catch (e) {
@@ -14,9 +19,12 @@
         }
     }
 
-    // Clear any leftover draft in storage on startup so we start fresh
+    // Clear any leftover draft in storage on startup only if one actually exists
     try {
-        window.nativeStorage.updateItems({ antigravity_message_input_draft: '' });
+        if (lastSavedDraft !== '') {
+            lastSavedDraft = '';
+            window.nativeStorage.updateItems({ antigravity_message_input_draft: '' });
+        }
     } catch (e) {
         // ignore
     }
@@ -24,7 +32,13 @@
     document.addEventListener('input', (e) => {
         const target = e.target;
         if (target && target.matches && target.matches('[role="combobox"][aria-label="Message input"]')) {
-            saveMessageDraft();
+            if (draftDebounceTimer) {
+                clearTimeout(draftDebounceTimer);
+            }
+            draftDebounceTimer = setTimeout(() => {
+                draftDebounceTimer = null;
+                saveMessageDraft();
+            }, 300);
         }
     });
 
