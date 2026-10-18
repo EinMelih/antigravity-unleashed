@@ -53,10 +53,14 @@ A local FastAPI + React dashboard and API proxy that drives Antigravity via CDP 
 - **OpenAI-Compatible API Proxy (`127.0.0.1:8001/v1/chat/completions`)** — Lets external tools (Cursor, Continue, Cline, custom scripts) send standard OpenAI SDK requests through an isolated Antigravity Electron profile (`--ams-profile=api`) with SSE streaming and tool-call forwarding.
 - **FastMCP Server (`mcp_server.py`)** — Exposes 36 MCP tools for session management, quota inspection, DOM inspection, and headless browser actions.
 
-### 3. AMS Memory Framework (`packages/ams-framework`)
+### 3. AMS Memory Framework & Multi-PC Cloud Sync (`packages/ams-framework`)
 
 - Compiles host-specific `USER.pc.md` and `MEMORY.pc.md` notes into `USER.md` and `MEMORY.md` under `~/.gemini/config/` while enforcing character budgets.
-- Includes helper skills for CDP window control, screenshots, and UI inspection.
+- **Usage Data Persistence (`usage_stats.json`)** — Automatically aggregates token counts, message counts, active chat sessions, skill counts, and per-model usage per device (`hosts.<hostname>`) plus a combined multi-device total (`combined`) inside `~/.gemini/config/usage_stats.json` on every sync.
+- **1-Click Private GitHub Backup & Multi-PC Import (`sync_config.py` + UI Modal)** — Open the **`Unleashed`** Quick Menu (`Ctrl+Shift+B` -> **Manuelles Git Sync & Cloud-Backup**) or press `Ctrl+Shift+P` -> **Git Sync**:
+  1. **First PC (Setup):** Click **`🔑 1. GitHub Login`** (authenticates `gh` via browser), then click **`🔒 2. Privates Repo erstellen & verbinden`**. This creates a private `antigravity-config` repository on your GitHub account and pushes your memory, skills, and `usage_stats.json` (while `.gitignore` excludes local API keys in `antigravity-hub/config.json`).
+  2. **Second PC / Laptop (Import & Restore):** After running `install.bat`, open the Git Sync modal, enter `YourGitHubUser/antigravity-config` (or paste the repo URL), and click **`📥 Auf 2. PC importieren (Pull & Restore)`** (or run `python ~/.gemini/config/scripts/sync_config.py --import-remote YourGitHubUser/antigravity-config`). Any existing local default files are backed up first to `~/.gemini/config/backups/pre-import-<timestamp>/`, the remote history is merged automatically, and `usage_stats.json` combines usage across all synced PCs.
+  3. **Optional Background Auto-Sync:** In the `Ctrl+Shift+B` Quick Menu, click **`Auto-Sync (Config)`** to toggle automatic background syncing of `~/.gemini/config` every 15 minutes without touching your coding workspace repositories.
 
 ---
 

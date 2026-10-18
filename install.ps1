@@ -67,14 +67,35 @@ if (-not (Test-Path $HubConfigFile)) {
 
 $UserPcMd = Join-Path $GeminiConfigDir "USER.pc.md"
 $MemoryPcMd = Join-Path $GeminiConfigDir "MEMORY.pc.md"
-if (-not (Test-Path $UserPcMd) -and (Test-Path (Join-Path $RepoRoot "USER.example.md"))) {
-    Copy-Item (Join-Path $RepoRoot "USER.example.md") $UserPcMd
+$AmsRoot = Join-Path $RepoRoot "packages\ams-framework"
+if (-not (Test-Path $UserPcMd) -and (Test-Path (Join-Path $AmsRoot "USER.example.md"))) {
+    Copy-Item (Join-Path $AmsRoot "USER.example.md") $UserPcMd
 }
-if (-not (Test-Path $MemoryPcMd) -and (Test-Path (Join-Path $RepoRoot "MEMORY.example.md"))) {
-    Copy-Item (Join-Path $RepoRoot "MEMORY.example.md") $MemoryPcMd
+if (-not (Test-Path $MemoryPcMd) -and (Test-Path (Join-Path $AmsRoot "MEMORY.example.md"))) {
+    Copy-Item (Join-Path $AmsRoot "MEMORY.example.md") $MemoryPcMd
+}
+if (-not (Test-Path (Join-Path $GeminiConfigDir "AGENTS.md")) -and (Test-Path (Join-Path $AmsRoot "AGENTS.md"))) {
+    Copy-Item (Join-Path $AmsRoot "AGENTS.md") (Join-Path $GeminiConfigDir "AGENTS.md")
 }
 
-# 4. Build preload.js
+# Copy AMS sync & memory scripts into ~/.gemini/config/scripts
+$GeminiScriptsDir = Join-Path $GeminiConfigDir "scripts"
+New-Item -ItemType Directory -Force -Path $GeminiScriptsDir | Out-Null
+Get-ChildItem -Path $AmsRoot -Filter "*.py" | ForEach-Object {
+    Copy-Item $_.FullName -Destination (Join-Path $GeminiScriptsDir $_.Name) -Force
+}
+
+# Compile initial USER.md / MEMORY.md and initialize Git repo + usage_stats.json
+$CompileScript = Join-Path $GeminiScriptsDir "compile_memory.py"
+if (Test-Path $CompileScript) {
+    & python $CompileScript | Out-Null
+}
+$SyncScript = Join-Path $GeminiScriptsDir "sync_config.py"
+if (Test-Path $SyncScript) {
+    & python $SyncScript --status-json | Out-Null
+}
+
+# 4. Build preload.js & sync skill helper scripts
 Write-Host "[3/4] Compiling Desktop UI Modifier (preload.js)..." -ForegroundColor Yellow
 $BuildPreload = Join-Path $ModifierRoot "scripts\build_preload.py"
 & python $BuildPreload
@@ -82,6 +103,13 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to compile preload.js"
     exit 1
 }
+
+$SkillModifierDir = Join-Path $GeminiConfigDir "skills\antigravity_desktop_ui_modifier"
+New-Item -ItemType Directory -Force -Path (Join-Path $SkillModifierDir "scripts") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $SkillModifierDir "src\ui") | Out-Null
+Copy-Item (Join-Path $ModifierRoot "scripts\*") (Join-Path $SkillModifierDir "scripts\") -Force -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $ModifierRoot "src\*.js") (Join-Path $SkillModifierDir "src\") -Force -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $ModifierRoot "src\ui\*") (Join-Path $SkillModifierDir "src\ui\") -Force -ErrorAction SilentlyContinue
 
 # 5. Patch app.asar & restart Antigravity (or just start Hub services)
 if (-not $SkipAsarPatch) {

@@ -1733,7 +1733,7 @@
         }));
 
         const syncSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
-        actionsSection.appendChild(createMenuItem('Manuelles Git Sync', syncSvg, () => {
+        actionsSection.appendChild(createMenuItem('Manuelles Git Sync & Cloud-Backup', syncSvg, () => {
             const convoId = getSessionId ? getSessionId() : '';
             if (typeof showGitSyncModal === 'function') {
                 showGitSyncModal(convoId, async (commitMsg) => {
@@ -1743,6 +1743,45 @@
                 });
             }
         }));
+
+        const autoSyncSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>`;
+        let currentAutoSyncMinutes = Number(window.__ams_config_auto_sync_minutes || 0);
+        const autoSyncItem = createMenuItem(
+            currentAutoSyncMinutes > 0
+                ? `Auto-Sync (Config): Alle ${currentAutoSyncMinutes} Min. ✓`
+                : 'Auto-Sync (Config): Aus (klicken für 15 Min.)',
+            autoSyncSvg,
+            async () => {
+                const nextMinutes = currentAutoSyncMinutes > 0 ? 0 : 15;
+                if (window.electronNative && window.electronNative.setConfigAutoSync) {
+                    try {
+                        await window.electronNative.setConfigAutoSync(nextMinutes);
+                        if (typeof window.applyConfigAutoSyncTimer === 'function') {
+                            window.applyConfigAutoSyncTimer(nextMinutes);
+                        }
+                    } catch (err) {
+                        console.error('[AMS Auto-Sync] Failed to toggle auto-sync:', err);
+                    }
+                }
+            },
+        );
+        actionsSection.appendChild(autoSyncItem);
+        if (window.electronNative && window.electronNative.getConfigSyncInfo) {
+            window.electronNative.getConfigSyncInfo().then((info) => {
+                if (!info || info.status === 'error') return;
+                currentAutoSyncMinutes = Number(info.auto_sync_minutes || 0);
+                if (typeof window.applyConfigAutoSyncTimer === 'function') {
+                    window.applyConfigAutoSyncTimer(currentAutoSyncMinutes);
+                }
+                const label = autoSyncItem.querySelector('span');
+                if (label) {
+                    label.textContent = currentAutoSyncMinutes > 0
+                        ? `Auto-Sync (Config): Alle ${currentAutoSyncMinutes} Min. ✓`
+                        : 'Auto-Sync (Config): Aus (klicken für 15 Min.)';
+                    label.style.color = currentAutoSyncMinutes > 0 ? '#4ade80' : '';
+                }
+            }).catch(() => {});
+        }
 
         const historySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>`;
         actionsSection.appendChild(createMenuItem('Update- & Patch-Log', historySvg, () => {
@@ -1950,3 +1989,30 @@
         if (window.syncSessionConfig) window.syncSessionConfig();
         if (window.checkModelSwitchRequest) window.checkModelSwitchRequest();
     }, 4000);
+
+    // Hintergrund-Auto-Sync für ~/.gemini/config (inkl. usage_stats.json)
+    window.applyConfigAutoSyncTimer = function(minutes) {
+        const mins = Math.max(0, Number(minutes || 0));
+        window.__ams_config_auto_sync_minutes = mins;
+        if (window.__ams_config_auto_sync_interval) {
+            clearInterval(window.__ams_config_auto_sync_interval);
+            window.__ams_config_auto_sync_interval = null;
+        }
+        if (mins > 0) {
+            window.__ams_config_auto_sync_interval = setInterval(() => {
+                if (window.electronNative && window.electronNative.syncConfigOnly) {
+                    window.electronNative.syncConfigOnly('chore(config): background auto-sync').catch(() => {});
+                }
+            }, mins * 60 * 1000);
+        }
+    };
+
+    if (window.electronNative && window.electronNative.getConfigSyncInfo) {
+        setTimeout(() => {
+            window.electronNative.getConfigSyncInfo().then((info) => {
+                if (info && info.auto_sync_minutes > 0 && typeof window.applyConfigAutoSyncTimer === 'function') {
+                    window.applyConfigAutoSyncTimer(info.auto_sync_minutes);
+                }
+            }).catch(() => {});
+        }, 4500);
+    }

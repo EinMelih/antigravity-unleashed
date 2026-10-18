@@ -50,49 +50,60 @@ class TestPrivacyCompliance(unittest.TestCase):
         self.root = PROJECT_ROOT
         self.forbidden_patterns = get_forbidden_patterns()
 
+    def _get_candidate_files(self):
+        """Return all tracked files plus untracked files not excluded by .gitignore."""
+        out = subprocess.check_output(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            cwd=str(self.root),
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+        )
+        files = []
+        for rel in out.splitlines():
+            rel = rel.strip()
+            if not rel:
+                continue
+            p = self.root / rel
+            if p.is_file():
+                files.append((p, Path(rel)))
+        return files
+
     def test_01_recursive_scan_for_forbidden_patterns(self):
-        """Test 1: Recursive scan of all files in repository (excluding .git/ and .agents/).
+        """Test 1: Scan all tracked and stageable files in repository.
         
         Must return 0 matches across all configured forbidden privacy patterns.
         """
         violations = []
-        excluded_dirs = {".git", ".agents", "__pycache__"}
+        candidate_files = self._get_candidate_files()
 
         scanned_count = 0
-        for root, dirs, files in os.walk(self.root):
-            # Prune excluded directories
-            dirs[:] = [d for d in dirs if d not in excluded_dirs]
+        for filepath, rel_path in candidate_files:
+            if filepath.name.endswith((".pyc", ".pyo")):
+                continue
 
-            for filename in files:
-                # Skip compiled bytecode files
-                if filename.endswith((".pyc", ".pyo")):
-                    continue
-
-                filepath = Path(root) / filename
-                rel_path = filepath.relative_to(self.root)
-
-                scanned_count += 1
-                try:
-                    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-                        for line_num, line in enumerate(f, 1):
-                            for name, pattern in self.forbidden_patterns:
-                                match = pattern.search(line)
-                                if match:
-                                    violations.append({
-                                        "file": str(rel_path),
-                                        "line": line_num,
-                                        "pattern": name,
-                                        "matched_text": match.group(0),
-                                        "context": line.strip()[:120],
-                                    })
-                except Exception as err:
-                    violations.append({
-                        "file": str(rel_path),
-                        "line": 0,
-                        "pattern": "READ_ERROR",
-                        "matched_text": str(err),
-                        "context": "",
-                    })
+            scanned_count += 1
+            try:
+                with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                    for line_num, line in enumerate(f, 1):
+                        for name, pattern in self.forbidden_patterns:
+                            match = pattern.search(line)
+                            if match:
+                                violations.append({
+                                    "file": str(rel_path),
+                                    "line": line_num,
+                                    "pattern": name,
+                                    "matched_text": match.group(0),
+                                    "context": line.strip()[:120],
+                                })
+            except Exception as err:
+                violations.append({
+                    "file": str(rel_path),
+                    "line": 0,
+                    "pattern": "READ_ERROR",
+                    "matched_text": str(err),
+                    "context": "",
+                })
 
         self.assertGreater(scanned_count, 10, "Should scan substantial repository files")
         failure_msg = (
@@ -105,34 +116,30 @@ class TestPrivacyCompliance(unittest.TestCase):
         self.assertEqual(len(violations), 0, failure_msg)
 
     def test_02_forbidden_file_extensions_and_live_state(self):
-        """Test 2: Check for forbidden file extensions.
+        """Test 2: Check for forbidden file extensions among tracked and stageable files.
         
         Zero *.db, *.db-wal, *.db-shm, *.jsonl, *.conflict, USER.md, MEMORY.md
-        may exist outside .git and .agents.
+        may be tracked or unignored.
         """
         forbidden_extensions = {".db", ".db-wal", ".db-shm", ".jsonl", ".sqlite", ".sqlite3"}
         forbidden_exact_names = {"user.md", "memory.md", "user.pc.md", "memory.pc.md"}
         violations = []
-        excluded_dirs = {".git", ".agents"}
+        candidate_files = self._get_candidate_files()
 
         scanned_count = 0
-        for root, dirs, files in os.walk(self.root):
-            dirs[:] = [d for d in dirs if d not in excluded_dirs]
+        for filepath, rel_path in candidate_files:
+            scanned_count += 1
+            low_name = filepath.name.lower()
 
-            for filename in files:
-                scanned_count += 1
-                low_name = filename.lower()
-                rel_path = (Path(root) / filename).relative_to(self.root)
+            for ext in forbidden_extensions:
+                if low_name.endswith(ext):
+                    violations.append((str(rel_path), f"Forbidden extension: {ext}"))
 
-                for ext in forbidden_extensions:
-                    if low_name.endswith(ext):
-                        violations.append((str(rel_path), f"Forbidden extension: {ext}"))
+            if ".conflict" in low_name:
+                violations.append((str(rel_path), "Contains .conflict in filename"))
 
-                if ".conflict" in low_name:
-                    violations.append((str(rel_path), "Contains .conflict in filename"))
-
-                if low_name in forbidden_exact_names:
-                    violations.append((str(rel_path), f"Forbidden live persona/memory filename: {filename}"))
+            if low_name in forbidden_exact_names:
+                violations.append((str(rel_path), f"Forbidden live persona/memory filename: {filepath.name}"))
 
         failure_msg = (
             f"Found {len(violations)} forbidden file violations in {scanned_count} files:\n"

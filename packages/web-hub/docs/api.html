@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antigravity Web API — Dokumentation</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--surface:#12121a;--surface2:#1a1a28;--border:#2a2a3d;--text:#e0e0e8;--text2:#8888a0;--accent:#6366f1;--accent2:#818cf8;--green:#22c55e;--blue:#3b82f6;--red:#ef4444;--orange:#f59e0b;--purple:#a855f7}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
+a{color:var(--accent2);text-decoration:none}
+/* Layout */
+.layout{display:flex;min-height:100vh}
+.sidebar{width:280px;background:var(--surface);border-right:1px solid var(--border);position:fixed;top:0;left:0;bottom:0;overflow-y:auto;z-index:10;padding:20px 0}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.main{margin-left:280px;flex:1;padding:40px 60px;max-width:900px}
+/* Sidebar */
+.logo{padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.logo h1{font-size:18px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo span{font-size:12px;color:var(--text2);display:block;margin-top:4px}
+.nav-group{margin-bottom:8px}
+.nav-group-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);padding:8px 20px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:6px 20px;font-size:13px;color:var(--text2);cursor:pointer;transition:all .15s}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{color:var(--accent2);background:rgba(99,102,241,.08);border-right:2px solid var(--accent)}
+.method-badge{font-size:10px;font-weight:700;font-family:'JetBrains Mono',monospace;padding:2px 6px;border-radius:4px;min-width:40px;text-align:center}
+.method-badge.get{background:rgba(34,197,94,.15);color:var(--green)}
+.method-badge.post{background:rgba(59,130,246,.15);color:var(--blue)}
+.method-badge.delete{background:rgba(239,68,68,.15);color:var(--red)}
+/* Auth bar */
+.auth-bar{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:32px;display:flex;align-items:center;gap:12px}
+.auth-bar label{font-size:13px;font-weight:600;color:var(--text2);white-space:nowrap}
+.auth-bar input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;outline:none}
+.auth-bar input:focus{border-color:var(--accent)}
+.auth-bar select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;outline:none}
+/* Endpoint */
+.endpoint{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;overflow:hidden;transition:border-color .2s}
+.endpoint:hover{border-color:var(--accent)}
+.endpoint-header{padding:16px 20px;cursor:pointer;display:flex;align-items:center;gap:12px}
+.endpoint-header .method-badge{font-size:12px;padding:4px 10px}
+.endpoint-header .path{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;flex:1}
+.endpoint-header .desc{font-size:12px;color:var(--text2);max-width:300px;text-align:right}
+.endpoint-header .arrow{color:var(--text2);transition:transform .2s;font-size:14px}
+.endpoint-body{display:none;border-top:1px solid var(--border);padding:20px}
+.endpoint.open .endpoint-body{display:block}
+.endpoint.open .arrow{transform:rotate(90deg)}
+/* Code */
+pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;overflow-x:auto;position:relative;line-height:1.7}
+pre .copy-btn{position:absolute;top:8px;right:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--text2);font-size:11px;cursor:pointer;transition:all .15s}
+pre .copy-btn:hover{color:var(--text);border-color:var(--accent)}
+.label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin:16px 0 8px}
+.label:first-child{margin-top:0}
+/* Try it */
+.try-section{background:var(--surface2);border-radius:8px;padding:16px;margin-top:16px}
+.try-section textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;resize:vertical;min-height:80px;outline:none}
+.try-section textarea:focus{border-color:var(--accent)}
+.btn{background:linear-gradient(135deg,var(--accent),var(--purple));color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.response-box{margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'JetBrains Mono',monospace;font-size:12px;max-height:400px;overflow:auto;white-space:pre-wrap}
+.status-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-right:8px}
+.status-badge.s2{background:rgba(34,197,94,.15);color:var(--green)}
+.status-badge.s4{background:rgba(239,68,68,.15);color:var(--red)}
+/* Section headers */
+h2{font-size:24px;font-weight:700;margin:40px 0 16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+h2:first-child{margin-top:0}
+h3{font-size:16px;font-weight:600;margin:24px 0 12px;color:var(--accent2)}
+p{color:var(--text2);margin-bottom:12px;font-size:14px}
+table{width:100%;border-collapse:collapse;margin:12px 0}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}
+th{color:var(--text2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+/* Responsive */
+@media(max-width:768px){
+.sidebar{display:none}
+.main{margin-left:0;padding:20px}
+}
+.highlight{color:var(--accent2)}
+.param{color:var(--orange)}
+.string{color:var(--green)}
+.key{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="layout">
+<!-- Sidebar -->
+<nav class="sidebar" id="sidebar">
+<div class="logo">
+<h1>⚡ Antigravity Web</h1>
+<span>API Dokumentation v2.1</span>
+</div>
+<div class="nav-group">
+<div class="nav-group-title">Übersicht</div>
+<div class="nav-item active" onclick="scrollTo('auth')">🔑 Authentifizierung</div>
+<div class="nav-item" onclick="scrollTo('streaming')">⚡ SSE Streaming</div>
+<div class="nav-item" onclick="scrollTo('ratelimit')">🛡️ Rate Limiting</div>
+<div class="nav-item" onclick="scrollTo('errors')">❌ Fehlerbehandlung</div>
+</div>
+<div class="nav-group">
+<div class="nav-group-title">API Bridge · :8001</div>
+<div class="nav-item" onclick="scrollTo('e-root')"><span class="method-badge get">GET</span> /</div>
+<div class="nav-item" onclick="scrollTo('e-chat')"><span class="method-badge post">POST</span> /v1/chat/completions</div>
+<div class="nav-item" onclick="scrollTo('e-simple')"><span class="method-badge post">POST</span> /api/chat</div>
+<div class="nav-item" onclick="scrollTo('e-models')"><span class="method-badge get">GET</span> /v1/models</div>
+<div class="nav-item" onclick="scrollTo('e-stats')"><span class="method-badge get">GET</span> /api/stats</div>
+<div class="nav-item" onclick="scrollTo('e-logs')"><span class="method-badge get">GET</span> /api/chat/logs</div>
+<div class="nav-item" onclick="scrollTo('e-clear')"><span class="method-badge delete">DEL</span> /api/chat/logs</div>
+<div class="nav-item" onclick="scrollTo('e-health')"><span class="method-badge get">GET</span> /health</div>
+<div class="nav-item" onclick="scrollTo('e-cdp')"><span class="method-badge get">GET</span> /health/cdp</div>
+</div>
+<div class="nav-group">
+<div class="nav-group-title">Session Manager · :8002</div>
+<div class="nav-item" onclick="scrollTo('e-sessions')"><span class="method-badge get">GET</span> /sessions</div>
+<div class="nav-item" onclick="scrollTo('e-sessions-add')"><span class="method-badge post">POST</span> /sessions</div>
+<div class="nav-item" onclick="scrollTo('e-sessions-del')"><span class="method-badge delete">DEL</span> /sessions/{id}</div>
+<div class="nav-item" onclick="scrollTo('e-sm-stats')"><span class="method-badge get">GET</span> /stats</div>
+</div>
+<div class="nav-group">
+<div class="nav-group-title">Auto-Healer · :8007</div>
+<div class="nav-item" onclick="scrollTo('e-heal-status')"><span class="method-badge get">GET</span> /status</div>
+<div class="nav-item" onclick="scrollTo('e-heal')"><span class="method-badge post">POST</span> /heal</div>
+<div class="nav-item" onclick="scrollTo('e-heal-hist')"><span class="method-badge get">GET</span> /history</div>
+</div>
+<div class="nav-group">
+<div class="nav-group-title">Watchdog · :8010</div>
+<div class="nav-item" onclick="scrollTo('e-wd-status')"><span class="method-badge get">GET</span> /status</div>
+<div class="nav-item" onclick="scrollTo('e-wd-uptime')"><span class="method-badge get">GET</span> /uptime</div>
+<div class="nav-item" onclick="scrollTo('e-wd-alerts')"><span class="method-badge get">GET</span> /alerts</div>
+<div class="nav-item" onclick="scrollTo('e-wd-test')"><span class="method-badge post">POST</span> /alert/test</div>
+</div>
+</nav>
+
+<!-- Main Content -->
+<main class="main">
+<h2 id="overview" style="margin-top:0">Antigravity Web API v2.1</h2>
+<p>Nutze dein Antigravity-Abo als vollständige OpenAI-kompatible REST-API. Kein externer API-Key nötig.</p>
+
+<div class="auth-bar">
+<label>🔑 Auth Token:</label>
+<input type="text" id="authToken" value="ag-local-token" placeholder="Bearer Token">
+<label>Base:</label>
+<select id="baseUrl">
+<option value="http://127.0.0.1:8001">:8001 API Bridge</option>
+<option value="http://127.0.0.1:8002">:8002 Session Manager</option>
+<option value="http://127.0.0.1:8007">:8007 Auto-Healer</option>
+<option value="http://127.0.0.1:8010">:8010 Watchdog</option>
+</select>
+</div>
+
+<!-- Auth Section -->
+<h2 id="auth">🔑 Authentifizierung</h2>
+<p>Alle API-Endpoints (außer <code>/health</code> und <code>/</code>) erfordern einen Auth-Token:</p>
+<pre><code>Authorization: Bearer ag-local-token
+<span class="comment"># ODER</span>
+X-Api-Key: ag-local-token</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<h3>Multi-Key Auth</h3>
+<p>Für Produktionsumgebungen können mehrere Keys mit individuellen Rate-Limits konfiguriert werden:</p>
+<pre><code><span class="key">"api_keys"</span>: {
+  <span class="string">"EXAMPLE_PROD_TOKEN_DO_NOT_USE"</span>: { <span class="key">"name"</span>: <span class="string">"Production"</span>, <span class="key">"rpm"</span>: 60 },
+  <span class="string">"EXAMPLE_DEV_TOKEN_DO_NOT_USE"</span>:  { <span class="key">"name"</span>: <span class="string">"Development"</span>, <span class="key">"rpm"</span>: 5 }
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+
+<!-- Streaming Section -->
+<h2 id="streaming">⚡ SSE Streaming</h2>
+<p>Setze <code>"stream": true</code> im Request für Echtzeit-Antworten im OpenAI-Chunk-Format:</p>
+<pre><code>data: {"id":"chatcmpl-xxx","choices":[{"delta":{"role":"assistant"},"finish_reason":null}]}
+data: {"id":"chatcmpl-xxx","choices":[{"delta":{"content":"Hallo"},"finish_reason":null}]}
+data: {"id":"chatcmpl-xxx","choices":[{"delta":{"content":"!"},"finish_reason":null}]}
+data: {"id":"chatcmpl-xxx","choices":[{"delta":{},"finish_reason":"stop"}]}
+data: [DONE]</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<p>Die Bridge pollt das DOM alle 300ms und sendet Deltas. Nach 3s Stabilität → <code>finish_reason: "stop"</code>.</p>
+
+<!-- Rate Limiting -->
+<h2 id="ratelimit">🛡️ Rate Limiting</h2>
+<p>Aktivierbar in <code>config.json</code>. Response-Headers bei aktivem Limiting:</p>
+<table>
+<tr><th>Header</th><th>Beschreibung</th></tr>
+<tr><td><code>X-RateLimit-Limit</code></td><td>Max. Requests pro Minute</td></tr>
+<tr><td><code>X-RateLimit-Remaining</code></td><td>Verbleibende Requests</td></tr>
+<tr><td><code>Retry-After</code></td><td>Sekunden bis zum nächsten erlaubten Request (bei 429)</td></tr>
+</table>
+
+<!-- Errors -->
+<h2 id="errors">❌ Fehlerbehandlung</h2>
+<p>Alle Fehler folgen dem OpenAI-Format:</p>
+<pre><code>{
+  <span class="key">"error"</span>: {
+    <span class="key">"message"</span>: <span class="string">"Beschreibung des Fehlers"</span>,
+    <span class="key">"type"</span>: <span class="string">"authentication_error | invalid_request_error | rate_limit_error | internal_error"</span>
+  }
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<table>
+<tr><th>Status</th><th>Typ</th><th>Ursache</th></tr>
+<tr><td>400</td><td>invalid_request_error</td><td>Leere Nachricht, ungültiges JSON, zu lang</td></tr>
+<tr><td>401</td><td>authentication_error</td><td>Fehlender oder ungültiger Token</td></tr>
+<tr><td>429</td><td>rate_limit_error</td><td>Rate-Limit überschritten</td></tr>
+<tr><td>500</td><td>internal_error</td><td>Server-/CDP-Fehler</td></tr>
+<tr><td>503</td><td>connection_error</td><td>CDP nicht verbunden</td></tr>
+</table>
+
+<!-- ========== API BRIDGE ENDPOINTS ========== -->
+<h2>API Bridge · Port 8001</h2>
+
+<div class="endpoint" id="e-root">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span>
+<span class="path">/</span>
+<span class="desc">Service-Info & Quickstart</span>
+<span class="arrow">▶</span>
+</div>
+<div class="endpoint-body">
+<div class="label">Beschreibung</div>
+<p>Gibt eine Übersicht des Services mit allen verfügbaren Endpoints und einem Quickstart-Guide zurück.</p>
+<div class="label">Auth</div><p>Nicht erforderlich</p>
+<div class="label">cURL</div>
+<pre><code>curl http://127.0.0.1:8001/</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<div class="try-section">
+<button class="btn" onclick="tryIt('GET','/',this)">🚀 Ausprobieren</button>
+<div class="response-box" style="display:none"></div>
+</div>
+</div>
+</div>
+
+<div class="endpoint" id="e-chat">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge post">POST</span>
+<span class="path">/v1/chat/completions</span>
+<span class="desc">OpenAI-kompatibel + Streaming</span>
+<span class="arrow">▶</span>
+</div>
+<div class="endpoint-body">
+<div class="label">Beschreibung</div>
+<p>Sendet eine Chat-Nachricht im OpenAI-Format. Unterstützt <code>stream: true</code> für SSE-Streaming.</p>
+<div class="label">Auth</div><p>Bearer Token erforderlich</p>
+<div class="label">Request Body</div>
+<pre><code>{
+  <span class="key">"model"</span>: <span class="string">"antigravity"</span>,
+  <span class="key">"messages"</span>: [
+    { <span class="key">"role"</span>: <span class="string">"user"</span>, <span class="key">"content"</span>: <span class="string">"Hallo!"</span> }
+  ],
+  <span class="key">"stream"</span>: false,
+  <span class="key">"timeout"</span>: 120,
+  <span class="key">"new_chat"</span>: false
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<div class="label">Response (Normal)</div>
+<pre><code>{
+  <span class="key">"id"</span>: <span class="string">"chatcmpl-abc123"</span>,
+  <span class="key">"object"</span>: <span class="string">"chat.completion"</span>,
+  <span class="key">"choices"</span>: [{
+    <span class="key">"message"</span>: { <span class="key">"role"</span>: <span class="string">"assistant"</span>, <span class="key">"content"</span>: <span class="string">"Hallo! Wie kann ich helfen?"</span> },
+    <span class="key">"finish_reason"</span>: <span class="string">"stop"</span>
+  }],
+  <span class="key">"usage"</span>: { <span class="key">"prompt_tokens"</span>: 2, <span class="key">"completion_tokens"</span>: 7, <span class="key">"total_tokens"</span>: 9 }
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<div class="label">cURL</div>
+<pre><code>curl -X POST http://127.0.0.1:8001/v1/chat/completions \
+  -H "Authorization: Bearer ag-local-token" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"antigravity","messages":[{"role":"user","content":"Hi!"}]}'</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<div class="try-section">
+<div class="label" style="margin-top:0">Request Body</div>
+<textarea id="try-chat-body">{"model":"antigravity","messages":[{"role":"user","content":"Sage Hallo!"}]}</textarea>
+<button class="btn" onclick="tryItPost('/v1/chat/completions','try-chat-body',this)" style="margin-top:8px">🚀 Senden</button>
+<div class="response-box" style="display:none"></div>
+</div>
+</div>
+</div>
+
+<div class="endpoint" id="e-simple">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge post">POST</span>
+<span class="path">/api/chat</span>
+<span class="desc">Einfaches JSON-Format</span>
+<span class="arrow">▶</span>
+</div>
+<div class="endpoint-body">
+<div class="label">Beschreibung</div>
+<p>Vereinfachtes Format — nur <code>message</code> als String senden.</p>
+<div class="label">Request Body</div>
+<pre><code>{ <span class="key">"message"</span>: <span class="string">"Hallo!"</span>, <span class="key">"model"</span>: <span class="string">"antigravity"</span> }</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<div class="label">Response</div>
+<pre><code>{
+  <span class="key">"response"</span>: <span class="string">"Hallo! Wie kann ich dir helfen?"</span>,
+  <span class="key">"model"</span>: <span class="string">"antigravity"</span>,
+  <span class="key">"tokens"</span>: { <span class="key">"prompt"</span>: 2, <span class="key">"completion"</span>: 7, <span class="key">"total"</span>: 9 }
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<div class="try-section">
+<textarea id="try-simple-body">{"message":"Sage Hallo!"}</textarea>
+<button class="btn" onclick="tryItPost('/api/chat','try-simple-body',this)" style="margin-top:8px">🚀 Senden</button>
+<div class="response-box" style="display:none"></div>
+</div>
+</div>
+</div>
+
+<div class="endpoint" id="e-models">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span>
+<span class="path">/v1/models</span>
+<span class="desc">Verfügbare Modelle</span>
+<span class="arrow">▶</span>
+</div>
+<div class="endpoint-body">
+<div class="label">Beschreibung</div>
+<p>Listet alle Modelle die über die Bridge verfügbar sind.</p>
+<div class="try-section">
+<button class="btn" onclick="tryIt('GET','/v1/models',this)">🚀 Ausprobieren</button>
+<div class="response-box" style="display:none"></div>
+</div>
+</div>
+</div>
+
+<div class="endpoint" id="e-stats">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span>
+<span class="method-badge post">POST</span>
+<span class="path">/api/stats</span>
+<span class="desc">Token-Verbrauch abfragen & buchen</span>
+<span class="arrow">▶</span>
+</div>
+<div class="endpoint-body">
+<div class="label">Beschreibung</div>
+<p><strong>GET:</strong> Ruft den akkumulierten Token-Verbrauch und die geschätzten Kosten der aktuellen Session ab. Wird vom Live-Widget im Browser genutzt.</p>
+<p><strong>POST:</strong> Erlaubt es externen Client-Anwendungen, manuell verbrauchte Tokens (z. B. aus clientseitigen Chats) in die Session-Statistiken einzubuchen.</p>
+<div class="label">Request Body (nur für POST)</div>
+<pre><code>{
+  <span class="key">"prompt_tokens"</span>: 15,
+  <span class="key">"completion_tokens"</span>: 35,
+  <span class="key">"model"</span>: <span class="string">"claude-sonnet-4.6"</span>
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<div class="label">Response</div>
+<pre><code>{
+  <span class="key">"session"</span>: {
+    <span class="key">"total_requests"</span>: 42,
+    <span class="key">"total_tokens"</span>: 23600,
+    <span class="key">"total_prompt_tokens"</span>: 5200,
+    <span class="key">"total_completion_tokens"</span>: 18400,
+    <span class="key">"requests_by_model"</span>: { <span class="string">"antigravity"</span>: { <span class="key">"requests"</span>: 42, <span class="key">"tokens"</span>: 23600 } }
+  },
+  <span class="key">"uptime_seconds"</span>: 3600
+}</code><button class="copy-btn" onclick="copyCode(this)">Copy</button></pre>
+<div class="try-section">
+<button class="btn" onclick="tryIt('GET','/api/stats',this)">🚀 Stats abfragen (GET)</button>
+<div class="response-box" style="display:none"></div>
+</div>
+</div>
+</div>
+
+<div class="endpoint" id="e-logs">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span>
+<span class="path">/api/chat/logs</span>
+<span class="desc">Request-Logs ansehen</span>
+<span class="arrow">▶</span>
+</div>
+<div class="endpoint-body">
+<p>Letzte API-Requests mit Timing, Token-Verbrauch und Responses.</p>
+<div class="try-section">
+<button class="btn" onclick="tryIt('GET','/api/chat/logs?limit=5',this)">🚀 Ausprobieren</button>
+<div class="response-box" style="display:none"></div>
+</div>
+</div>
+</div>
+
+<div class="endpoint" id="e-clear">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge delete">DEL</span>
+<span class="path">/api/chat/logs</span>
+<span class="desc">Logs löschen</span>
+<span class="arrow">▶</span>
+</div>
+<div class="endpoint-body">
+<p>Löscht alle gespeicherten Request-Logs.</p>
+<div class="try-section">
+<button class="btn" onclick="tryItDelete('/api/chat/logs',this)">🗑️ Logs löschen</button>
+<div class="response-box" style="display:none"></div>
+</div>
+</div>
+</div>
+
+<div class="endpoint" id="e-health">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span>
+<span class="path">/health</span>
+<span class="desc">Service-Status</span>
+<span class="arrow">▶</span>
+</div>
+<div class="endpoint-body">
+<p>Zeigt Status, CDP-Verbindung, Features, und alle Endpoints. <strong>Kein Auth erforderlich.</strong></p>
+<div class="try-section">
+<button class="btn" onclick="tryItNoAuth('GET','http://127.0.0.1:8001/health',this)">🚀 Ausprobieren</button>
+<div class="response-box" style="display:none"></div>
+</div>
+</div>
+</div>
+
+<div class="endpoint" id="e-cdp">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span>
+<span class="path">/health/cdp</span>
+<span class="desc">CDP-Diagnose (detailliert)</span>
+<span class="arrow">▶</span>
+</div>
+<div class="endpoint-body">
+<p>Detaillierte Chrome DevTools Protocol Diagnose — Input-Status, DOM-Info, Bridge-Status.</p>
+<div class="try-section">
+<button class="btn" onclick="tryItNoAuth('GET','http://127.0.0.1:8001/health/cdp',this)">🚀 Ausprobieren</button>
+<div class="response-box" style="display:none"></div>
+</div>
+</div>
+</div>
+
+<!-- ========== SESSION MANAGER ========== -->
+<h2>Session Manager · Port 8002</h2>
+
+<div class="endpoint" id="e-sessions">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span><span class="path">/sessions</span><span class="desc">Alle Sessions</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Liste aller registrierten API-Bridge Sessions mit Status.</p>
+<div class="try-section"><button class="btn" onclick="tryItPort('GET',8002,'/sessions',this)">🚀 Ausprobieren</button><div class="response-box" style="display:none"></div></div></div>
+</div>
+
+<div class="endpoint" id="e-sessions-add">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge post">POST</span><span class="path">/sessions</span><span class="desc">Session registrieren</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Neue API-Bridge Session zum Pool hinzufügen.</p>
+<pre><code>{ <span class="key">"url"</span>: <span class="string">"http://127.0.0.1:8001"</span>, <span class="key">"name"</span>: <span class="string">"main"</span> }</code></pre></div>
+</div>
+
+<div class="endpoint" id="e-sessions-del">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge delete">DEL</span><span class="path">/sessions/{id}</span><span class="desc">Session entfernen</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Entfernt eine Session aus dem Pool.</p></div>
+</div>
+
+<div class="endpoint" id="e-sm-stats">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span><span class="path">/stats</span><span class="desc">Pool-Statistiken</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Session-Pool Statistiken: aktive/idle Sessions, Request-Verteilung.</p>
+<div class="try-section"><button class="btn" onclick="tryItPort('GET',8002,'/stats',this)">🚀 Ausprobieren</button><div class="response-box" style="display:none"></div></div></div>
+</div>
+
+<!-- ========== AUTO-HEALER ========== -->
+<h2>Auto-Healer · Port 8007</h2>
+
+<div class="endpoint" id="e-heal-status">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span><span class="path">/status</span><span class="desc">Healing-Status</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Aktueller Zustand des Auto-Healers und System-Gesundheit.</p>
+<div class="try-section"><button class="btn" onclick="tryItPort('GET',8007,'/status',this)">🚀 Ausprobieren</button><div class="response-box" style="display:none"></div></div></div>
+</div>
+
+<div class="endpoint" id="e-heal">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge post">POST</span><span class="path">/heal</span><span class="desc">Manueller Heal-Zyklus</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Startet einen vollständigen Healing-Zyklus durch alle 5 Eskalationsstufen.</p>
+<div class="try-section"><button class="btn" onclick="tryItPostPort(8007,'/heal','{}',this)">🩺 Heal starten</button><div class="response-box" style="display:none"></div></div></div>
+</div>
+
+<div class="endpoint" id="e-heal-hist">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span><span class="path">/history</span><span class="desc">Healing-Verlauf</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Letzte 200 Healing-Events mit Timestamp, Level und Ergebnis.</p>
+<div class="try-section"><button class="btn" onclick="tryItPort('GET',8007,'/history',this)">🚀 Ausprobieren</button><div class="response-box" style="display:none"></div></div></div>
+</div>
+
+<!-- ========== WATCHDOG ========== -->
+<h2>Watchdog · Port 8010</h2>
+
+<div class="endpoint" id="e-wd-status">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span><span class="path">/status</span><span class="desc">Alle Services</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Aggregierter Status aller überwachten Services.</p>
+<div class="try-section"><button class="btn" onclick="tryItPort('GET',8010,'/status',this)">🚀 Ausprobieren</button><div class="response-box" style="display:none"></div></div></div>
+</div>
+
+<div class="endpoint" id="e-wd-uptime">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span><span class="path">/uptime</span><span class="desc">Uptime-Statistiken</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Uptime-Prozentsätze für 1h, 24h und 7 Tage.</p>
+<div class="try-section"><button class="btn" onclick="tryItPort('GET',8010,'/uptime',this)">🚀 Ausprobieren</button><div class="response-box" style="display:none"></div></div></div>
+</div>
+
+<div class="endpoint" id="e-wd-alerts">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge get">GET</span><span class="path">/alerts</span><span class="desc">Alert-Verlauf</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Letzte 50 Telegram-Alerts mit Zeitstempel und Inhalt.</p>
+<div class="try-section"><button class="btn" onclick="tryItPort('GET',8010,'/alerts',this)">🚀 Ausprobieren</button><div class="response-box" style="display:none"></div></div></div>
+</div>
+
+<div class="endpoint" id="e-wd-test">
+<div class="endpoint-header" onclick="toggleEndpoint(this)">
+<span class="method-badge post">POST</span><span class="path">/alert/test</span><span class="desc">Test-Alert senden</span><span class="arrow">▶</span>
+</div>
+<div class="endpoint-body"><p>Sendet einen Test-Alert über Telegram (erfordert konfigurierte Telegram-Credentials).</p>
+<div class="try-section"><button class="btn" onclick="tryItPostPort(8010,'/alert/test','{}',this)">📬 Test-Alert</button><div class="response-box" style="display:none"></div></div></div>
+</div>
+
+<div style="text-align:center;color:var(--text2);padding:40px 0;font-size:13px;border-top:1px solid var(--border);margin-top:40px">
+Antigravity Web v2.1 — API Dokumentation<br>
+Generiert am <span id="genDate"></span>
+</div>
+</main>
+</div>
+
+<script>
+document.getElementById('genDate').textContent = new Date().toLocaleDateString('de-DE');
+
+function scrollTo(id) {
+  const el = document.getElementById(id);
+  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  event.target.closest('.nav-item')?.classList.add('active');
+}
+
+function toggleEndpoint(header) {
+  header.closest('.endpoint').classList.toggle('open');
+}
+
+function copyCode(btn) {
+  const code = btn.closest('pre').querySelector('code').textContent;
+  navigator.clipboard.writeText(code);
+  btn.textContent = 'Copied!';
+  setTimeout(() => btn.textContent = 'Copy', 1500);
+}
+
+function getAuth() { return document.getElementById('authToken').value; }
+function getBase() { return document.getElementById('baseUrl').value; }
+
+function showResponse(btn, status, data) {
+  const box = btn.closest('.try-section').querySelector('.response-box');
+  box.style.display = 'block';
+  const badge = status < 400 ? '<span class="status-badge s2">'+status+'</span>' : '<span class="status-badge s4">'+status+'</span>';
+  box.innerHTML = badge + '\n' + (typeof data === 'string' ? data : JSON.stringify(data, null, 2));
+}
+
+async function tryIt(method, path, btn) {
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const r = await fetch(getBase() + path, { headers: { 'Authorization': 'Bearer ' + getAuth() } });
+    showResponse(btn, r.status, await r.json());
+  } catch(e) { showResponse(btn, 0, 'Fehler: ' + e.message); }
+  btn.disabled = false; btn.textContent = '\u{1F680} Ausprobieren';
+}
+
+async function tryItNoAuth(method, url, btn) {
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const r = await fetch(url);
+    showResponse(btn, r.status, await r.json());
+  } catch(e) { showResponse(btn, 0, 'Fehler: ' + e.message); }
+  btn.disabled = false; btn.textContent = '\u{1F680} Ausprobieren';
+}
+
+async function tryItPost(path, textareaId, btn) {
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const body = document.getElementById(textareaId).value;
+    const r = await fetch(getBase() + path, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + getAuth(), 'Content-Type': 'application/json' },
+      body: body
+    });
+    showResponse(btn, r.status, await r.json());
+  } catch(e) { showResponse(btn, 0, 'Fehler: ' + e.message); }
+  btn.disabled = false; btn.textContent = '\u{1F680} Senden';
+}
+
+async function tryItDelete(path, btn) {
+  btn.disabled = true;
+  try {
+    const r = await fetch(getBase() + path, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuth() } });
+    showResponse(btn, r.status, await r.json());
+  } catch(e) { showResponse(btn, 0, 'Fehler: ' + e.message); }
+  btn.disabled = false;
+}
+
+async function tryItPort(method, port, path, btn) {
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const r = await fetch('http://127.0.0.1:'+port+path, { headers: { 'Authorization': 'Bearer ' + getAuth() } });
+    showResponse(btn, r.status, await r.json());
+  } catch(e) { showResponse(btn, 0, 'Service auf Port '+port+' nicht erreichbar: ' + e.message); }
+  btn.disabled = false; btn.textContent = '\u{1F680} Ausprobieren';
+}
+
+async function tryItPostPort(port, path, body, btn) {
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const r = await fetch('http://127.0.0.1:'+port+path, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + getAuth(), 'Content-Type': 'application/json' },
+      body: body
+    });
+    showResponse(btn, r.status, await r.json());
+  } catch(e) { showResponse(btn, 0, 'Service auf Port '+port+' nicht erreichbar: ' + e.message); }
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>

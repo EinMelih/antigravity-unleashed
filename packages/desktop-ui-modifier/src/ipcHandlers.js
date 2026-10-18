@@ -1221,6 +1221,168 @@ function registerIpcHandlers(storageManager) {
         }
     });
 
+    const parseLastJsonLine = (outputText) => {
+        const lines = String(outputText || '').trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        for (let i = lines.length - 1; i >= 0; i--) {
+            if (lines[i].startsWith('{') && lines[i].endsWith('}')) {
+                try {
+                    return JSON.parse(lines[i]);
+                } catch (_) {}
+            }
+        }
+        return JSON.parse(String(outputText || '{}'));
+    };
+
+    // Config Cloud-Sync Info & Usage Stats (~/.gemini/config)
+    electron_1.ipcMain.handle('git:get-config-sync-info', async (event) => {
+        try {
+            validateOrigin(event);
+            const os = require('os');
+            const path = require('path');
+            const fs_std = require('fs');
+            const syncScript = path.join(os.homedir(), '.gemini', 'config', 'scripts', 'sync_config.py');
+            if (!fs_std.existsSync(syncScript)) {
+                return { status: 'error', message: `sync_config.py nicht gefunden unter ${syncScript}` };
+            }
+            const { stdout } = await execFilePromise(
+                getPythonPath(),
+                [syncScript, '--status-json'],
+                { timeout: 25000, windowsHide: true, maxBuffer: 5 * 1024 * 1024 },
+            );
+            return parseLastJsonLine(stdout);
+        } catch (err) {
+            console.error('[AMS IPC] git:get-config-sync-info failed:', err);
+            return { status: 'error', message: err.message };
+        }
+    });
+
+    // Setup or 1-click create private GitHub repo for ~/.gemini/config
+    electron_1.ipcMain.handle('git:setup-config-remote', async (event, target, createPrivate) => {
+        try {
+            validateOrigin(event);
+            const os = require('os');
+            const path = require('path');
+            const fs_std = require('fs');
+            const syncScript = path.join(os.homedir(), '.gemini', 'config', 'scripts', 'sync_config.py');
+            if (!fs_std.existsSync(syncScript)) {
+                return { status: 'error', message: `sync_config.py nicht gefunden unter ${syncScript}` };
+            }
+            const cleanTarget = typeof target === 'string' && target.trim() ? target.trim().slice(0, 300) : 'antigravity-config';
+            const args = [syncScript, '--setup-remote', cleanTarget];
+            if (createPrivate) args.push('--create-private');
+            const { stdout } = await execFilePromise(
+                getPythonPath(),
+                args,
+                { timeout: 60000, windowsHide: true, maxBuffer: 10 * 1024 * 1024 },
+            );
+            return parseLastJsonLine(stdout);
+        } catch (err) {
+            console.error('[AMS IPC] git:setup-config-remote failed:', err);
+            return { status: 'error', message: err.message };
+        }
+    });
+
+    // Import existing ~/.gemini/config remote onto a 2nd PC / laptop
+    electron_1.ipcMain.handle('git:import-config-remote', async (event, target) => {
+        try {
+            validateOrigin(event);
+            const os = require('os');
+            const path = require('path');
+            const fs_std = require('fs');
+            const syncScript = path.join(os.homedir(), '.gemini', 'config', 'scripts', 'sync_config.py');
+            if (!fs_std.existsSync(syncScript)) {
+                return { status: 'error', message: `sync_config.py nicht gefunden unter ${syncScript}` };
+            }
+            const cleanTarget = typeof target === 'string' ? target.trim().slice(0, 300) : '';
+            const args = cleanTarget ? [syncScript, '--import-remote', cleanTarget] : [syncScript, '--import-remote'];
+            const { stdout } = await execFilePromise(
+                getPythonPath(),
+                args,
+                { timeout: 60000, windowsHide: true, maxBuffer: 10 * 1024 * 1024 },
+            );
+            return parseLastJsonLine(stdout);
+        } catch (err) {
+            console.error('[AMS IPC] git:import-config-remote failed:', err);
+            return { status: 'error', message: err.message };
+        }
+    });
+
+    // Toggle background auto-sync interval for ~/.gemini/config
+    electron_1.ipcMain.handle('git:set-config-auto-sync', async (event, minutes) => {
+        try {
+            validateOrigin(event);
+            const os = require('os');
+            const path = require('path');
+            const fs_std = require('fs');
+            const syncScript = path.join(os.homedir(), '.gemini', 'config', 'scripts', 'sync_config.py');
+            if (!fs_std.existsSync(syncScript)) {
+                return { status: 'error', message: `sync_config.py nicht gefunden unter ${syncScript}` };
+            }
+            const safeMinutes = Math.max(0, Math.min(1440, parseInt(minutes, 10) || 0));
+            const { stdout } = await execFilePromise(
+                getPythonPath(),
+                [syncScript, '--set-auto-sync', String(safeMinutes)],
+                { timeout: 15000, windowsHide: true },
+            );
+            return parseLastJsonLine(stdout);
+        } catch (err) {
+            console.error('[AMS IPC] git:set-config-auto-sync failed:', err);
+            return { status: 'error', message: err.message };
+        }
+    });
+
+    // Background sync of ~/.gemini/config only (does not touch active coding workspace)
+    electron_1.ipcMain.handle('git:sync-config-only', async (event, message) => {
+        try {
+            validateOrigin(event);
+            const os = require('os');
+            const path = require('path');
+            const fs_std = require('fs');
+            const syncScript = path.join(os.homedir(), '.gemini', 'config', 'scripts', 'sync_config.py');
+            if (!fs_std.existsSync(syncScript)) {
+                return { status: 'error', message: `sync_config.py nicht gefunden` };
+            }
+            const safeMsg = typeof message === 'string' && message.trim()
+                ? message.trim().slice(0, 300)
+                : 'chore(config): background auto-sync';
+            const { stdout, stderr } = await execFilePromise(
+                getPythonPath(),
+                [syncScript, '--msg', safeMsg],
+                { timeout: 45000, windowsHide: true, maxBuffer: 10 * 1024 * 1024 },
+            );
+            return { status: 'success', details: `${stdout}\n${stderr}`.trim() };
+        } catch (err) {
+            console.error('[AMS IPC] git:sync-config-only failed:', err);
+            return { status: 'error', message: err.message };
+        }
+    });
+
+    // Launch interactive GitHub CLI web login
+    electron_1.ipcMain.handle('git:gh-auth-login', async (event) => {
+        try {
+            validateOrigin(event);
+            const { spawn } = require('child_process');
+            if (process.platform === 'win32') {
+                const child = spawn(
+                    'cmd.exe',
+                    ['/c', 'start', '""', 'powershell', '-NoExit', '-Command', 'Write-Host "=== Antigravity GitHub Cloud-Sync Login ===" -ForegroundColor Cyan; gh auth login --web -p https'],
+                    { detached: true, stdio: 'ignore', windowsHide: false },
+                );
+                child.unref();
+            } else {
+                const child = spawn('gh', ['auth', 'login', '--web', '-p', 'https'], {
+                    detached: true,
+                    stdio: 'ignore',
+                });
+                child.unref();
+            }
+            return { status: 'launched' };
+        } catch (err) {
+            console.error('[AMS IPC] git:gh-auth-login failed:', err);
+            return { status: 'error', message: err.message };
+        }
+    });
+
     // Get Task Plan from active brain/task.md
     electron_1.ipcMain.handle('task:get-plan', async (event, conversationId) => {
         try {

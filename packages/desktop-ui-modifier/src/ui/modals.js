@@ -303,10 +303,10 @@
         modal.style.background = 'var(--card, #18181b)';
         modal.style.border = '1px solid var(--border, #27272a)';
         modal.style.borderRadius = '12px';
-        modal.style.width = '90%';
-        modal.style.maxWidth = '850px';
-        modal.style.height = '80vh';
-        modal.style.maxHeight = '650px';
+        modal.style.width = '92%';
+        modal.style.maxWidth = '880px';
+        modal.style.height = '86vh';
+        modal.style.maxHeight = '760px';
         modal.style.display = 'flex';
         modal.style.flexDirection = 'column';
         modal.style.boxShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.7)';
@@ -317,7 +317,7 @@
         modal.setAttribute('aria-modal', 'true');
 
         const header = document.createElement('div');
-        header.style.padding = '16px 20px';
+        header.style.padding = '14px 20px';
         header.style.borderBottom = '1px solid var(--border, #27272a)';
         header.style.display = 'flex';
         header.style.justifyContent = 'space-between';
@@ -325,7 +325,7 @@
         header.style.background = 'rgba(0, 0, 0, 0.15)';
 
         const title = document.createElement('h3');
-        title.textContent = 'Git Sync & Workspace Diffs';
+        title.textContent = 'Git Sync, Cloud-Backup & Workspace Diffs';
         title.style.margin = '0';
         title.style.fontSize = '14px';
         title.style.fontWeight = '600';
@@ -348,10 +348,156 @@
         header.appendChild(title);
         header.appendChild(closeBtn);
 
+        // Cloud-Backup, Memory & Usage Stats Section (~/.gemini/config)
+        const cloudSection = document.createElement('div');
+        cloudSection.style.padding = '12px 20px';
+        cloudSection.style.borderBottom = '1px solid var(--border, #27272a)';
+        cloudSection.style.background = 'linear-gradient(180deg, rgba(59, 130, 246, 0.07) 0%, rgba(24, 24, 27, 0.4) 100%)';
+        cloudSection.style.display = 'flex';
+        cloudSection.style.flexDirection = 'column';
+        cloudSection.style.gap = '8px';
+
+        const cloudTopRow = document.createElement('div');
+        cloudTopRow.style.display = 'flex';
+        cloudTopRow.style.justifyContent = 'space-between';
+        cloudTopRow.style.alignItems = 'flex-start';
+        cloudTopRow.style.gap = '12px';
+        cloudTopRow.style.flexWrap = 'wrap';
+
+        const cloudInfoCol = document.createElement('div');
+        cloudInfoCol.style.display = 'flex';
+        cloudInfoCol.style.flexDirection = 'column';
+        cloudInfoCol.style.gap = '3px';
+
+        const cloudTitleRow = document.createElement('div');
+        cloudTitleRow.style.display = 'flex';
+        cloudTitleRow.style.alignItems = 'center';
+        cloudTitleRow.style.gap = '8px';
+        cloudTitleRow.style.flexWrap = 'wrap';
+
+        const cloudTitle = document.createElement('span');
+        cloudTitle.style.fontSize = '12px';
+        cloudTitle.style.fontWeight = '600';
+        cloudTitle.style.color = '#ffffff';
+        cloudTitle.textContent = '☁️ Cloud-Backup, Memory & Nutzungsdaten (~/.gemini/config)';
+
+        const cloudStatusBadge = document.createElement('span');
+        cloudStatusBadge.style.fontSize = '10px';
+        cloudStatusBadge.style.fontWeight = '600';
+        cloudStatusBadge.style.padding = '2px 8px';
+        cloudStatusBadge.style.borderRadius = '999px';
+        cloudStatusBadge.style.background = 'rgba(161, 161, 170, 0.15)';
+        cloudStatusBadge.style.color = '#a1a1aa';
+        cloudStatusBadge.textContent = 'Prüfe Status...';
+
+        cloudTitleRow.appendChild(cloudTitle);
+        cloudTitleRow.appendChild(cloudStatusBadge);
+
+        const cloudSubtext = document.createElement('div');
+        cloudSubtext.style.fontSize = '11px';
+        cloudSubtext.style.color = 'var(--muted-foreground, #a1a1aa)';
+        cloudSubtext.style.lineHeight = '1.35';
+        cloudSubtext.textContent = 'Sichert automatisch MEMORY.pc.md, USER.pc.md, Skills & usage_stats.json (Tokens, Sessions, Modelle) in deinem privaten GitHub-Repo und stellt sie auf jedem Zweit-PC/Laptop per 1-Klick wieder her.';
+
+        cloudInfoCol.appendChild(cloudTitleRow);
+        cloudInfoCol.appendChild(cloudSubtext);
+
+        const usagePills = document.createElement('div');
+        usagePills.style.fontSize = '10px';
+        usagePills.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+        usagePills.style.color = '#93c5fd';
+        usagePills.style.background = 'rgba(59, 130, 246, 0.12)';
+        usagePills.style.border = '1px solid rgba(59, 130, 246, 0.28)';
+        usagePills.style.borderRadius = '6px';
+        usagePills.style.padding = '4px 8px';
+        usagePills.style.whiteSpace = 'nowrap';
+        usagePills.textContent = '📊 Lade Nutzungsdaten...';
+
+        cloudTopRow.appendChild(cloudInfoCol);
+        cloudTopRow.appendChild(usagePills);
+
+        const cloudBtnRow = document.createElement('div');
+        cloudBtnRow.style.display = 'flex';
+        cloudBtnRow.style.alignItems = 'center';
+        cloudBtnRow.style.gap = '8px';
+        cloudBtnRow.style.flexWrap = 'wrap';
+
+        const makeCloudBtn = (label, bg, border, color = '#ffffff') => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.style.background = bg;
+            b.style.border = border;
+            b.style.color = color;
+            b.style.borderRadius = '5px';
+            b.style.padding = '5px 10px';
+            b.style.fontSize = '11px';
+            b.style.fontWeight = '500';
+            b.style.cursor = 'pointer';
+            b.style.outline = 'none';
+            b.style.transition = 'opacity 0.15s';
+            return b;
+        };
+
+        const ghLoginBtn = makeCloudBtn('🔑 1. GitHub Login', 'rgba(255,255,255,0.06)', '1px solid var(--border, #27272a)', '#e4e4e7');
+        const createPrivateBtn = makeCloudBtn('🔒 2. Privates Repo erstellen & verbinden', 'rgba(34, 197, 94, 0.18)', '1px solid rgba(34, 197, 94, 0.45)', '#4ade80');
+        const importConfigBtn = makeCloudBtn('📥 Auf 2. PC importieren (Pull & Restore)', 'rgba(59, 130, 246, 0.18)', '1px solid rgba(59, 130, 246, 0.45)', '#60a5fa');
+        const customUrlToggleBtn = makeCloudBtn('🔗 Repo-URL ändern / eingeben', 'transparent', '1px solid var(--border, #27272a)', '#a1a1aa');
+
+        cloudBtnRow.appendChild(ghLoginBtn);
+        cloudBtnRow.appendChild(createPrivateBtn);
+        cloudBtnRow.appendChild(importConfigBtn);
+        cloudBtnRow.appendChild(customUrlToggleBtn);
+
+        const customUrlRow = document.createElement('div');
+        customUrlRow.style.display = 'none';
+        customUrlRow.style.gap = '8px';
+        customUrlRow.style.alignItems = 'center';
+        customUrlRow.style.marginTop = '2px';
+
+        const repoUrlInput = document.createElement('input');
+        repoUrlInput.type = 'text';
+        repoUrlInput.placeholder = 'z.B. https://github.com/DeinName/antigravity-config.git oder DeinName/antigravity-config';
+        repoUrlInput.style.flex = '1';
+        repoUrlInput.style.background = 'var(--background, #09090b)';
+        repoUrlInput.style.border = '1px solid var(--border, #27272a)';
+        repoUrlInput.style.borderRadius = '5px';
+        repoUrlInput.style.padding = '5px 10px';
+        repoUrlInput.style.fontSize = '11px';
+        repoUrlInput.style.color = '#ffffff';
+        repoUrlInput.style.outline = 'none';
+
+        const linkAndPushBtn = makeCloudBtn('Verbinden & Pushen', '#22c55e', 'none', '#ffffff');
+        const pullFromUrlBtn = makeCloudBtn('Von dieser URL importieren', '#3b82f6', 'none', '#ffffff');
+
+        customUrlRow.appendChild(repoUrlInput);
+        customUrlRow.appendChild(linkAndPushBtn);
+        customUrlRow.appendChild(pullFromUrlBtn);
+
+        const cloudFeedback = document.createElement('div');
+        cloudFeedback.style.display = 'none';
+        cloudFeedback.style.fontSize = '11px';
+        cloudFeedback.style.padding = '6px 10px';
+        cloudFeedback.style.borderRadius = '5px';
+        cloudFeedback.style.lineHeight = '1.4';
+
+        const showCloudFeedback = (msg, isError = false) => {
+            cloudFeedback.style.display = 'block';
+            cloudFeedback.style.background = isError ? 'rgba(239, 68, 68, 0.14)' : 'rgba(34, 197, 94, 0.14)';
+            cloudFeedback.style.border = isError ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(34, 197, 94, 0.35)';
+            cloudFeedback.style.color = isError ? '#fca5a5' : '#86efac';
+            cloudFeedback.textContent = msg;
+        };
+
+        cloudSection.appendChild(cloudTopRow);
+        cloudSection.appendChild(cloudBtnRow);
+        cloudSection.appendChild(customUrlRow);
+        cloudSection.appendChild(cloudFeedback);
+
         const body = document.createElement('div');
         body.style.flex = '1';
+        body.style.minHeight = '0';
         body.style.display = 'flex';
-        body.style.height = 'calc(100% - 180px)';
         body.style.overflow = 'hidden';
 
         const fileList = document.createElement('div');
@@ -496,6 +642,7 @@
         footer.appendChild(actionsRow);
 
         modal.appendChild(header);
+        modal.appendChild(cloudSection);
         modal.appendChild(body);
         modal.appendChild(footer);
         overlay.appendChild(modal);
@@ -689,7 +836,173 @@
             }
         };
 
+        let currentConfigInfo = null;
+        const formatCompactNum = (n) => {
+            const val = Number(n || 0);
+            if (val >= 1000000) return (val / 1000000).toFixed(2) + 'M';
+            if (val >= 1000) return (val / 1000).toFixed(1) + 'K';
+            return String(val);
+        };
+
+        const renderConfigSyncInfo = (info) => {
+            if (!info || info.status === 'error') {
+                cloudStatusBadge.textContent = 'Status nicht verfügbar';
+                return;
+            }
+            currentConfigInfo = info;
+            if (info.remote_url) {
+                cloudStatusBadge.style.background = 'rgba(34, 197, 94, 0.16)';
+                cloudStatusBadge.style.color = '#4ade80';
+                cloudStatusBadge.textContent = '● Verbunden: ' + info.remote_url;
+                repoUrlInput.value = info.remote_url;
+            } else {
+                cloudStatusBadge.style.background = 'rgba(234, 179, 8, 0.16)';
+                cloudStatusBadge.style.color = '#facc15';
+                cloudStatusBadge.textContent = '○ Nur lokal (Kein GitHub-Remote verbunden)';
+            }
+
+            if (info.gh_authenticated) {
+                ghLoginBtn.textContent = '✓ GitHub (@' + (info.gh_user || 'angemeldet') + ')';
+                ghLoginBtn.style.color = '#4ade80';
+                ghLoginBtn.style.borderColor = 'rgba(34, 197, 94, 0.35)';
+            } else {
+                ghLoginBtn.textContent = '🔑 1. GitHub Login';
+                ghLoginBtn.style.color = '#e4e4e7';
+            }
+
+            const u = info.usage || {};
+            const hostsCount = Array.isArray(u.synced_hosts) ? u.synced_hosts.length : 1;
+            usagePills.textContent =
+                '📊 ' + formatCompactNum(u.total_tokens) + ' Tokens · ' +
+                formatCompactNum(u.total_messages) + ' Msgs · ' +
+                (u.total_sessions || 0) + ' Sessions · ' +
+                (u.skills_count || 0) + ' Skills · ' +
+                hostsCount + ' PC(s)';
+            if (Array.isArray(u.synced_hosts) && u.synced_hosts.length > 0) {
+                usagePills.title = 'Synchronisierte Geräte in usage_stats.json: ' + u.synced_hosts.join(', ');
+            }
+        };
+
+        const loadConfigSyncInfo = async () => {
+            if (!window.electronNative || !window.electronNative.getConfigSyncInfo) return;
+            try {
+                const info = await window.electronNative.getConfigSyncInfo();
+                renderConfigSyncInfo(info);
+            } catch (err) {
+                console.warn('[AMS Cloud Sync] Could not load config sync info:', err);
+            }
+        };
+
+        ghLoginBtn.addEventListener('click', async () => {
+            if (!window.electronNative || !window.electronNative.ghAuthLogin) return;
+            showCloudFeedback('Öffne PowerShell für GitHub Web-Login (gh auth login --web)... Nach dem Login im Browser wird der Status automatisch aktualisiert.');
+            await window.electronNative.ghAuthLogin();
+            setTimeout(loadConfigSyncInfo, 6000);
+            setTimeout(loadConfigSyncInfo, 14000);
+        });
+
+        createPrivateBtn.addEventListener('click', async () => {
+            if (!window.electronNative || !window.electronNative.setupConfigRemote) return;
+            createPrivateBtn.disabled = true;
+            createPrivateBtn.style.opacity = '0.6';
+            showCloudFeedback('Erstelle/verbinde privates Repository "antigravity-config" und synchronisiere ~/.gemini/config + usage_stats.json...');
+            try {
+                const target = (repoUrlInput.value || '').trim() || 'antigravity-config';
+                const res = await window.electronNative.setupConfigRemote(target, true);
+                if (res && res.status === 'success') {
+                    showCloudFeedback('✓ ' + (res.message || 'Privates GitHub-Repository verbunden & synchronisiert!'));
+                    if (res.info) renderConfigSyncInfo(res.info);
+                    else await loadConfigSyncInfo();
+                    await loadFiles();
+                } else {
+                    showCloudFeedback('✗ ' + ((res && res.message) || 'Fehler beim Erstellen/Verbinden des Repositories.'), true);
+                }
+            } catch (err) {
+                showCloudFeedback('✗ Ausnahmefehler: ' + err.message, true);
+            } finally {
+                createPrivateBtn.disabled = false;
+                createPrivateBtn.style.opacity = '1';
+            }
+        });
+
+        const runConfigImport = async (targetUrl) => {
+            if (!window.electronNative || !window.electronNative.importConfigRemote) return;
+            importConfigBtn.disabled = true;
+            pullFromUrlBtn.disabled = true;
+            importConfigBtn.style.opacity = '0.6';
+            showCloudFeedback('Importiere Config, Memory & Nutzungsdaten vom Remote (lokale Dateien werden zuvor unter ~/.gemini/config/backups/ gesichert)...');
+            try {
+                const res = await window.electronNative.importConfigRemote(targetUrl || '');
+                if (res && res.status === 'success') {
+                    showCloudFeedback('✓ ' + (res.message || 'Config & Nutzungsdaten erfolgreich importiert!'));
+                    if (res.info) renderConfigSyncInfo(res.info);
+                    else await loadConfigSyncInfo();
+                    await loadFiles();
+                } else {
+                    showCloudFeedback('✗ ' + ((res && res.message) || 'Import fehlgeschlagen.'), true);
+                }
+            } catch (err) {
+                showCloudFeedback('✗ Ausnahmefehler beim Import: ' + err.message, true);
+            } finally {
+                importConfigBtn.disabled = false;
+                pullFromUrlBtn.disabled = false;
+                importConfigBtn.style.opacity = '1';
+            }
+        };
+
+        importConfigBtn.addEventListener('click', () => {
+            const configuredRemote = (currentConfigInfo && currentConfigInfo.remote_url) || (repoUrlInput.value || '').trim();
+            if (!configuredRemote) {
+                customUrlRow.style.display = 'flex';
+                repoUrlInput.focus();
+                showCloudFeedback('Bitte gib die GitHub-URL oder "DeinName/antigravity-config" deines bestehenden Config-Repos ein und klicke auf "Von dieser URL importieren".', true);
+                return;
+            }
+            runConfigImport(configuredRemote);
+        });
+
+        customUrlToggleBtn.addEventListener('click', () => {
+            const isHidden = customUrlRow.style.display === 'none';
+            customUrlRow.style.display = isHidden ? 'flex' : 'none';
+            if (isHidden) repoUrlInput.focus();
+        });
+
+        linkAndPushBtn.addEventListener('click', async () => {
+            const target = (repoUrlInput.value || '').trim();
+            if (!target) {
+                showCloudFeedback('Bitte zuerst eine Repository-URL oder "user/repo" eingeben.', true);
+                return;
+            }
+            linkAndPushBtn.disabled = true;
+            showCloudFeedback('Verbinde Remote "' + target + '" und pushe lokale Config + Nutzungsdaten...');
+            try {
+                const res = await window.electronNative.setupConfigRemote(target, false);
+                if (res && res.status === 'success') {
+                    showCloudFeedback('✓ ' + (res.message || 'Remote verbunden und synchronisiert!'));
+                    if (res.info) renderConfigSyncInfo(res.info);
+                    else await loadConfigSyncInfo();
+                    await loadFiles();
+                } else {
+                    showCloudFeedback('✗ ' + ((res && res.message) || 'Verbindung fehlgeschlagen.'), true);
+                }
+            } catch (err) {
+                showCloudFeedback('✗ Fehler: ' + err.message, true);
+            } finally {
+                linkAndPushBtn.disabled = false;
+            }
+        });
+
+        pullFromUrlBtn.addEventListener('click', () => {
+            const target = (repoUrlInput.value || '').trim();
+            if (!target) {
+                showCloudFeedback('Bitte zuerst eine Repository-URL oder "user/repo" zum Importieren eingeben.', true);
+                return;
+            }
+            runConfigImport(target);
+        });
+
         loadFiles();
+        loadConfigSyncInfo();
 
         aiBtn.addEventListener('click', async () => {
             aiBtn.disabled = true;
