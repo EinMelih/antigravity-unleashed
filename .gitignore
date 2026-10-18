@@ -10,6 +10,7 @@
 # Privacy: Live User Configurations & AI Persona Memory
 # (Templates provided in *.example.* files)
 # ==============================================================================
+AGENTS.md
 USER.md
 USER.pc.md
 USER.server.md
