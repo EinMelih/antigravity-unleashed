@@ -832,7 +832,7 @@ export function ApiLogsPage() {
               {en ? "Active Streams:" : "Aktive Streams:"}
             </label>
             <select
-              aria-label="Aktive Streams"
+              aria-label={en ? "Active Streams" : "Aktive Streams"}
               className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs"
               id="parallel-streams"
               onChange={(e) =>
@@ -1078,7 +1078,11 @@ export function ApiLogsPage() {
               {en ? "Assign Custom IP → Source:" : "Eigene IP festlegen → Quelle:"}
             </span>
             <input
-              aria-label="IP-Adresse für Quellen-Zuordnung"
+              aria-label={
+                en
+                  ? "IP address for source mapping"
+                  : "IP-Adresse für Quellen-Zuordnung"
+              }
               className="w-44 rounded-lg border border-border bg-background px-2.5 py-1.5 font-mono text-xs"
               onChange={(e) => setNewIpInput(e.target.value)}
               placeholder={
@@ -1090,7 +1094,7 @@ export function ApiLogsPage() {
               value={newIpInput}
             />
             <select
-              aria-label="Ziel-Quelle für IP"
+              aria-label={en ? "Target source for IP" : "Ziel-Quelle für IP"}
               className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs"
               onChange={(e) => setNewIpSource(e.target.value)}
               value={newIpSource}
@@ -1153,7 +1157,9 @@ export function ApiLogsPage() {
                 <span className="text-muted-foreground">→</span>
                 <FrameworkBadge en={en} source={srcVal} />
                 <button
-                  aria-label={`IP-Regel ${ipKey} löschen`}
+                  aria-label={
+                    en ? `Delete IP rule ${ipKey}` : `IP-Regel ${ipKey} löschen`
+                  }
                   className="ml-1 rounded px-1 text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
                   onClick={() => {
                     const nextMap = { ...(engine.source_ip_map || {}) };
@@ -1421,7 +1427,7 @@ export function ApiLogsPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4">
         <input
-          aria-label="Logs durchsuchen"
+          aria-label={en ? "Search logs" : "Logs durchsuchen"}
           className="min-w-60 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs"
           onChange={(e) => setSearch(e.target.value)}
           placeholder={
@@ -1433,7 +1439,7 @@ export function ApiLogsPage() {
           value={search}
         />
         <select
-          aria-label="Quelle filtern"
+          aria-label={en ? "Filter by source" : "Quelle filtern"}
           className="rounded-lg border border-border bg-background px-3 py-2 text-xs"
           onChange={(e) => setFrameworkFilter(e.target.value)}
           value={frameworkFilter}
@@ -1455,7 +1461,7 @@ export function ApiLogsPage() {
           </option>
         </select>
         <select
-          aria-label="Status filtern"
+          aria-label={en ? "Filter by status" : "Status filtern"}
           className="rounded-lg border border-border bg-background px-3 py-2 text-xs"
           onChange={(e) => setStatusFilter(e.target.value)}
           value={statusFilter}
@@ -1474,7 +1480,7 @@ export function ApiLogsPage() {
           </option>
         </select>
         <input
-          aria-label="Modell filtern"
+          aria-label={en ? "Filter by model" : "Modell filtern"}
           className="w-44 rounded-lg border border-border bg-background px-3 py-2 text-xs"
           onChange={(e) => setModelFilter(e.target.value)}
           placeholder={en ? "Model (e.g. opus)…" : "Modell (z.B. opus)…"}
@@ -1982,7 +1988,11 @@ POST http://127.0.0.1:8001/v1/chat/revert
             <iframe
               className="h-[680px] w-full border-0"
               src={`/docs?lang=${lang}`}
-              title="Antigravity Web API Dokumentation"
+              title={
+                en
+                  ? "Antigravity Web API Documentation"
+                  : "Antigravity Web API Dokumentation"
+              }
             />
           </div>
         ) : null}

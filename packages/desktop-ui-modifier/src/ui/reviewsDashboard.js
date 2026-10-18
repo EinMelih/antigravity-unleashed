@@ -306,7 +306,7 @@
                         const number = btn.getAttribute('data-number');
                         const item = type === 'PR' ? loadedPRs[number] : loadedIssues[number];
                         if (!item) {
-                            alert('Daten im Speicher nicht gefunden!');
+                            showCustomAlert('Daten im Speicher nicht gefunden!');
                             return;
                         }
 
@@ -332,7 +332,7 @@
                         const number = btn.getAttribute('data-number');
                         const item = loadedPRs[number];
                         if (!item) {
-                            alert('Daten im Speicher nicht gefunden!');
+                            showCustomAlert('Daten im Speicher nicht gefunden!');
                             return;
                         }
 
@@ -350,7 +350,7 @@
                             const event = new Event('input', { bubbles: true });
                             input.dispatchEvent(event);
                         } else {
-                            alert('Chat-Eingabefeld nicht gefunden!');
+                            showCustomAlert('Chat-Eingabefeld nicht gefunden!');
                         }
                     });
                 });
@@ -465,7 +465,7 @@
                         const number = btn.getAttribute('data-number');
                         const item = type === 'PR' ? loadedPRs[number] : loadedIssues[number];
                         if (!item) {
-                            alert('Daten im Speicher nicht gefunden!');
+                            showCustomAlert('Daten im Speicher nicht gefunden!');
                             return;
                         }
 
@@ -491,7 +491,7 @@
                         const number = btn.getAttribute('data-number');
                         const item = loadedIssues[number];
                         if (!item) {
-                            alert('Daten im Speicher nicht gefunden!');
+                            showCustomAlert('Daten im Speicher nicht gefunden!');
                             return;
                         }
 
@@ -509,7 +509,7 @@
                             const event = new Event('input', { bubbles: true });
                             input.dispatchEvent(event);
                         } else {
-                            alert('Chat-Eingabefeld nicht gefunden!');
+                            showCustomAlert('Chat-Eingabefeld nicht gefunden!');
                         }
                     });
                 });
@@ -979,7 +979,7 @@
                 const textToSave = textarea.value.trim();
 
                 if (!textToSave) {
-                    alert('Bitte trage eine Erkenntnis ein.');
+                    showCustomAlert('Bitte trage eine Erkenntnis ein.');
                     return;
                 }
 
@@ -997,7 +997,7 @@
                         showToast('Erkenntnis gespeichert, Kompilierung fehlgeschlagen: ' + res.message, 'error');
                         closeModal('saved');
                     } else {
-                        alert('Fehler beim Speichern: ' + (res ? res.message : 'Unbekannter Fehler'));
+                        showCustomAlert('Fehler beim Speichern: ' + (res ? res.message : 'Unbekannter Fehler'));
                         saveBtn.disabled = false;
                         saveBtn.innerHTML = 'Speichern & Kompilieren';
                         saveBtn.style.opacity = '1';
@@ -1008,7 +1008,7 @@
                     }
                 } catch (saveErr) {
                     console.error('[AMS UI] Failed to save memory suggestion:', saveErr);
-                    alert('Speicherfehler: ' + saveErr.message);
+                    showCustomAlert('Speicherfehler: ' + saveErr.message);
                     saveBtn.disabled = false;
                     saveBtn.innerHTML = 'Speichern & Kompilieren';
                     saveBtn.style.opacity = '1';
@@ -1651,7 +1651,7 @@
         actionsSection.style.flexDirection = 'column';
         actionsSection.style.gap = '6px';
 
-        const createMenuItem = (label, iconSvg, onClick) => {
+        const createMenuItem = (label, iconSvg, onClick, closeOnClick = true) => {
             const item = document.createElement('button');
             item.style.display = 'flex';
             item.style.alignItems = 'center';
@@ -1680,8 +1680,12 @@
                 item.style.background = 'transparent';
                 item.style.color = 'rgba(255, 255, 255, 0.8)';
             });
-            item.addEventListener('click', () => {
-                window.toggleQuickMenu();
+            item.addEventListener('click', (e) => {
+                if (closeOnClick) {
+                    window.toggleQuickMenu();
+                } else if (e && typeof e.stopPropagation === 'function') {
+                    e.stopPropagation();
+                }
                 onClick();
             });
             return item;
@@ -1829,6 +1833,7 @@
                     await window.amsToggleLang();
                 }
             },
+            false,
         );
         actionsSection.appendChild(langItem);
 

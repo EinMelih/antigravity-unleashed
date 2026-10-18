@@ -113,7 +113,10 @@ function NavigationLink({
       {locked ? <Lock aria-hidden="true" className="size-3.5 shrink-0 opacity-75" /> : null}
       <span>{label}</span>
       {locked && lockedBadge ? (
-        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span
+          aria-hidden="true"
+          className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+        >
           {lockedBadge}
         </span>
       ) : null}
@@ -200,7 +203,7 @@ export function PrimaryNavigation() {
   return (
     <>
       <nav
-        aria-label="Hauptnavigation"
+        aria-label={lang === "en" ? "Main navigation" : "Hauptnavigation"}
         className="hidden items-center gap-1 md:flex"
       >
         {primaryItems.map((item) => (
@@ -254,7 +257,13 @@ export function PrimaryNavigation() {
           aria-controls="mobile-navigation"
           aria-expanded={mobileOpen}
           aria-label={
-            mobileOpen ? "Navigation schließen" : "Navigation öffnen"
+            mobileOpen
+              ? lang === "en"
+                ? "Close navigation"
+                : "Navigation schließen"
+              : lang === "en"
+                ? "Open navigation"
+                : "Navigation öffnen"
           }
           onClick={() => setMobileOpen((open) => !open)}
           size="icon"
@@ -266,7 +275,7 @@ export function PrimaryNavigation() {
 
       {mobileOpen ? (
         <nav
-          aria-label="Mobile Navigation"
+          aria-label={lang === "en" ? "Mobile navigation" : "Mobile Navigation"}
           className="absolute inset-x-4 top-20 z-50 grid gap-1 rounded-xl border border-border bg-popover p-3 shadow-elevated md:hidden"
           id="mobile-navigation"
         >

@@ -517,8 +517,11 @@ Generiert am <span id="genDate"></span>
 document.getElementById('genDate').textContent = new Date().toLocaleDateString('de-DE');
 
 const EN_MAP = {
+  'Antigravity Web API — Dokumentation': 'Antigravity Web API — Documentation',
+  'API Dokumentation v2.1': 'API Documentation v2.1',
   'Übersicht': 'Overview',
   '🔑 Authentifizierung': '🔑 Authentication',
+  '⚡ SSE Streaming': '⚡ SSE Streaming',
   '🛡️ Rate Limiting': '🛡️ Rate Limiting',
   '❌ Fehlerbehandlung': '❌ Error Handling',
   'Service-Info & Quickstart': 'Service Info & Quickstart',
@@ -542,25 +545,95 @@ const EN_MAP = {
   'Alert-Verlauf': 'Alert History',
   'Test-Alert senden': 'Send Test Alert',
   'Nutze dein Antigravity-Abo als vollständige OpenAI-kompatible REST-API. Kein externer API-Key nötig.': 'Use your Antigravity subscription as a complete OpenAI-compatible REST API. No external API key required.',
-  '🔑 Authentifizierung': '🔑 Authentication',
   'Alle API-Endpoints (außer /health und /) erfordern einen Auth-Token:': 'All API endpoints (except /health and /) require an Auth Token:',
+  'Alle API-Endpoints (außer': 'All API endpoints (except',
+  'und': 'and',
+  ') erfordern einen Auth-Token:': ') require an Auth Token:',
+  'Für Produktionsumgebungen können mehrere Keys mit individuellen Rate-Limits konfiguriert werden:': 'For production environments, multiple keys with individual rate limits can be configured:',
+  'Setze': 'Set',
+  'im Request für Echtzeit-Antworten im OpenAI-Chunk-Format:': 'in the request for real-time responses in OpenAI chunk format:',
+  'Die Bridge pollt das DOM alle 300ms und sendet Deltas. Nach 3s Stabilität →': 'The bridge polls the DOM every 300ms and sends deltas. After 3s stability →',
+  'Aktivierbar in': 'Configurable in',
+  '. Response-Headers bei aktivem Limiting:': '. Response headers when rate limiting is active:',
+  'Beschreibung': 'Description',
+  'Max. Requests pro Minute': 'Max requests per minute',
+  'Verbleibende Requests': 'Remaining requests',
+  'Sekunden bis zum nächsten erlaubten Request (bei 429)': 'Seconds until next allowed request (on 429)',
+  'Alle Fehler folgen dem OpenAI-Format:': 'All errors follow the OpenAI format:',
+  'Typ': 'Type',
+  'Ursache': 'Cause',
+  'Leere Nachricht, ungültiges JSON, zu lang': 'Empty message, invalid JSON, or too long',
+  'Fehlender oder ungültiger Token': 'Missing or invalid token',
+  'Rate-Limit überschritten': 'Rate limit exceeded',
+  'Server-/CDP-Fehler': 'Server / CDP error',
+  'CDP nicht verbunden': 'CDP not connected',
+  'Gibt eine Übersicht des Services mit allen verfügbaren Endpoints und einem Quickstart-Guide zurück.': 'Returns a service overview with all available endpoints and a quickstart guide.',
+  'Nicht erforderlich': 'Not required',
+  'Bearer Token erforderlich': 'Bearer Token required',
+  'Sendet eine Chat-Nachricht im OpenAI-Format. Unterstützt': 'Sends a chat message in OpenAI format. Supports',
+  'für SSE-Streaming.': 'for SSE streaming.',
+  'Vereinfachtes Format — nur': 'Simplified format — just send',
+  'als String senden.': 'as a string.',
+  'Listet alle Modelle die über die Bridge verfügbar sind.': 'Lists all models available through the bridge.',
+  'Ruft den akkumulierten Token-Verbrauch und die geschätzten Kosten der aktuellen Session ab. Wird vom Live-Widget im Browser genutzt.': 'Retrieves accumulated token usage and estimated costs for the current session. Used by the live widget in the browser.',
+  'Erlaubt es externen Client-Anwendungen, manuell verbrauchte Tokens (z. B. aus clientseitigen Chats) in die Session-Statistiken einzubuchen.': 'Allows external client applications to manually record consumed tokens (e.g., from client-side chats) into session statistics.',
+  'Request Body (nur für POST)': 'Request Body (POST only)',
+  'Letzte API-Requests mit Timing, Token-Verbrauch und Responses.': 'Recent API requests with timing, token usage, and responses.',
+  'Löscht alle gespeicherten Request-Logs.': 'Deletes all stored request logs.',
+  'Zeigt Status, CDP-Verbindung, Features, und alle Endpoints.': 'Shows status, CDP connection, features, and all endpoints.',
+  'Kein Auth erforderlich.': 'No auth required.',
+  'Detaillierte Chrome DevTools Protocol Diagnose — Input-Status, DOM-Info, Bridge-Status.': 'Detailed Chrome DevTools Protocol diagnostics — input status, DOM info, bridge status.',
+  'Liste aller registrierten API-Bridge Sessions mit Status.': 'List of all registered API Bridge sessions with status.',
+  'Neue API-Bridge Session zum Pool hinzufügen.': 'Add a new API Bridge session to the pool.',
+  'Entfernt eine Session aus dem Pool.': 'Removes a session from the pool.',
+  'Session-Pool Statistiken: aktive/idle Sessions, Request-Verteilung.': 'Session pool statistics: active/idle sessions, request distribution.',
+  'Aktueller Zustand des Auto-Healers und System-Gesundheit.': 'Current state of the Auto-Healer and system health.',
+  'Startet einen vollständigen Healing-Zyklus durch alle 5 Eskalationsstufen.': 'Starts a full healing cycle across all 5 escalation levels.',
+  'Letzte 200 Healing-Events mit Timestamp, Level und Ergebnis.': 'Last 200 healing events with timestamp, level, and result.',
+  'Aggregierter Status aller überwachten Services.': 'Aggregated status of all monitored services.',
+  'Uptime-Prozentsätze für 1h, 24h und 7 Tage.': 'Uptime percentages for 1h, 24h, and 7 days.',
+  'Letzte 50 Telegram-Alerts mit Zeitstempel und Inhalt.': 'Last 50 Telegram alerts with timestamp and content.',
+  'Sendet einen Test-Alert über Telegram (erfordert konfigurierte Telegram-Credentials).': 'Sends a test alert via Telegram (requires configured Telegram credentials).',
+  'Antigravity Web v2.1 — API Dokumentation': 'Antigravity Web v2.1 — API Documentation',
+  'Generiert am': 'Generated on',
   '🚀 Ausprobieren': '🚀 Try it',
   '🚀 Senden': '🚀 Send',
-  '🗑️ Logs löschen': '🗑️ Clear Logs'
+  '🚀 Stats abfragen (GET)': '🚀 Fetch Stats (GET)',
+  '🗑️ Logs löschen': '🗑️ Clear Logs',
+  '🩺 Heal starten': '🩺 Start Heal',
+  '📬 Test-Alert': '📬 Test Alert'
 };
 const DE_MAP = Object.fromEntries(Object.entries(EN_MAP).map(([k, v]) => [v, k]));
 
+let currentDocsLang = 'de';
+function docsT(de, en) {
+  return currentDocsLang === 'en' ? en : de;
+}
+
 function setApiDocsLang(lang) {
-  localStorage.setItem('antigravity_hub_lang', lang);
-  const en = lang === 'en';
-  document.documentElement.lang = lang;
+  currentDocsLang = lang === 'en' ? 'en' : 'de';
+  localStorage.setItem('antigravity_hub_lang', currentDocsLang);
+  const en = currentDocsLang === 'en';
+  document.documentElement.lang = currentDocsLang;
+  document.title = en ? 'Antigravity Web API — Documentation' : 'Antigravity Web API — Dokumentation';
+  const genDateEl = document.getElementById('genDate');
+  if (genDateEl) {
+    genDateEl.textContent = new Date().toLocaleDateString(en ? 'en-US' : 'de-DE');
+  }
   const map = en ? EN_MAP : DE_MAP;
-  document.querySelectorAll('.nav-group-title, .nav-item, .desc, h2, h3, p, button.btn').forEach(el => {
-    if (el.children.length === 0) {
-      const txt = el.textContent.trim();
-      if (map[txt]) el.textContent = map[txt];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+  let node = walker.nextNode();
+  while (node) {
+    const parent = node.parentElement;
+    if (parent && !parent.closest('pre, code, script, style, textarea')) {
+      const raw = node.nodeValue || '';
+      const trimmed = raw.trim();
+      if (trimmed && map[trimmed]) {
+        node.nodeValue = raw.replace(trimmed, map[trimmed]);
+      }
     }
-  });
+    node = walker.nextNode();
+  }
   const bDe = document.getElementById('docs-lang-de');
   const bEn = document.getElementById('docs-lang-en');
   if (bDe && bEn) {
@@ -619,8 +692,8 @@ async function tryIt(method, path, btn) {
   try {
     const r = await fetch(getBase() + path, { headers: { 'Authorization': 'Bearer ' + getAuth() } });
     showResponse(btn, r.status, await r.json());
-  } catch(e) { showResponse(btn, 0, 'Fehler: ' + e.message); }
-  btn.disabled = false; btn.textContent = '\u{1F680} Ausprobieren';
+  } catch(e) { showResponse(btn, 0, docsT('Fehler: ', 'Error: ') + e.message); }
+  btn.disabled = false; btn.textContent = docsT('\u{1F680} Ausprobieren', '\u{1F680} Try it');
 }
 
 async function tryItNoAuth(method, url, btn) {
@@ -628,8 +701,8 @@ async function tryItNoAuth(method, url, btn) {
   try {
     const r = await fetch(url);
     showResponse(btn, r.status, await r.json());
-  } catch(e) { showResponse(btn, 0, 'Fehler: ' + e.message); }
-  btn.disabled = false; btn.textContent = '\u{1F680} Ausprobieren';
+  } catch(e) { showResponse(btn, 0, docsT('Fehler: ', 'Error: ') + e.message); }
+  btn.disabled = false; btn.textContent = docsT('\u{1F680} Ausprobieren', '\u{1F680} Try it');
 }
 
 async function tryItPost(path, textareaId, btn) {
@@ -642,8 +715,8 @@ async function tryItPost(path, textareaId, btn) {
       body: body
     });
     showResponse(btn, r.status, await r.json());
-  } catch(e) { showResponse(btn, 0, 'Fehler: ' + e.message); }
-  btn.disabled = false; btn.textContent = '\u{1F680} Senden';
+  } catch(e) { showResponse(btn, 0, docsT('Fehler: ', 'Error: ') + e.message); }
+  btn.disabled = false; btn.textContent = docsT('\u{1F680} Senden', '\u{1F680} Send');
 }
 
 async function tryItDelete(path, btn) {
@@ -651,7 +724,7 @@ async function tryItDelete(path, btn) {
   try {
     const r = await fetch(getBase() + path, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuth() } });
     showResponse(btn, r.status, await r.json());
-  } catch(e) { showResponse(btn, 0, 'Fehler: ' + e.message); }
+  } catch(e) { showResponse(btn, 0, docsT('Fehler: ', 'Error: ') + e.message); }
   btn.disabled = false;
 }
 
@@ -660,8 +733,8 @@ async function tryItPort(method, port, path, btn) {
   try {
     const r = await fetch('http://127.0.0.1:'+port+path, { headers: { 'Authorization': 'Bearer ' + getAuth() } });
     showResponse(btn, r.status, await r.json());
-  } catch(e) { showResponse(btn, 0, 'Service auf Port '+port+' nicht erreichbar: ' + e.message); }
-  btn.disabled = false; btn.textContent = '\u{1F680} Ausprobieren';
+  } catch(e) { showResponse(btn, 0, docsT('Service auf Port '+port+' nicht erreichbar: ', 'Service on port '+port+' unreachable: ') + e.message); }
+  btn.disabled = false; btn.textContent = docsT('\u{1F680} Ausprobieren', '\u{1F680} Try it');
 }
 
 async function tryItPostPort(port, path, body, btn) {
@@ -673,7 +746,7 @@ async function tryItPostPort(port, path, body, btn) {
       body: body
     });
     showResponse(btn, r.status, await r.json());
-  } catch(e) { showResponse(btn, 0, 'Service auf Port '+port+' nicht erreichbar: ' + e.message); }
+  } catch(e) { showResponse(btn, 0, docsT('Service auf Port '+port+' nicht erreichbar: ', 'Service on port '+port+' unreachable: ') + e.message); }
   btn.disabled = false;
 }
 </script>
