@@ -1,4 +1,4 @@
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { Lock, Plus, RefreshCw, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ApiError } from "@/api/errors";
@@ -23,12 +23,54 @@ import { EndeavorList } from "@/features/automation/endeavor-list";
 import { useAutomationData } from "@/features/automation/use-automation-data";
 import { WorkItemDetail } from "@/features/automation/work-item-detail";
 import { WorkItemList } from "@/features/automation/work-item-list";
+import { useHubLanguage } from "@/lib/i18n";
 
 const filters: Array<{ id: WorkItemFilter; label: string }> = [
   { id: "active", label: "Aktiv" },
   { id: "attention", label: "Entscheidung nötig" },
   { id: "all", label: "Alle" },
 ];
+
+function AutomationLockedNotice() {
+  const [lang] = useHubLanguage();
+  return (
+    <section
+      aria-label={lang === "en" ? "Section temporarily locked" : "Bereich vorübergehend gesperrt"}
+      className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-dashed border-border bg-muted/40 p-5 text-sm shadow-panel"
+    >
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground">
+          <Lock aria-hidden="true" className="size-4" />
+        </span>
+        <div>
+          <div className="flex items-center gap-2">
+            <strong className="font-semibold text-foreground">
+              {lang === "en"
+                ? "Automation temporarily locked (Bugfixes pending)"
+                : "Automation vorübergehend gesperrt (Bugfixes ausstehend)"}
+            </strong>
+            <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {lang === "en" ? "Paused" : "Pausiert"}
+            </span>
+          </div>
+          <p className="mt-1 max-w-2xl text-muted-foreground">
+            {lang === "en"
+              ? "This view is currently affected by recent updates and is paused because it is not actively used right now."
+              : "Dieser Bereich ist durch neue Updates aktuell noch fehlerhaft und vorübergehend ausgegraut, da er momentan nicht aktiv genutzt wird."}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button asChild size="sm" variant="secondary">
+          <a href="#/chats">{lang === "en" ? "Open Chats" : "Zu den Chats"}</a>
+        </Button>
+        <Button asChild size="sm">
+          <a href="#/api-logs">{lang === "en" ? "Open API-Logs" : "API-Logs öffnen"}</a>
+        </Button>
+      </div>
+    </section>
+  );
+}
 
 export function AutomationPage() {
   const data = useAutomationData();
@@ -95,32 +137,56 @@ export function AutomationPage() {
   }
 
   if (data.control.isPending) {
-    return <LoadingState description="Umsetzung und Prüfnachweise werden geladen." />;
+    return (
+      <div className="space-y-6">
+        <AutomationLockedNotice />
+        <div aria-disabled="true" className="pointer-events-none select-none opacity-40 saturate-0">
+          <LoadingState description="Umsetzung und Prüfnachweise werden geladen." />
+        </div>
+      </div>
+    );
   }
 
   if (data.control.isError) {
     if (data.control.error instanceof ApiError && data.control.error.offline) {
-      return <OfflineState onRetry={refreshAll} />;
+      return (
+        <div className="space-y-6">
+          <AutomationLockedNotice />
+          <div aria-disabled="true" className="pointer-events-none select-none opacity-40 saturate-0">
+            <OfflineState onRetry={refreshAll} />
+          </div>
+        </div>
+      );
     }
     return (
-      <ErrorState
-        description={
-          data.control.error instanceof Error
-            ? data.control.error.message
-            : "Der aktuelle Stand der Automation konnte nicht geladen werden."
-        }
-        onRetry={refreshAll}
-        title="Automation nicht verfügbar"
-      />
+      <div className="space-y-6">
+        <AutomationLockedNotice />
+        <div aria-disabled="true" className="pointer-events-none select-none opacity-40 saturate-0">
+          <ErrorState
+            description={
+              data.control.error instanceof Error
+                ? data.control.error.message
+                : "Der aktuelle Stand der Automation konnte nicht geladen werden."
+            }
+            onRetry={refreshAll}
+            title="Automation nicht verfügbar"
+          />
+        </div>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-7">
-      <header className="automation-page-header">
-        <div>
-          <p className="eyebrow">Arbeitssteuerung</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Automation</h1>
+    <div className="space-y-6">
+      <AutomationLockedNotice />
+      <div
+        aria-disabled="true"
+        className="pointer-events-none select-none space-y-7 opacity-40 saturate-0"
+      >
+        <header className="automation-page-header">
+          <div>
+            <p className="eyebrow">Arbeitssteuerung</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight">Automation</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Beschreibe dein Ziel. Anti-Gravity erstellt einen Plan, setzt freigegebene PRs in
             Reihenfolge um und legt sie dir zur Prüfung vor.
@@ -312,6 +378,7 @@ export function AutomationPage() {
         planningJob={selectedPlanningJob}
         policy={data.control.data.policy}
       />
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { ChevronDown, Menu, X } from "lucide-react";
+import { ChevronDown, Lock, Menu, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -6,22 +6,47 @@ import { useHubLanguage } from "@/lib/i18n";
 import { routeHref, type AppRoute, type HubRoute, useHubRoute } from "@/lib/routing";
 import { cn } from "@/lib/utils";
 
-const primaryItems: ReadonlyArray<{
+interface NavItem {
   labelDe: string;
   labelEn: string;
+  locked?: boolean;
+  lockedBadgeDe?: string;
+  lockedBadgeEn?: string;
+  lockedHintDe?: string;
+  lockedHintEn?: string;
   to: HubRoute;
-}> = [
-  { labelDe: "Studio", labelEn: "Studio", to: "/studio" },
+}
+
+const primaryItems: ReadonlyArray<NavItem> = [
+  {
+    labelDe: "Studio",
+    labelEn: "Studio",
+    locked: true,
+    lockedBadgeDe: "Pausiert",
+    lockedBadgeEn: "Paused",
+    lockedHintDe:
+      "Wegen neuer Updates vorübergehend gesperrt – Bugfixes ausstehend (wird aktuell nicht aktiv genutzt)",
+    lockedHintEn:
+      "Temporarily locked due to recent updates – bugfixes pending (currently not in active use)",
+    to: "/studio",
+  },
   { labelDe: "Chats", labelEn: "Chats", to: "/chats" },
-  { labelDe: "Automation", labelEn: "Automation", to: "/automation" },
+  {
+    labelDe: "Automation",
+    labelEn: "Automation",
+    locked: true,
+    lockedBadgeDe: "Pausiert",
+    lockedBadgeEn: "Paused",
+    lockedHintDe:
+      "Wegen neuer Updates vorübergehend gesperrt – Bugfixes ausstehend (wird aktuell nicht aktiv genutzt)",
+    lockedHintEn:
+      "Temporarily locked due to recent updates – bugfixes pending (currently not in active use)",
+    to: "/automation",
+  },
   { labelDe: "API-Logs", labelEn: "API-Logs", to: "/api-logs" },
 ];
 
-const moreItems: ReadonlyArray<{
-  labelDe: string;
-  labelEn: string;
-  to: HubRoute;
-}> = [
+const moreItems: ReadonlyArray<NavItem> = [
   {
     labelDe: "API & Audit-Logs",
     labelEn: "API & Audit Logs",
@@ -53,27 +78,45 @@ const moreItems: ReadonlyArray<{
 function NavigationLink({
   currentRoute,
   label,
+  locked,
+  lockedBadge,
+  lockedHint,
   onNavigate,
   to,
 }: {
   currentRoute: AppRoute;
   label: string;
+  locked?: boolean;
+  lockedBadge?: string;
+  lockedHint?: string;
   onNavigate: () => void;
   to: HubRoute;
 }) {
   return (
     <a
       aria-current={currentRoute === to ? "page" : undefined}
+      aria-disabled={locked ? "true" : undefined}
       className={cn(
-        "rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
-        currentRoute === to
-          ? "bg-primary/15 text-primary-foreground"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+        "inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+        locked
+          ? currentRoute === to
+            ? "border border-dashed border-border/80 bg-muted/40 text-muted-foreground opacity-65 saturate-0"
+            : "border border-dashed border-border/50 bg-muted/15 text-muted-foreground/60 opacity-50 saturate-0 hover:bg-muted/30 hover:text-muted-foreground"
+          : currentRoute === to
+            ? "bg-primary/15 text-primary-foreground"
+            : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
       href={routeHref(to)}
       onClick={onNavigate}
+      title={locked ? lockedHint : undefined}
     >
-      {label}
+      {locked ? <Lock aria-hidden="true" className="size-3.5 shrink-0 opacity-75" /> : null}
+      <span>{label}</span>
+      {locked && lockedBadge ? (
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {lockedBadge}
+        </span>
+      ) : null}
     </a>
   );
 }
@@ -165,6 +208,9 @@ export function PrimaryNavigation() {
             currentRoute={currentRoute}
             key={item.to}
             label={lang === "en" ? item.labelEn : item.labelDe}
+            locked={item.locked}
+            lockedBadge={lang === "en" ? item.lockedBadgeEn : item.lockedBadgeDe}
+            lockedHint={lang === "en" ? item.lockedHintEn : item.lockedHintDe}
             onNavigate={closeNavigation}
             to={item.to}
           />
@@ -229,6 +275,9 @@ export function PrimaryNavigation() {
               currentRoute={currentRoute}
               key={item.to}
               label={lang === "en" ? item.labelEn : item.labelDe}
+              locked={item.locked}
+              lockedBadge={lang === "en" ? item.lockedBadgeEn : item.lockedBadgeDe}
+              lockedHint={lang === "en" ? item.lockedHintEn : item.lockedHintDe}
               onNavigate={closeNavigation}
               to={item.to}
             />
