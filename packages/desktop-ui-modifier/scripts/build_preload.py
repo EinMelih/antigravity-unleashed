@@ -20,6 +20,7 @@ def build():
 
     # Paths to modular source files
     main_path = os.path.join(ui_dir, 'main.js')
+    i18n_path = os.path.join(ui_dir, 'i18n.js')
     draft_saver_path = os.path.join(ui_dir, 'draftSaver.js')
     quota_watcher_path = os.path.join(ui_dir, 'quotaWatcher.js')
     task_tracker_path = os.path.join(ui_dir, 'taskTracker.js')
@@ -38,6 +39,8 @@ def build():
     try:
         with open(main_path, 'r', encoding='utf-8') as f:
             main_code = f.read()
+        with open(i18n_path, 'r', encoding='utf-8') as f:
+            i18n_code = f.read()
         with open(draft_saver_path, 'r', encoding='utf-8') as f:
             draft_saver_code = f.read()
         with open(quota_watcher_path, 'r', encoding='utf-8') as f:
@@ -65,6 +68,7 @@ def build():
 
     # Combine modules into the placeholder in main.js
     modules_combined = (
+        i18n_code + "\n\n" +
         draft_saver_code + "\n\n" +
         quota_watcher_code + "\n\n" +
         task_tracker_code + "\n\n" +

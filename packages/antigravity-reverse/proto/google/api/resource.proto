@@ -1,0 +1,82 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/api/resource.proto
+
+syntax = "proto3";
+
+package google.api;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.MessageOptions {
+  google.api.ResourceDescriptor resource = 1053;
+}
+
+extend proto2.FieldOptions {
+  google.api.ResourceReference resource_reference = 1055;
+  google.api.ResourceContainerRule resource_container = 135496935;
+}
+
+extend proto2.FileOptions {
+  google.api.ResourceDescriptor resource_definition = 1053;
+}
+
+extend proto2.MethodOptions {
+  google.api.ResourceReference method_resource = 463459046;
+}
+
+message ResourceDescriptor {
+  enum History {
+    HISTORY_UNSPECIFIED = 0;
+    ORIGINALLY_SINGLE_PATTERN = 1;
+    FUTURE_MULTI_PATTERN = 2;
+  }
+
+  enum Style {
+    STYLE_UNSPECIFIED = 0;
+    DECLARATIVE_FRIENDLY = 1;
+    KRM = 2;
+  }
+
+  message ResourceNameDescriptor {
+    enum LocationType {
+      LOCATION_TYPE_UNSPECIFIED = 0;
+      CLOUD_ZONE = 1;
+      CLOUD_REGION = 2;
+      GOOGLE_MANAGED_MULTI_REGION = 3;
+      STANDARD_MANAGED_MULTI_REGION = 4;
+      CUSTOMER_MANAGED_MULTI_REGION = 5;
+      GLOBAL = 6;
+    }
+
+    string pattern = 1;
+    string parent_type = 2;
+    string parent_name_extractor = 3;
+    string location_extractor = 4;
+    repeated google.api.ResourceDescriptor.ResourceNameDescriptor.LocationType supported_location_types = 5;
+  }
+
+  string type = 1;
+  repeated string pattern = 2;
+  string name_field = 3;
+  google.api.ResourceDescriptor.History history = 4;
+  string plural = 5;
+  string singular = 6;
+  repeated google.api.ResourceDescriptor.ResourceNameDescriptor name_descriptor = 7;
+  repeated google.api.ResourceDescriptor.Style style = 10;
+  reserved 8 to 9;
+}
+
+message ResourceReference {
+  string type = 1;
+  string child_type = 2;
+}
+
+message ResourceContainer {
+  repeated google.api.ResourceContainerRule rules = 1;
+}
+
+message ResourceContainerRule {
+  string selector = 1;
+  string type = 2;
+}

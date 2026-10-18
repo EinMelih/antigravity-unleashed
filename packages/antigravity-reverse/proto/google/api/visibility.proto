@@ -1,0 +1,50 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/api/visibility.proto
+
+syntax = "proto3";
+
+package google.api;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.ServiceOptions {
+  google.api.VisibilityRule api_visibility = 72295727;
+}
+
+extend proto2.MethodOptions {
+  google.api.VisibilityRule method_visibility = 72295727;
+}
+
+extend proto2.MessageOptions {
+  google.api.VisibilityRule message_visibility = 72295727;
+}
+
+extend proto2.FieldOptions {
+  google.api.VisibilityRule field_visibility = 72295727;
+}
+
+extend proto2.EnumOptions {
+  google.api.VisibilityRule enum_visibility = 72295727;
+}
+
+extend proto2.EnumValueOptions {
+  google.api.VisibilityRule value_visibility = 72295727;
+}
+
+message Visibility {
+  repeated google.api.VisibilityRule rules = 1;
+}
+
+message VisibilityRule {
+  enum FailureMode {
+    FAILURE_MODE_UNSPECIFIED = 0;
+    FALLBACK_PUBLIC = 1;
+    FAIL_CLOSED = 2;
+  }
+
+  string selector = 1;
+  string restriction = 2;
+  google.api.VisibilityRule.FailureMode failure_mode = 4;
+  reserved 3;
+}

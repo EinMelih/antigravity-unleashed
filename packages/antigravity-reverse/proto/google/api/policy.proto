@@ -1,0 +1,80 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/api/policy.proto
+
+syntax = "proto3";
+
+package google.api;
+
+import "google/protobuf/struct.proto";
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.FieldOptions {
+  google.api.FieldPolicy field_policy = 158361448;
+}
+
+extend proto2.MethodOptions {
+  google.api.MethodPolicy method_policy = 161893301;
+}
+
+message FieldPolicy {
+  enum CustomOrgPolicyAccessibility {
+    CUSTOM_ORG_POLICY_ACCESSIBILITY_UNSPECIFIED = 0;
+    PUBLIC = 1;
+    reserved 2 to 1;
+  }
+
+  string selector = 1;
+  string resource_permission = 2;
+  string resource_type = 3;
+  string child_resource_type = 10;
+  string child_resource_name_extractor = 11;
+  string auditing = 4;
+  string resource_access_type = 12;
+  string monitored_resource_type = 8;
+  string monitored_resource_label_extractor = 9;
+  repeated google.api.OrgPolicy org_policies = 5;
+  bool is_service_consumer = 6;
+  string location_selector = 7;
+  repeated google.api.MetadataPolicy metadata_policies = 13;
+  string resource_location_selector = 14;
+  string cmek_key_selector = 15;
+  google.api.FieldPolicy.CustomOrgPolicyAccessibility custom_org_policy_accessibility = 16;
+  string custom_org_policy = 17;
+  string condition = 18;
+  string resource_decorator = 19;
+}
+
+message OrgPolicy {
+  string constraint = 1;
+  string value_selector = 2;
+  string enabled = 5;
+  repeated string value_extractors = 4;
+  reserved 3;
+}
+
+message MetadataPolicy {
+  string type = 1;
+  string value_selector = 2;
+  repeated string value_extractors = 3;
+}
+
+message MethodPolicy {
+  string action = 1;
+  string selector = 9;
+  string auditing = 4;
+  string authorization = 6;
+  string flags = 7;
+  bool active_developer_method = 8;
+  repeated google.api.FieldPolicy request_policies = 2;
+  repeated google.api.FieldPolicy response_policies = 3;
+  map<string, string> metadata = 5;
+  repeated google.api.PolicyAspect policy_aspects = 10;
+  string policy_set = 11;
+}
+
+message PolicyAspect {
+  string kind = 1;
+  google.protobuf.Struct spec = 2;
+  bool suppress_deterministic_encode = 3;
+}

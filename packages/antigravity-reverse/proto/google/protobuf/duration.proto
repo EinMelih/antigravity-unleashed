@@ -1,0 +1,12 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/protobuf/duration.proto
+
+syntax = "proto3";
+
+package google.protobuf;
+
+message Duration {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}

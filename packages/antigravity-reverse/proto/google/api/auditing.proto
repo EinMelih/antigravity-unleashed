@@ -1,0 +1,27 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/api/auditing.proto
+
+syntax = "proto3";
+
+package google.api;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.FieldOptions {
+  google.api.AuditingRule field_auditing = 112199341;
+}
+
+extend proto2.MethodOptions {
+  google.api.AuditingRule method_auditing = 112199341;
+}
+
+message Auditing {
+  repeated google.api.AuditingRule rules = 1;
+  map<string, string> labels = 2;
+}
+
+message AuditingRule {
+  string selector = 1;
+  string directive = 2;
+}

@@ -1,0 +1,563 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: learning/genai/api/interactions/proto/content.proto
+
+syntax = "proto3";
+
+package genai;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "google/ai/generativelanguage/v1main/file_options.proto";
+import "google/ai/generativelanguage/v1main/processing_options.proto";
+import "google/ai/generativelanguage/v1main/verbalization_options.proto";
+import "learning/genai/api/interactions/proto/in_context_file_citation.proto";
+import "learning/genai/api/interactions/proto/security_annotations.proto";
+import "third_party/jetski_prod/actor/proto/custom_extensions.proto";
+
+enum MediaResolution {
+  MEDIA_RESOLUTION_UNSPECIFIED = 0;
+  LOW = 1;
+  MEDIUM = 2;
+  HIGH = 3;
+  ULTRA_HIGH = 4;
+}
+
+message Content {
+  oneof type {
+    genai.TextContent text = 10;
+    genai.ImageContent image = 11;
+    genai.AudioContent audio = 12;
+    genai.DocumentContent document = 13;
+    genai.VideoContent video = 14;
+    genai.ThoughtContent thought = 5;
+    genai.ToolCallContent tool_call = 24;
+    genai.ToolResultContent tool_result = 25;
+  }
+  genai.InternalMetadata metadata = 26;
+  agency.CustomExtensions custom_extensions = 27;
+  reserved 1 to 4, 6 to 9, 15 to 23;
+  reserved "__content_list_hidden_discriminator__";
+}
+
+message ContentList {
+  repeated genai.Content contents = 1;
+}
+
+message WordInfo {
+  string text = 1;
+  google.protobuf.Duration start_offset = 2;
+  google.protobuf.Duration end_offset = 3;
+  string speaker = 4;
+  reserved "type";
+}
+
+message SpeechAnnotation {
+  string speaker = 1;
+  string style = 2;
+  reserved "type";
+}
+
+message TextContent {
+  message Annotation {
+    string reference_id = 9;
+    int32 start_index = 1;
+    int32 end_index = 2;
+    oneof type {
+      genai.UrlCitation url_citation = 5;
+      genai.FileCitation file_citation = 6;
+      genai.PlaceCitation place_citation = 7;
+      genai.InContextFileCitation in_context_file_citation = 12;
+      genai.WordInfo word_info = 8;
+      genai.SpeechAnnotation speech_metadata = 11;
+      genai.ReferenceMetadata reference_metadata = 10;
+    }
+    reserved 3 to 4;
+  }
+
+  string text = 3;
+  repeated genai.TextContent.Annotation annotations = 4;
+  bytes precomputed_fields = 5;
+  reserved 1;
+  reserved "type";
+}
+
+message ImageContent {
+  enum MimeType {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_PNG = 1;
+    TYPE_JPEG = 2;
+    TYPE_WEBP = 3;
+    TYPE_HEIC = 4;
+    TYPE_HEIF = 5;
+    TYPE_GIF = 7;
+    TYPE_BMP = 8;
+    TYPE_TIFF = 9;
+    TYPE_VIDEO_FRAME_JPEG2000 = 10;
+    TYPE_VIDEO_JPEG2000 = 11;
+    reserved 6 to 5;
+  }
+
+  genai.ImageContent.MimeType mime_type = 1;
+  string mime_type_string = 8;
+  oneof data_or_uri {
+    bytes data = 2;
+    string uri = 6;
+  }
+  genai.MediaResolution resolution = 5;
+  bytes precomputed_fields = 7;
+  genai.ContentIngestionOptions ingestion_options = 15;
+  string name = 16;
+  reserved 3;
+  reserved "type";
+}
+
+message AudioContent {
+  enum MimeType {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_WAV = 1;
+    TYPE_MP3 = 2;
+    TYPE_AIFF = 3;
+    TYPE_AAC = 4;
+    TYPE_OGG = 5;
+    TYPE_FLAC = 6;
+    TYPE_MPEG = 7;
+    TYPE_M4A = 8;
+    TYPE_L16 = 9;
+    TYPE_S16LE = 10;
+    TYPE_OPUS = 11;
+    TYPE_ALAW = 12;
+    TYPE_MULAW = 13;
+    TYPE_VIDEO_AUDIO_S16LE = 14;
+    TYPE_WEBM = 15;
+  }
+
+  genai.AudioContent.MimeType mime_type = 1;
+  string mime_type_string = 11;
+  oneof data_or_uri {
+    bytes data = 2;
+    string uri = 5;
+  }
+  int32 channels = 7;
+  int32 sample_rate = 8;
+  string transcript = 9;
+  bytes precomputed_fields = 10;
+  genai.ContentIngestionOptions ingestion_options = 15;
+  string name = 16;
+  reserved 3 to 4, 6;
+  reserved "type", "rate";
+}
+
+message DocumentContent {
+  enum MimeType {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_PDF = 1;
+    TYPE_CSV = 2;
+  }
+
+  genai.DocumentContent.MimeType mime_type = 1;
+  string mime_type_string = 6;
+  oneof data_or_uri {
+    bytes data = 2;
+    string uri = 5;
+  }
+  genai.MediaResolution resolution = 17;
+  genai.ContentIngestionOptions ingestion_options = 15;
+  string name = 16;
+  reserved 3;
+  reserved "type";
+}
+
+message VideoContent {
+  enum MimeType {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_MP4 = 1;
+    TYPE_MPEG = 2;
+    TYPE_MPG = 3;
+    TYPE_MOV = 4;
+    TYPE_AVI = 5;
+    TYPE_X_FLV = 6;
+    TYPE_WEBM = 7;
+    TYPE_WMV = 8;
+    TYPE_3GPP = 9;
+    TYPE_YT_BEYOND = 10;
+    TYPE_JPEG2000 = 11;
+  }
+
+  enum Processing {
+    PROCESSING_UNSPECIFIED = 0;
+    STATIC = 1;
+    AGENTIC = 2;
+  }
+
+  message StaticMediaProcessing {
+    google.protobuf.Duration start_offset = 1;
+    google.protobuf.Duration end_offset = 2;
+    double fps = 3;
+    reserved "type";
+  }
+
+  message MediaProcessing {
+    oneof type {
+      genai.VideoContent.StaticMediaProcessing static = 2;
+    }
+  }
+
+  genai.VideoContent.MimeType mime_type = 1;
+  string mime_type_string = 8;
+  oneof data_or_uri {
+    bytes data = 2;
+    string uri = 6;
+  }
+  genai.MediaResolution resolution = 5;
+  bytes precomputed_fields = 19;
+  oneof processing {
+    genai.VideoContent.Processing processing_type = 17;
+    genai.VideoContent.MediaProcessing processing_config = 18;
+  }
+  genai.ContentIngestionOptions ingestion_options = 15;
+  string name = 16;
+  reserved 3, 7;
+  reserved "type";
+}
+
+message Citation {
+  oneof citation_type {
+    genai.UrlCitation url_citation = 1;
+    genai.FileCitation file_citation = 2;
+    genai.PlaceCitation place_citation = 3;
+    genai.InContextFileCitation in_context_file_citation = 4;
+  }
+}
+
+message UrlCitation {
+  string url = 1;
+  string title = 2;
+  string text_snippet = 3;
+  reserved "type";
+}
+
+message FileCitation {
+  string document_uri = 1;
+  string file_name = 2;
+  string source = 3;
+  google.protobuf.Struct custom_metadata = 4;
+  int32 page_number = 5;
+  string media_id = 6;
+  reserved "type";
+}
+
+message PlaceCitation {
+  string place_id = 1;
+  string name = 2;
+  string url = 3;
+  repeated genai.ReviewSnippet review_snippets = 4;
+  reserved "type";
+}
+
+message ReviewSnippet {
+  string title = 1;
+  string url = 2;
+  string review_id = 3;
+}
+
+message Struct {
+  repeated genai.Field fields = 1;
+}
+
+message Field {
+  string name = 1;
+  genai.Value value = 2;
+}
+
+message ReferenceMetadata {
+  string reference_id = 1;
+  genai.Citation citation = 2;
+  reserved "type";
+}
+
+message Value {
+  oneof kind {
+    google.protobuf.NullValue null_value = 1;
+    double number_value = 2;
+    string string_value = 3;
+    bool bool_value = 4;
+    genai.Struct struct_value = 5;
+    genai.ListValue list_value = 6;
+    genai.Content content_value = 7;
+    genai.Function function_value = 9;
+  }
+  genai.ReferenceMetadata reference_metadata = 8;
+  string recitation_dataset_id = 10;
+}
+
+message ListValue {
+  repeated genai.Value values = 1;
+}
+
+message GoogleSearch {
+  enum SearchType {
+    SEARCH_TYPE_UNSPECIFIED = 0;
+    SEARCH_TYPE_WEB_SEARCH = 1;
+    SEARCH_TYPE_IMAGE_SEARCH = 2;
+    SEARCH_TYPE_ENTERPRISE_WEB_SEARCH = 3;
+    SEARCH_TYPE_VISUAL_SEARCH = 4;
+  }
+
+  repeated genai.GoogleSearch.SearchType search_types = 1;
+  reserved "type";
+}
+
+message ThoughtContent {
+  bytes signature = 7;
+  repeated genai.ThoughtSummaryContent summary = 9;
+  reserved 1 to 5, 8;
+  reserved "type";
+}
+
+message ThoughtSummaryContent {
+  oneof type {
+    genai.TextContent text = 1;
+    genai.ImageContent image = 2;
+  }
+}
+
+message Turn {
+  string role = 1;
+  oneof content {
+    genai.ContentList content_list = 3;
+    string content_string = 4;
+  }
+  reserved 2;
+}
+
+message TurnList {
+  repeated genai.Turn turns = 1;
+}
+
+message InternalMetadata {
+  int64 file_id_key = 1;
+  string recitation_dataset_id = 2;
+}
+
+message ToolCallContent {
+  string id = 1;
+  bytes signature = 9;
+  oneof type {
+    genai.FunctionCallContent function_call = 2;
+    genai.CodeExecutionCallContent code_execution_call = 3;
+    genai.UrlContextCallContent url_context_call = 4;
+    genai.McpServerToolCallContent mcp_server_tool_call = 6;
+    genai.GoogleSearchCallContent google_search_call = 7;
+    genai.FileSearchCallContent file_search_call = 8;
+    genai.GoogleMapsCallContent google_maps_call = 10;
+  }
+  google.protobuf.Any execute_tool_auxiliary_inputs = 11;
+}
+
+message ToolResultContent {
+  string call_id = 8;
+  bytes signature = 9;
+  oneof type {
+    genai.FunctionResultContent function_result = 2;
+    genai.CodeExecutionResultContent code_execution_result = 3;
+    genai.UrlContextResultContent url_context_result = 4;
+    genai.GoogleSearchResultContent google_search_result = 5;
+    genai.McpServerToolResultContent mcp_server_tool_result = 6;
+    genai.FileSearchResultContent file_search_result = 7;
+    genai.GoogleMapsResultContent google_maps_result = 10;
+  }
+  reserved 1;
+}
+
+message FunctionCallContent {
+  string name = 3;
+  genai.Struct arguments = 4;
+  reserved 1 to 2;
+  reserved "type";
+}
+
+message FunctionResultContent {
+  string name = 8;
+  bool is_error = 2;
+  oneof result {
+    genai.Struct struct_result = 3;
+    genai.FunctionResultSubcontentList content_list = 9;
+    string string_result = 7;
+  }
+  reserved 1, 4;
+  reserved "type";
+}
+
+message CodeExecutionCallContent {
+  message CodeExecutionCallArguments {
+    enum Language {
+      LANGUAGE_UNSPECIFIED = 0;
+      PYTHON = 1;
+      BASH = 2;
+    }
+
+    genai.CodeExecutionCallContent.CodeExecutionCallArguments.Language language = 1;
+    string code = 2;
+  }
+
+  genai.CodeExecutionCallContent.CodeExecutionCallArguments arguments = 2;
+  reserved 1, 4;
+  reserved "type";
+}
+
+message CodeExecutionResultContent {
+  string result = 1;
+  bool is_error = 2;
+  reserved 3, 5;
+  reserved "type";
+}
+
+message UrlContextCallContent {
+  message UrlContextCallArguments {
+    repeated string urls = 1;
+  }
+
+  genai.UrlContextCallContent.UrlContextCallArguments arguments = 2;
+  reserved 1, 4;
+  reserved "type";
+}
+
+message UrlContextResultContent {
+  message UrlContextResult {
+    enum Status {
+      STATUS_UNSPECIFIED = 0;
+      SUCCESS = 1;
+      ERROR = 2;
+      PAYWALL = 3;
+      UNSAFE = 4;
+    }
+
+    string url = 1;
+    genai.UrlContextResultContent.UrlContextResult.Status status = 2;
+  }
+
+  repeated genai.UrlContextResultContent.UrlContextResult result = 2;
+  bool is_error = 3;
+  reserved 1, 5;
+  reserved "type";
+}
+
+message McpServerToolCallContent {
+  string name = 1;
+  string server_name = 2;
+  genai.Struct arguments = 3;
+  reserved "type";
+}
+
+message McpServerToolResultContent {
+  string name = 1;
+  string server_name = 2;
+  oneof result {
+    genai.Struct struct_result = 3;
+    genai.FunctionResultSubcontentList content_list = 6;
+    string string_result = 4;
+  }
+  reserved "type";
+}
+
+message GoogleSearchCallContent {
+  message GoogleSearchCallArguments {
+    repeated string queries = 1;
+  }
+
+  genai.GoogleSearchCallContent.GoogleSearchCallArguments arguments = 1;
+  genai.GoogleSearch.SearchType search_type = 2;
+  reserved 3;
+  reserved "type";
+}
+
+message GoogleSearchResultContent {
+  message GoogleSearchResult {
+    string search_suggestions = 5;
+    reserved 1 to 4;
+  }
+
+  repeated genai.GoogleSearchResultContent.GoogleSearchResult result = 2;
+  bool is_error = 3;
+  reserved 1, 5;
+  reserved "type";
+}
+
+message FileSearchCallContent {
+  reserved "type";
+}
+
+message FileSearchResultContent {
+  message FileSearchResult {
+    reserved 1 to 5;
+  }
+
+  repeated genai.FileSearchResultContent.FileSearchResult result = 1;
+  reserved "type";
+}
+
+message GoogleMapsCallContent {
+  message GoogleMapsCallArguments {
+    repeated string queries = 1;
+  }
+
+  genai.GoogleMapsCallContent.GoogleMapsCallArguments arguments = 1;
+  reserved "type";
+}
+
+message GoogleMapsResultContent {
+  message GoogleMapsResult {
+    message Places {
+      string place_id = 1;
+      string name = 2;
+      string url = 3;
+      repeated genai.ReviewSnippet review_snippets = 4;
+    }
+
+    repeated genai.GoogleMapsResultContent.GoogleMapsResult.Places places = 1;
+    string widget_context_token = 2;
+  }
+
+  repeated genai.GoogleMapsResultContent.GoogleMapsResult result = 1;
+  reserved "type";
+}
+
+message Function {
+  enum Behavior {
+    UNSPECIFIED = 0;
+    BLOCKING = 1;
+    NON_BLOCKING = 2;
+  }
+
+  string name = 1;
+  string description = 2;
+  genai.Value parameters = 3;
+  string tool_backend_route_identifier = 4;
+  genai.Value response = 5;
+  genai.Function.Behavior behavior = 6;
+  bool defer_loading = 7;
+  string short_description = 8;
+  genai.SecurityAnnotations security_annotations = 9;
+  reserved "type";
+}
+
+message FunctionResultSubcontent {
+  oneof type {
+    genai.TextContent text = 1;
+    genai.ImageContent image = 2;
+    genai.Function function = 3;
+    genai.VideoContent video = 4;
+  }
+}
+
+message FunctionResultSubcontentList {
+  repeated genai.FunctionResultSubcontent contents = 1;
+}
+
+message ContentIngestionOptions {
+  google.ai.generativelanguage.v1main.ProcessingOptions processing_options = 1;
+  google.ai.generativelanguage.v1main.VerbalizationOptions verbalization_options = 2;
+  google.ai.generativelanguage.v1main.FileMetadata file_metadata = 3;
+}

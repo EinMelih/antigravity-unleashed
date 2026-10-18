@@ -1,0 +1,11 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/internal/cloud/code/v1internal/entitlement.proto
+
+syntax = "proto3";
+
+package google.internal.cloud.code.v1internal;
+
+message Entitlement {
+  string user_tier = 1;
+}

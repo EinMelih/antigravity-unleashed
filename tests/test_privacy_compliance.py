@@ -22,7 +22,7 @@ def get_forbidden_patterns():
     Tokens are constructed at runtime to avoid storing forbidden literals
     in source code or self-triggering static scanners.
     """
-    token_user_path = r"Users[/\\]" + "EinMelih"
+    token_user_path = r"Users[/\\]+" + "EinMelih"
     token_gh_oauth = "gh" + "o_"
     token_personality = "user_" + "personality"
     token_backup = "".join(["win11 ", "alt ", "backup"])

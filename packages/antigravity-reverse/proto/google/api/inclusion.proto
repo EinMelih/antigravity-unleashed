@@ -1,0 +1,17 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/api/inclusion.proto
+
+syntax = "proto3";
+
+package google.api;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.FileOptions {
+  google.api.ApiInclusion inclusion = 525000017;
+}
+
+message ApiInclusion {
+  repeated string scopes = 1;
+}

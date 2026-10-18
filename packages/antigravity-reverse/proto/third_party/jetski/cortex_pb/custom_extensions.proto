@@ -1,0 +1,10 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: third_party/jetski/cortex_pb/custom_extensions.proto
+
+syntax = "proto3";
+
+package exa.cortex_pb;
+
+message CustomExtensions {
+}

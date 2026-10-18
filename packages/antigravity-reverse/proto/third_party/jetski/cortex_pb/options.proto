@@ -1,0 +1,13 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: third_party/jetski/cortex_pb/options.proto
+
+syntax = "proto3";
+
+package exa.cortex_pb;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.FieldOptions {
+  bool internal_only = 535815292;
+}

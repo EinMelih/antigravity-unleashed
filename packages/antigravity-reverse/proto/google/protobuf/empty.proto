@@ -1,0 +1,10 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/protobuf/empty.proto
+
+syntax = "proto3";
+
+package google.protobuf;
+
+message Empty {
+}

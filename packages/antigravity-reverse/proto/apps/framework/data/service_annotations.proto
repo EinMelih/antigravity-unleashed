@@ -1,0 +1,26 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: apps/framework/data/service_annotations.proto
+
+syntax = "proto3";
+
+package af.data;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.FileOptions {
+  bool types_can_be_used_with_json_format_clients = 140442106;
+}
+
+extend proto2.MethodOptions {
+  af.data.FrontendMethodType frontend_method_type = 140442103;
+  bool to_be_removed = 140442104;
+  bool code_access_only = 140442105;
+}
+
+enum FrontendMethodType {
+  UNKNOWN_FRONTEND_METHOD_TYPE = 0;
+  FETCH = 1;
+  MUTATE = 2;
+  SERVER_STREAM = 3;
+}

@@ -128,7 +128,7 @@ If you want to contribute or build on top of this, here is where things stand:
 - **Upstream Version Pinning (`v2.24.0`)**: The ASAR injector checks SHA-256 hashes of `dist/main.js`, `dist/ipcHandlers.js`, `dist/preload.js`, `dist/updater.js`, and `dist/utils.js`. When Google ships a new Antigravity version, `SUPPORTED_UPSTREAM_VERSION` and `UPSTREAM_COMPATIBILITY.json` need to be rebased.
 - **Renderer Selectors**: Several UI hooks rely on DOM selectors (`button[aria-label="Add context"]`, `[data-testid="settings-button"]`) and CDP script evaluation that can break if upstream changes its React layout.
 - **Windows-Specific Process Management**: Process tree discovery, WMI/CIM queries, and PowerShell service launchers (`start_services.ps1`) are built for Windows and haven't been ported to macOS or Linux.
-- **Mixed German/English UI Strings**: Because I built this for personal use first, many labels and toast messages in the injected UI (`reviewsDashboard.js`, `modals.js`) are still in German.
+- **Localization (`src/ui/i18n.js`)**: The injected UI defaults to **English (`en`)** out of the box and includes a 1-click **English ↔ Deutsch (`de`)** toggle inside the `Ctrl+Shift+B` Quick Menu (`🌐 Language`). Some backend error messages or legacy log strings may still appear in German.
 
 Pull Requests, cleanups, and ports to newer Antigravity versions are very welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 

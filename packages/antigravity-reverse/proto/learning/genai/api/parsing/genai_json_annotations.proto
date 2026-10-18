@@ -1,0 +1,49 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: learning/genai/api/parsing/genai_json_annotations.proto
+
+syntax = "proto3";
+
+package gaos.parsing;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.OneofOptions {
+  bool is_union = 525000029;
+  bool subtype_source = 525000030;
+  bool is_required = 525000031;
+  string union_name = 525000032;
+}
+
+extend proto2.FieldOptions {
+  string json_discriminator = 525000215;
+  string json_discriminator_value = 525000216;
+  bool subtype_source_field = 525000217;
+  string json_only_discriminator = 525000218;
+  bool additional_properties = 525000219;
+  string json_discriminator_values = 525000220;
+  string add_union_value = 525000221;
+  bool flexible_map = 525000222;
+  string sub_content_name = 525000227;
+}
+
+extend proto2.EnumValueOptions {
+  string enum_value_name = 535802949;
+}
+
+extend proto2.MessageOptions {
+  gaos.parsing.StaticJsonField add_static_field = 535801962;
+  gaos.parsing.JsonType message_json_type = 535801963;
+}
+
+enum JsonType {
+  JSON_TYPE_UNSPECIFIED = 0;
+  JSON_TYPE_OBJECT = 1;
+  JSON_TYPE_ARRAY = 2;
+  JSON_TYPE_VALUE = 3;
+}
+
+message StaticJsonField {
+  string key = 1;
+  string value = 2;
+}

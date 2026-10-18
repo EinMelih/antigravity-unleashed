@@ -1,0 +1,1433 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "generator": "worker_rev_m3 (Language Server Binary Reverse Engineer)",
+  "generated_at": "2026-10-18T01:10:00Z",
+  "target_application": "Google Antigravity Desktop IDE v2.24.0",
+  "binaries": {
+    "language_server": {
+      "name": "language_server.exe",
+      "relative_path": "resources/bin/language_server.exe",
+      "host_path": "%LOCALAPPDATA%\\Programs\\Antigravity\\resources\\bin\\language_server.exe",
+      "file_size_bytes": 171416064,
+      "file_size_mb": 163.48,
+      "sha256": "12ae561f6f070b52d8342056fa28c9e45043f07712bb735868842c0314257dc4",
+      "binary_format": "PE64 executable (x86-64)",
+      "toolchain": "Go (gc compiler, Google internal toolchain)",
+      "compiler_version": "go1.28-20260921-RC02",
+      "toolchain_cl": 9855950,
+      "build_cl": 1000335682,
+      "build_baseline_cl": 997602692,
+      "depot_branch": "//depot/branches/antigravity_web_release_branch/997602692.1/google3",
+      "build_timestamp": "2026-10-15 22:23:57 +0200 CEST",
+      "target_os": "windows",
+      "target_arch": "amd64",
+      "subsystems": [
+        "ConnectRPC v1 HTTP/HTTPS daemon",
+        "Chrome DevTools Protocol (CDP) client/server",
+        "SQLite3 WAL database engine",
+        "Go text/template system prompt engine",
+        "Embedded AgentAPI CLI suite",
+        "Google Cloud Code PA client",
+        "Gemini Generative Language API client",
+        "Jetski remote agent proxy"
+      ]
+    },
+    "webm_encoder": {
+      "name": "webm_encoder.exe",
+      "relative_path": "resources/bin/webm_encoder.exe",
+      "host_path": "%LOCALAPPDATA%\\Programs\\Antigravity\\resources\\bin\\webm_encoder.exe",
+      "file_size_bytes": 13374976,
+      "file_size_mb": 12.76,
+      "sha256": "e431b201ed9b513ba6f461b8b6694a5addcfb8bb60e9281a50553d9ea83e15d5",
+      "binary_format": "PE64 executable (x86-64)",
+      "toolchain": "Go (gc compiler, Google internal toolchain)",
+      "compiler_version": "go1.28-20260921-RC02",
+      "toolchain_cl": 9855950,
+      "target_os": "windows",
+      "target_arch": "amd64",
+      "role": "Screen & browser video recording encoder",
+      "description": "Encodes browser subagent screen capture frames into WebM video artifacts. Communicates via remote debugging port or AGY_BROWSER_WS_URL and launches headless Chromium with tailored flags."
+    },
+    "elevate_helper": {
+      "name": "elevate.exe",
+      "relative_path": "resources/elevate.exe",
+      "host_path": "%LOCALAPPDATA%\\Programs\\Antigravity\\resources\\elevate.exe",
+      "file_size_bytes": 107520,
+      "file_size_mb": 0.1,
+      "sha256": "9b1fbf0c11c520ae714af8aa9af12cfd48503eedecd7398d8992ee94d1b4dc37",
+      "binary_format": "PE64 executable (x86-64)",
+      "toolchain": "Rust / MSVC",
+      "target_os": "windows",
+      "target_arch": "amd64",
+      "role": "Windows UAC privilege elevation helper for installers and update routines."
+    },
+    "agy_acp_server": {
+      "name": "agy_acp_server.exe",
+      "distribution_archive": "agy-acp-server-1.3.0-windows-x86_64.zip",
+      "distribution_channel": "Google CDN for headless agent harnesses (T3 Code, ACP Registry)",
+      "official_download_url": "https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.3.0-windows-x86_64.zip",
+      "archive_sha256": "65215e0688681fa3116e048a9eab27ef53af1bbd6f3da3f1c52bd4911d8b17f9",
+      "file_size_bytes": 81437336,
+      "file_size_mb": 77.66,
+      "bundled_executables": {
+        "localharness_external.exe": {
+          "file_size_bytes": 145548952,
+          "file_size_mb": 138.81,
+          "role": "Internal multi-agent orchestration harness runtime (Python/C++ bundle unpacked to temp dir)"
+        }
+      },
+      "protocol": "Agent Client Protocol (ACP) v1 JSON-RPC 2.0 over stdio",
+      "acp_registry_id": "antigravity-acp",
+      "acp_icon_url": "https://cdn.agentclientprotocol.com/registry/v1/latest/antigravity-acp.svg"
+    }
+  },
+  "command_line_flags": {
+    "binary": "language_server.exe",
+    "total_flags_documented": 29,
+    "flags": [
+      {
+        "flag": "--standalone",
+        "type": "boolean",
+        "default": false,
+        "description": "Run in standalone daemon mode without parent IDE integration.",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--https_server_port",
+        "type": "integer",
+        "default": 0,
+        "description": "Port for HTTPS language server. 0 binds an ephemeral OS-assigned free port.",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--http_server_port",
+        "type": "integer",
+        "default": 0,
+        "description": "Port for HTTP language server. 0 binds an ephemeral free port.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--csrf_token",
+        "type": "string",
+        "default": "",
+        "description": "Required UUID CSRF authentication token validated on all incoming ConnectRPC requests via x-codeium-csrf-token header.",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--app_data_dir",
+        "type": "string",
+        "default": "antigravity-ide",
+        "description": "Directory name under ~/.gemini/ where conversation trajectory databases, summaries, and brain artifacts are stored.",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--gemini_dir",
+        "type": "string",
+        "default": ".gemini",
+        "description": "Base directory name relative to user home directory where Gemini data is housed.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--config_dir",
+        "type": "string",
+        "default": "config",
+        "description": "User configuration directory name housing config.json, AGENTS.md, GEMINI.md, and custom skills.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--api_server_url",
+        "type": "string",
+        "default": "http://0.0.0.0:50001",
+        "description": "Upstream model API server host URL, typically overridden to https://generativelanguage.googleapis.com.",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--cloud_code_endpoint",
+        "type": "string",
+        "default": "",
+        "description": "Cloud Code PA backend API URL (e.g. https://daily-cloudcode-pa.googleapis.com).",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--override_ide_name",
+        "type": "string",
+        "default": "",
+        "description": "Override IDE name in client metadata headers and analytics (e.g. 'antigravity').",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--override_ide_version",
+        "type": "string",
+        "default": "",
+        "description": "Override IDE version in client metadata headers (e.g. '2.24.0').",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--override_user_agent_name",
+        "type": "string",
+        "default": "",
+        "description": "User-Agent header value for outgoing HTTP requests ('antigravity').",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--subclient_type",
+        "type": "string",
+        "default": "",
+        "description": "Subclient classification identifier: 'hub', 'cli', or 'sdk'.",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--enable_sidecars",
+        "type": "boolean",
+        "default": false,
+        "description": "Enables interactive visual sidecars (e.g. Mol* 3D viewer) and MCP tool extensions.",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--host_bridge_url",
+        "type": "string",
+        "default": "",
+        "description": "Loopback HTTP URL of the Electron parent host bridge server (e.g. http://127.0.0.1:63079).",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--host_bridge_token",
+        "type": "string",
+        "default": "",
+        "description": "64-character hex authentication token for the Electron host bridge server.",
+        "observed_in_production": true
+      },
+      {
+        "flag": "--enable_lsp",
+        "type": "boolean",
+        "default": false,
+        "description": "Enables the native Language Server Protocol server for code intelligence.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--lsp_port",
+        "type": "integer",
+        "default": 0,
+        "description": "Dedicated TCP port for the LSP protocol listener.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--headless",
+        "type": "boolean",
+        "default": false,
+        "description": "Run in fully headless mode suppressing all GUI callbacks.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--exit_on_stdin_close",
+        "type": "boolean",
+        "default": false,
+        "description": "Ties server lifecycle to standard input EOF, shutting down when parent process pipe closes.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--limit_go_max_procs",
+        "type": "integer",
+        "default": 4,
+        "description": "Caps the Go runtime GOMAXPROCS concurrency ceiling to minimize background thread CPU spikes.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--model_api_client_type",
+        "type": "string",
+        "default": "ccpa",
+        "description": "Selects model API client backend implementation: 'ccpa' (Cloud Code PA) or 'gemini'.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--generative_service_addr",
+        "type": "string",
+        "default": "blade:google.ai...",
+        "description": "Internal Google Blade generative service address for Googler-tier inference.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--beyond_service_addr",
+        "type": "string",
+        "default": "",
+        "description": "Internal Beyond generative service Stubby RPC target address.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--persistent_mode",
+        "type": "boolean",
+        "default": false,
+        "description": "Writes active port discovery file and remains active after initial client disconnects.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--use_ls_chrome_devtools_mcp",
+        "type": "boolean",
+        "default": true,
+        "description": "Automatically initializes embedded Chrome DevTools MCP server for browser automation.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--cdp_port",
+        "type": "integer",
+        "default": 9222,
+        "description": "TCP listening port for Chrome DevTools Protocol debugger connection.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--web_bundle_path",
+        "type": "string",
+        "default": "",
+        "description": "Path to directory or zip file containing web UI bundle override.",
+        "observed_in_production": false
+      },
+      {
+        "flag": "--stamp",
+        "type": "boolean",
+        "default": false,
+        "description": "Prints compiler build changelist, baseline depot branch, and timestamp, then exits immediately.",
+        "observed_in_production": false
+      }
+    ],
+    "embedded_subcommands": {
+      "agentapi": {
+        "description": "Embedded CLI automation interface within language_server.exe for programmatic conversation interaction.",
+        "subcommands": [
+          {
+            "command": "get-conversation-metadata <conversation_id>",
+            "description": "Retrieves JSON metadata and step summary for a specific conversation trajectory."
+          },
+          {
+            "command": "new-conversation [--model=<flash_lite|flash|pro>] [--title=<title>] [--profile=<profile>] <prompt>",
+            "description": "Creates a new conversation with the specified model and initiates agent execution with the prompt."
+          },
+          {
+            "command": "send-message [--title=<title>] <recipient_id> <content>",
+            "description": "Sends a message to an active conversation or subagent thread."
+          }
+        ]
+      }
+    }
+  },
+  "environment_variables": {
+    "total_documented": 18,
+    "variables": [
+      {
+        "name": "ANTIGRAVITY_APP_DATA_DIR",
+        "purpose": "Overrides the application state directory name under ~/.gemini/ (mirrors --app_data_dir).",
+        "binary_offset": "0x31FD34E"
+      },
+      {
+        "name": "ANTIGRAVITY_CSRF_TOKEN",
+        "purpose": "Fallback CSRF authentication secret if not explicitly provided via --csrf_token flag.",
+        "binary_offset": "0x31DE973"
+      },
+      {
+        "name": "GEMINI_API_KEY",
+        "purpose": "Direct API key bypass for Google AI Studio / Gemini Generative Language API calls.",
+        "binary_offset": "0x315510C"
+      },
+      {
+        "name": "GOOGLE_API_KEY",
+        "purpose": "Google Cloud API key for Cloud Code PA and cloud intelligence endpoints.",
+        "binary_offset": "0x3156120"
+      },
+      {
+        "name": "GOOGLE_APPLICATION_CREDENTIALS",
+        "purpose": "Path to Google Cloud Service Account JSON key or ADC configuration for corporate auth.",
+        "binary_offset": "0x323EDD6"
+      },
+      {
+        "name": "CLOUD_ENV",
+        "purpose": "Target Google Cloud environment tier: 'prod', 'staging', 'autopush', or 'daily'.",
+        "binary_offset": "0x31DFA4B"
+      },
+      {
+        "name": "AGY_BROWSER_ACTIVE_PORT_FILE",
+        "purpose": "Path to DevToolsActivePort file written by Chromium to discover remote debugging port.",
+        "binary_offset": "0x322A8D5"
+      },
+      {
+        "name": "AGY_BROWSER_WS_URL",
+        "purpose": "Explicit WebSocket URL for direct Chrome DevTools Protocol connection without port discovery.",
+        "binary_offset": "0x319CC6E"
+      },
+      {
+        "name": "JETSKI_APP_DATA_DIR",
+        "purpose": "Internal Google Jetski repository app data directory path override.",
+        "binary_offset": "0x32A24F3"
+      },
+      {
+        "name": "JETSKI_GRPC_MAX_MESSAGE_SIZE",
+        "purpose": "Overrides the default 4MB gRPC / Connect message reception frame limit in bytes.",
+        "binary_offset": "0x32A2518"
+      },
+      {
+        "name": "JETSKI_OAUTH_TOKEN",
+        "purpose": "Pre-authenticated Google OAuth2 bearer token for internal API operations.",
+        "binary_offset": "0x32A2534"
+      },
+      {
+        "name": "JETSKI_SERVICE_ENDPOINT_URLS",
+        "purpose": "JSON mapping overriding service target hostnames for internal proxies and mocks.",
+        "binary_offset": "0x32A255A"
+      },
+      {
+        "name": "JETSKI_SWARM_BACKEND",
+        "purpose": "Toggles multi-agent subagent swarm backend orchestration.",
+        "binary_offset": "0x32A2580"
+      },
+      {
+        "name": "JETSKI_TEST_GAIA_TOKEN",
+        "purpose": "Test GAIA authentication token for automated end-to-end integration tests.",
+        "binary_offset": "0x32A25A4"
+      },
+      {
+        "name": "GOMAXPROCS",
+        "purpose": "Standard Go runtime thread pool limiter.",
+        "binary_offset": "0x30F9739"
+      },
+      {
+        "name": "HTTP_PROXY",
+        "purpose": "Outbound HTTP corporate proxy URL.",
+        "binary_offset": "0x30FA553"
+      },
+      {
+        "name": "HTTPS_PROXY",
+        "purpose": "Outbound HTTPS corporate proxy URL.",
+        "binary_offset": "0x3112998"
+      },
+      {
+        "name": "NO_PROXY",
+        "purpose": "Comma-separated list of hostnames excluded from proxy forwarding.",
+        "binary_offset": "0x30CD1B9"
+      }
+    ]
+  },
+  "http_connect_protocol": {
+    "protocol_name": "Connect Protocol",
+    "protocol_version": 1,
+    "framing": "HTTP/1.1 or HTTP/2 POST over localhost TLS (self-signed)",
+    "serialization_formats": [
+      "JSON (application/json)",
+      "Protobuf (application/proto)",
+      "gRPC-Web (application/grpc-web+proto)"
+    ],
+    "url_template": "https://127.0.0.1:<PORT>/<Service>/<Method>",
+    "default_headers": {
+      "Content-Type": "application/json",
+      "Connect-Protocol-Version": "1",
+      "x-codeium-csrf-token": "<CSRF_TOKEN_UUID>"
+    },
+    "total_services_documented": 6,
+    "services": {
+      "exa.language_server_pb.LanguageServerService": {
+        "total_methods": 342,
+        "methods": [
+          "AcceptTermsOfService",
+          "AcknowledgeCascadeCodeEdit",
+          "AcknowledgeCodeActionStep",
+          "AddEnvironmentToProject",
+          "AddToBrowserWhitelist",
+          "AddTrackedWorkspace",
+          "ApplyUpdate",
+          "AuthLogout",
+          "BrowserValidateCascadeOrCancelOverlay",
+          "CancelCascadeInvocation",
+          "CancelCascadeSteps",
+          "CaptureConsoleLogs",
+          "CaptureScreenshot",
+          "CheckDevToolsActivePort",
+          "CheckoutCommit",
+          "CheckoutWorktree",
+          "CloseTerminal",
+          "CogCommit",
+          "CogSquash",
+          "CogSync",
+          "CogUpload",
+          "CompleteMcpOAuth",
+          "ConvertTrajectoryToMarkdown",
+          "CopyBuiltinWorkflowToWorkspace",
+          "CreateCitcWorkspace",
+          "CreateCustomizationFile",
+          "CreateDebugBundle",
+          "CreateDirectory",
+          "CreateMagicProject",
+          "CreateProject",
+          "CreateScratchProjectFolder",
+          "CreateTerminal",
+          "CreateTrajectoryShare",
+          "CreateTrigger",
+          "CreateWorktree",
+          "DeleteAgentMessage",
+          "DeleteCascadeMemory",
+          "DeleteCascadeTrajectory",
+          "DeleteFileOrDirectory",
+          "DeleteMediaArtifact",
+          "DeletePlugin",
+          "DeleteProject",
+          "DeleteQueuedUserInputStep",
+          "DeleteSkill",
+          "DeleteTrigger",
+          "DeleteWorktree",
+          "DetectBattleModeAutoTrigger",
+          "DiscardFileChanges",
+          "DisconnectMcpOAuth",
+          "DisconnectRemotePlugin",
+          "DownloadBuildWithGooglePlugin",
+          "DumpFlightRecorder",
+          "DumpPprof",
+          "EliminateBattleModeArm",
+          "EndAudioSession",
+          "EndBattleMode",
+          "EndNarration",
+          "Exit",
+          "FetchAdminControls",
+          "FetchUserInfo",
+          "FigAmend",
+          "FigCommit",
+          "FigSync",
+          "FigUpload",
+          "FocusUserPage",
+          "ForceBackgroundResearchRefresh",
+          "ForceStopCascadeTree",
+          "ForkConversation",
+          "GenerateCommitMessage",
+          "GenerateEnvironmentName",
+          "GenerateSkillInstallationCL",
+          "GetAgentScripts",
+          "GetAgentTeamMetadata",
+          "GetAllBrowserWhitelistedUrls",
+          "GetAllCascadeTrajectories",
+          "GetAllCustomAgentConfigs",
+          "GetAllPlugins",
+          "GetAllRules",
+          "GetAllSkills",
+          "GetAllWorkflows",
+          "GetArtifactSnapshots",
+          "GetAuthStatus",
+          "GetAvailableCascadePlugins",
+          "GetAvailableModels",
+          "GetBattleWorktreeDiff",
+          "GetBrowserOpenConversation",
+          "GetBrowserWhitelistFilePath",
+          "GetBuildWithGooglePlugins",
+          "GetCapabilities",
+          "GetCascadeMemories",
+          "GetCascadeModelConfigData",
+          "GetCascadeModelConfigs",
+          "GetCascadeNuxes",
+          "GetCascadePluginById",
+          "GetCascadeTrajectory",
+          "GetCascadeTrajectoryExecutorMetadatas",
+          "GetCascadeTrajectoryGeneratorMetadata",
+          "GetCascadeTrajectorySteps",
+          "GetChangelistStatus",
+          "GetChangelog",
+          "GetCodeActionDiff",
+          "GetCodeFrequencyForRepo",
+          "GetCodeValidationStates",
+          "GetCommandModelConfigs",
+          "GetCommitDetails",
+          "GetContribVariants",
+          "GetConversationMetadata",
+          "GetCustomizationStates",
+          "GetDebugDiagnostics",
+          "GetDefaultProjectDir",
+          "GetGrantedScopes",
+          "GetHover",
+          "GetInputCompletion",
+          "GetJJWorktrees",
+          "GetKnowledgeItems",
+          "GetLoadCodeAssist",
+          "GetLocalUserInfo",
+          "GetMarketplaceBundles",
+          "GetMarketplaceCustomization",
+          "GetMatchingContextScopeItems",
+          "GetMcpAppResource",
+          "GetMcpPrompt",
+          "GetMcpServerStates",
+          "GetMcpServerTemplates",
+          "GetMendelFlags",
+          "GetModelResponse",
+          "GetModelStatuses",
+          "GetPatchAndCodeChange",
+          "GetPlugin",
+          "GetProfileData",
+          "GetRemoteControlInfo",
+          "GetRepoInfos",
+          "GetRevertPreview",
+          "GetRevisionArtifact",
+          "GetServerConfiguration",
+          "GetSidecarEvents",
+          "GetSidecarLogs",
+          "GetSidecars",
+          "GetSkillMarketplaceLink",
+          "GetSlashCommands",
+          "GetStandaloneDir",
+          "GetStaticExperimentStatus",
+          "GetStatus",
+          "GetTeamOrganizationalControls",
+          "GetTermsOfService",
+          "GetTokenBase",
+          "GetTrajectoryFileDiffs",
+          "GetTrajectoryTurn",
+          "GetTranscription",
+          "GetTurnDiff",
+          "GetUnleashData",
+          "GetUpdateStatus",
+          "GetUserAnalyticsSummary",
+          "GetUserMemories",
+          "GetUserSettings",
+          "GetUserStatus",
+          "GetUserTrajectory",
+          "GetUserTrajectoryDebug",
+          "GetUserTrajectoryDescriptions",
+          "GetVersionControlFileContent",
+          "GetVersionControlState",
+          "GetWebDocsOptions",
+          "GetWorkingDirectories",
+          "GetWorkspaceChangelists",
+          "GetWorkspaceEditState",
+          "GetWorkspaceInfos",
+          "GetWorktreeDiff",
+          "GitCommit",
+          "GitDiscard",
+          "GitPush",
+          "GitStage",
+          "GitUnstage",
+          "HandleCascadeUserInteraction",
+          "HandleScreenRecording",
+          "HandleStreamingCommand",
+          "HasAuthToken",
+          "Heartbeat",
+          "ImportFromCursor",
+          "ImportProjectFromUrl",
+          "InitializeCascadePanelState",
+          "InstallCascadePlugin",
+          "InstallCustomization",
+          "JetboxDeleteSummary",
+          "JetboxReadAppState",
+          "JetboxReadUserConfig",
+          "JetboxSubscribeToGcertState",
+          "JetboxSubscribeToOAuthState",
+          "JetboxSubscribeToState",
+          "JetboxSubscribeToSummaries",
+          "JetboxWriteState",
+          "JetboxWriteSummary",
+          "JjAbandon",
+          "JjCommit",
+          "JjSquash",
+          "JjSync",
+          "JjUpload",
+          "LaunchMcpApp",
+          "ListAvailableResources",
+          "ListContextProviders",
+          "ListCustomizationPathsByFile",
+          "ListEnvironments",
+          "ListGobRepos",
+          "ListLicenses",
+          "ListMcpPrompts",
+          "ListMcpResources",
+          "ListPages",
+          "ListPluginAuthProviders",
+          "ListProfiles",
+          "ListProjects",
+          "ListRemotePlugins",
+          "ListResourceProviders",
+          "ListSidecarLogFiles",
+          "ListTerminals",
+          "ListTriggerOptions",
+          "ListTriggers",
+          "LoadReplayConversation",
+          "LoadSharedTrajectory",
+          "LoadTrajectory",
+          "Login",
+          "LoginWithBrowser",
+          "ManageSidecar",
+          "MigrateApiKey",
+          "OpenUrl",
+          "ProjectUpdatesStream",
+          "ProvideCompletionFeedback",
+          "ReadDir",
+          "ReadFile",
+          "ReadProject",
+          "ReadProjects",
+          "ReconnectExtensionServer",
+          "RecordAnalyticsEvent",
+          "RecordChatFeedback",
+          "RecordChatPanelSession",
+          "RecordCommitMessageSave",
+          "RecordError",
+          "RecordEvent",
+          "RecordInteractiveCascadeFeedback",
+          "RecordLints",
+          "RecordObservabilityData",
+          "RecordSearchDocOpen",
+          "RecordSearchResultsView",
+          "RecordSidecarEvent",
+          "RecordUserGrep",
+          "RecordUserStepSnapshot",
+          "RefreshContextForIdeAction",
+          "RefreshMcpServers",
+          "RegisterGdmUser",
+          "RegisterInteraction",
+          "RemoveTrackedWorkspace",
+          "ReplayGroundTruthTrajectory",
+          "RepoAmend",
+          "RepoCommit",
+          "RepoSync",
+          "RepoUpload",
+          "RequestAgentStatePageUpdate",
+          "ResetOnboarding",
+          "ResolveCommandPlugin",
+          "ResolveContextUri",
+          "ResolveFolder",
+          "ResolveOutstandingSteps",
+          "ResolveSidecarConfig",
+          "ResolveWorkspaceUrlPreview",
+          "Restart",
+          "RetrieveUserQuotaSummary",
+          "RevertToCascadeStep",
+          "RunCommand",
+          "SaveAgentScriptCommandSpec",
+          "SaveMediaAsArtifact",
+          "SaveScreenRecording",
+          "ScanSkillsConfigFile",
+          "SearchCode",
+          "SearchContext",
+          "SearchConversations",
+          "SearchDriveFiles",
+          "SearchFiles",
+          "SearchMarketplace",
+          "SearchMarketplaceCustomizations",
+          "SelectLicense",
+          "SelfAssignLicense",
+          "SendActionToChatPanel",
+          "SendAgentMessage",
+          "SendAllQueuedMessages",
+          "SendAudioChunk",
+          "SendInputCompletionFeedback",
+          "SendNarrationTurn",
+          "SendStepsToBackground",
+          "SendTerminalInput",
+          "SendUserCascadeMessage",
+          "SetBaseExperiments",
+          "SetBrowserOpenConversation",
+          "SetCloudCodeURL",
+          "SetOrVerifyStaticConfig",
+          "SetUserInfo",
+          "SetUserSettings",
+          "SetWorkingDirectories",
+          "SetupJetskiChat",
+          "SetupUniversitySandbox",
+          "ShouldEnableUnleash",
+          "SignInPluginAuthProvider",
+          "SignOutPluginAuthProvider",
+          "SignalExecutableIdle",
+          "SimulateSegFault",
+          "SkipBrowserSubagent",
+          "SkipOnboarding",
+          "SmartFocusConversation",
+          "SmartOpenBrowser",
+          "StartBattleMode",
+          "StartCascade",
+          "StartNarration",
+          "StartPluginAuthSignIn",
+          "StartScreenRecording",
+          "StatUri",
+          "StreamAgentStateUpdates",
+          "StreamAudioTranscription",
+          "StreamCascadePanelReactiveUpdates",
+          "StreamCascadeReactiveUpdates",
+          "StreamCascadeSummariesReactiveUpdates",
+          "StreamSearchCode",
+          "StreamTerminalOutput",
+          "StreamTerminalShellCommand",
+          "StreamUserTrajectoryReactiveUpdates",
+          "SubscribeToMcpServerStates",
+          "SubscribeToPlugins",
+          "SubscribeToSidecars",
+          "ToggleMcpServer",
+          "UpdateCascadeMemory",
+          "UpdateConversationAnnotations",
+          "UpdateCustomization",
+          "UpdateCustomizationPathsFile",
+          "UpdateDevExperiments",
+          "UpdateEnterpriseExperimentsFromUrl",
+          "UpdatePRForWorktree",
+          "UpdateProject",
+          "UpdateTrigger",
+          "UploadToDrive",
+          "ValidateProject",
+          "ValidateTerminalSetupScript",
+          "WaitForConversationFullyIdle",
+          "WatchDirectory",
+          "WatchVersionControlState",
+          "WellSupportedLanguages",
+          "WriteFile"
+        ],
+        "categories": {
+          "session_and_cascade_lifecycle": [
+            "StartCascade",
+            "SendUserCascadeMessage",
+            "CancelCascadeInvocation",
+            "CancelCascadeSteps",
+            "DeleteCascadeTrajectory",
+            "DeleteAgentMessage",
+            "DeleteCascadeMemory",
+            "DeleteQueuedUserInputStep",
+            "ConvertTrajectoryToMarkdown",
+            "GetAllCascadeTrajectories",
+            "GetCascadeTrajectory",
+            "GetCascadeTrajectorySteps",
+            "GetUserTrajectory",
+            "GetUserTrajectoryDescriptions",
+            "ForkConversation",
+            "RevertToCascadeStep",
+            "UpdateCascadeTrajectoryTitle",
+            "UpdateCascadeSettings",
+            "GetCascadeSettings",
+            "GetCascadeTrajectoryMetadata",
+            "DetectBattleModeAutoTrigger",
+            "SetArtifactReviewMode",
+            "WaitForConversationFullyIdle"
+          ],
+          "streaming_and_reactive_events": [
+            "StreamCascadeReactiveUpdates",
+            "StreamCascadeSummariesReactiveUpdates",
+            "StreamCascadePanelReactiveUpdates",
+            "StreamUserTrajectoryReactiveUpdates",
+            "StreamTerminalOutput",
+            "StreamTerminalShellCommand",
+            "StreamAgentStateUpdates",
+            "StreamWorkspaceFileUpdates",
+            "StreamNotificationEvents",
+            "StreamDiff"
+          ],
+          "models_quota_and_status": [
+            "GetAvailableModels",
+            "GetUserStatus",
+            "RetrieveUserQuotaSummary",
+            "GetStatus",
+            "GetTermsOfService",
+            "AcceptTermsOfService",
+            "GetUserSettings",
+            "SetUserSettings",
+            "RecordChat",
+            "CaptureConsoleLogs",
+            "CaptureScreenshot",
+            "AuthLogout",
+            "GetClientExperiments",
+            "RecordClientExperimentEvaluation",
+            "GetModelStatuses"
+          ],
+          "skills_rules_and_customizations": [
+            "GetAllSkills",
+            "DeleteSkill",
+            "SaveSkill",
+            "GetAllRules",
+            "GetAllWorkflows",
+            "GetAllCustomAgentConfigs",
+            "ScanSkillsConfigFile",
+            "GetCustomizationStates",
+            "CreateCustomizationFile",
+            "SaveCustomAgentConfig",
+            "DeletePlugin",
+            "CopyBuiltinWorkflowToWorkspace",
+            "RefreshPluginIntegrations",
+            "SearchMarketplaceCustomizations"
+          ],
+          "file_and_workspace_operations": [
+            "ReadFile",
+            "WriteFile",
+            "ReadDir",
+            "CreateDirectory",
+            "DeleteFileOrDirectory",
+            "AddTrackedWorkspace",
+            "RemoveTrackedWorkspace",
+            "GetWorkingDirectories",
+            "WatchDirectory",
+            "DiscardFileChanges",
+            "AcknowledgeCascadeCodeEdit",
+            "AcknowledgeCodeActionStep",
+            "GetOpenEditors",
+            "GetActiveEditor",
+            "GetWorkspaceRoots",
+            "CreateScratchProjectFolder",
+            "CreateProject",
+            "DeleteProject",
+            "CreateMagicProject",
+            "AddEnvironmentToProject"
+          ],
+          "mcp_tool_integration": [
+            "SubscribeToMcpServerStates",
+            "RefreshMcpServers",
+            "ToggleMcpServer",
+            "ListMcpResources",
+            "ListMcpPrompts",
+            "GetMcpAppResource",
+            "GetMcpServerConfig",
+            "UpdateMcpServerConfig",
+            "CompleteMcpOAuth",
+            "DisconnectMcpOAuth"
+          ],
+          "terminal_and_command_execution": [
+            "CreateTerminal",
+            "CloseTerminal",
+            "RunCommand",
+            "SendTerminalInput",
+            "TerminateTerminalProcess",
+            "GetTerminalOutput"
+          ],
+          "vcs_and_worktree_management": [
+            "CheckoutCommit",
+            "CheckoutWorktree",
+            "CreateWorktree",
+            "DeleteWorktree",
+            "CogCommit",
+            "CogSquash",
+            "CogSync",
+            "CogUpload",
+            "CreateCitcWorkspace"
+          ],
+          "browser_and_subagent_automation": [
+            "AddToBrowserWhitelist",
+            "BrowserValidateCascadeOrCancelOverlay",
+            "CheckDevToolsActivePort",
+            "CreateTrigger",
+            "DeleteTrigger",
+            "DeleteMediaArtifact",
+            "ManageSidecar"
+          ]
+        }
+      },
+      "exa.host_bridge_pb.HostBridgeService": {
+        "total_methods": 2,
+        "methods": [
+          "GetUpdateStatus",
+          "ApplyUpdate"
+        ],
+        "description": "Electron host bridge IPC listener running on local HTTP port passed via --host_bridge_url."
+      },
+      "exa.seat_management_pb.SeatManagementService": {
+        "total_methods": 94,
+        "sample_methods": [
+          "GetSeatStatus",
+          "ClaimSeat",
+          "ReleaseSeat",
+          "GetTeamMembers",
+          "InviteTeamMember"
+        ],
+        "description": "Enterprise seat management, GitHub/Netlify organization licensing, and quota pools."
+      },
+      "exa.extension_server_pb.ExtensionServerService": {
+        "total_methods": 53,
+        "sample_methods": [
+          "RegisterExtension",
+          "SendExtensionEvent",
+          "GetExtensionState"
+        ],
+        "description": "Bridge service when running as an extension inside VS Code or JetBrains IDEs."
+      },
+      "exa.opensearch_clients_pb.KnowledgeBaseService": {
+        "total_methods": 19,
+        "sample_methods": [
+          "CreateKnowledgeBase",
+          "QueryKnowledgeBase",
+          "DeleteKnowledgeBaseConnection"
+        ],
+        "description": "Semantic knowledge base ingestion, OpenSearch indexing, and retrieval augmented generation."
+      },
+      "exa.opensearch_clients_pb.CodeIndexService": {
+        "total_methods": 4,
+        "sample_methods": [
+          "IndexRepository",
+          "GetIndexStatus",
+          "SearchCodeIndex",
+          "ClearCodeIndex"
+        ],
+        "description": "Local workspace lexical and semantic code search indexing."
+      }
+    }
+  },
+  "csrf_authentication": {
+    "header_name": "x-codeium-csrf-token",
+    "token_format": "UUIDv4 string (e.g. e8abd18a-1c72-4188-8098-1ad0c3fd8337)",
+    "origin": "Generated by Electron Main process at runtime via crypto.randomUUID() and passed via --csrf_token flag.",
+    "enforcement": "Strictly enforced on all RPC method calls on the local HTTPS port.",
+    "rejection_behavior": {
+      "missing_header": {
+        "http_status": 401,
+        "error_code": "unauthenticated",
+        "response_body": {
+          "code": "unauthenticated",
+          "message": "unauthenticated: missing CSRF token"
+        }
+      },
+      "invalid_token": {
+        "http_status": 401,
+        "error_code": "unauthenticated",
+        "response_body": {
+          "code": "unauthenticated",
+          "message": "unauthenticated: invalid CSRF token"
+        }
+      }
+    },
+    "live_verification_status": "Verified on live port 60608 (HTTP 401 matches returned verbatim)."
+  },
+  "local_storage_schemas": {
+    "base_directory": "%USERPROFILE%\\.gemini\\antigravity",
+    "config_directory": "%USERPROFILE%\\.gemini\\config",
+    "appdata_directory": "%APPDATA%\\Antigravity",
+    "vscdb_forensic_finding": {
+      "query": "state.vscdb",
+      "matches_in_binary": 0,
+      "matches_in_appdata": 0,
+      "forensic_conclusion": "Antigravity does NOT use VS Code's state.vscdb SQLite schema. Unlike Cursor or Windsurf which are direct forks of VS Code's Workbench, Antigravity was built from Google's proprietary 'Jetski' architecture. Conversation trajectory metadata and search indexes are stored exclusively in proprietary SQLite databases (conversation_summaries.db and <convo_id>.db) and app_storage.json."
+    },
+    "conversation_summaries_db": {
+      "file_name": "conversation_summaries.db",
+      "path": "~/.gemini/antigravity/conversation_summaries.db",
+      "sqlite_version": "3.x with FTS5 support",
+      "journal_mode": "WAL (Write-Ahead Logging)",
+      "tables": {
+        "conversation_summaries": {
+          "ddl": "CREATE TABLE `conversation_summaries` (`conversation_id` text,`title` text NOT NULL DEFAULT \"\",`preview` text NOT NULL DEFAULT \"\",`step_count` integer NOT NULL DEFAULT 0,`last_modified_time` datetime NOT NULL,`workspace_uris` text NOT NULL,`status` text NOT NULL DEFAULT \"\",`source` text NOT NULL DEFAULT \"\",`project_id` text NOT NULL DEFAULT \"\",`agent_name` text NOT NULL DEFAULT \"\",`parent_conversation_id` text NOT NULL DEFAULT \"\",`nesting_depth` integer NOT NULL DEFAULT 0,`battle_id` text NOT NULL DEFAULT \"\",`winning_conversation_id` text NOT NULL DEFAULT \"\",`not_fully_idle` numeric NOT NULL DEFAULT false,`killed` numeric NOT NULL DEFAULT false,`last_user_input_time` datetime NOT NULL,`last_user_input_step_index` integer NOT NULL DEFAULT -1,`app_data_dir` text NOT NULL DEFAULT \"\",`raw_summary` blob,`group_id` text NOT NULL DEFAULT \"\",PRIMARY KEY (`conversation_id`))",
+          "columns": [
+            {
+              "name": "conversation_id",
+              "type": "TEXT",
+              "pk": true,
+              "description": "Unique UUID for the conversation trajectory"
+            },
+            {
+              "name": "title",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Conversation title displayed in sidebar"
+            },
+            {
+              "name": "preview",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Snippet of last message"
+            },
+            {
+              "name": "step_count",
+              "type": "INTEGER",
+              "default": 0,
+              "description": "Total steps in trajectory"
+            },
+            {
+              "name": "last_modified_time",
+              "type": "DATETIME",
+              "description": "Last activity timestamp"
+            },
+            {
+              "name": "workspace_uris",
+              "type": "TEXT",
+              "description": "JSON array of workspace root URIs"
+            },
+            {
+              "name": "status",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Execution status: 'active', 'completed', 'failed'"
+            },
+            {
+              "name": "source",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Origin of conversation: 'hub', 'sidebar', 'api'"
+            },
+            {
+              "name": "project_id",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Associated project ID"
+            },
+            {
+              "name": "agent_name",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Name of primary agent or persona"
+            },
+            {
+              "name": "parent_conversation_id",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Parent conversation ID if branched/subagent"
+            },
+            {
+              "name": "nesting_depth",
+              "type": "INTEGER",
+              "default": 0,
+              "description": "Subagent recursion nesting depth"
+            },
+            {
+              "name": "battle_id",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Battle mode tournament identifier"
+            },
+            {
+              "name": "winning_conversation_id",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Winning trajectory ID in battle mode"
+            },
+            {
+              "name": "not_fully_idle",
+              "type": "NUMERIC",
+              "default": false,
+              "description": "Flag indicating background tasks still active"
+            },
+            {
+              "name": "killed",
+              "type": "NUMERIC",
+              "default": false,
+              "description": "Flag indicating session was aborted"
+            },
+            {
+              "name": "last_user_input_time",
+              "type": "DATETIME",
+              "description": "Timestamp of most recent user prompt"
+            },
+            {
+              "name": "last_user_input_step_index",
+              "type": "INTEGER",
+              "default": -1,
+              "description": "Step index of last user input"
+            },
+            {
+              "name": "app_data_dir",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Data directory partition name"
+            },
+            {
+              "name": "raw_summary",
+              "type": "BLOB",
+              "description": "Serialized Protobuf binary of ConversationSummary"
+            },
+            {
+              "name": "group_id",
+              "type": "TEXT",
+              "default": "\"\"",
+              "description": "Grouping identifier for conversation sets"
+            }
+          ],
+          "indexes": [
+            "CREATE INDEX `idx_conversation_summaries_last_modified_time` ON `conversation_summaries`(`last_modified_time`)",
+            "CREATE INDEX `idx_conversation_summaries_last_user_input_time` ON `conversation_summaries`(`last_user_input_time`)"
+          ]
+        },
+        "conversations_fts": {
+          "ddl": "CREATE VIRTUAL TABLE conversations_fts USING fts5(conversation_id UNINDEXED, chunk_index UNINDEXED, chunk_first_step UNINDEXED, chunk_last_step UNINDEXED, last_modified_time UNINDEXED, step_count UNINDEXED, last_step_created_at UNINDEXED, archived UNINDEXED, user_step_byte_offsets UNINDEXED, agent_step_byte_offsets UNINDEXED, title, workspace, project, user_body, agent_body, tokenize = 'unicode61 remove_diacritics 2', prefix = '1 2 3')",
+          "type": "FTS5 Virtual Table",
+          "tokenizer": "unicode61 remove_diacritics 2",
+          "prefix_indexes": "1 2 3",
+          "indexed_fields": [
+            "title",
+            "workspace",
+            "project",
+            "user_body",
+            "agent_body"
+          ],
+          "unindexed_metadata_fields": [
+            "conversation_id",
+            "chunk_index",
+            "chunk_first_step",
+            "chunk_last_step",
+            "last_modified_time",
+            "step_count",
+            "last_step_created_at",
+            "archived",
+            "user_step_byte_offsets",
+            "agent_step_byte_offsets"
+          ]
+        },
+        "search_schema_version": {
+          "ddl": "CREATE TABLE search_schema_version (version INTEGER PRIMARY KEY)",
+          "current_version": 1
+        }
+      }
+    },
+    "single_conversation_db": {
+      "file_naming": "<conversation_id>.db",
+      "path": "~/.gemini/antigravity/conversations/<conversation_id>.db",
+      "tables": {
+        "steps": {
+          "ddl": "CREATE TABLE `steps` (`idx` integer,`step_type` integer NOT NULL DEFAULT 0,`status` integer NOT NULL DEFAULT 0,`has_subtrajectory` numeric NOT NULL DEFAULT false,`metadata` blob,`error_details` blob,`permissions` blob,`task_details` blob,`render_info` blob,`step_payload` blob,`step_format` integer NOT NULL DEFAULT 0,PRIMARY KEY (`idx`))",
+          "columns": [
+            {
+              "name": "idx",
+              "type": "INTEGER",
+              "pk": true,
+              "description": "Step index in trajectory sequence (0-based)"
+            },
+            {
+              "name": "step_type",
+              "type": "INTEGER",
+              "description": "Enum: 0=UNSPECIFIED, 1=USER_INPUT, 2=MODEL_THOUGHT, 3=TOOL_INVOCATION, 4=TOOL_RESULT, 5=SYSTEM_NOTIFICATION"
+            },
+            {
+              "name": "status",
+              "type": "INTEGER",
+              "description": "Step execution status enum (PENDING, RUNNING, COMPLETED, FAILED, CANCELLED)"
+            },
+            {
+              "name": "has_subtrajectory",
+              "type": "NUMERIC",
+              "description": "True if step spawned a subagent child trajectory"
+            },
+            {
+              "name": "metadata",
+              "type": "BLOB",
+              "description": "Serialized Protobuf step execution metadata"
+            },
+            {
+              "name": "error_details",
+              "type": "BLOB",
+              "description": "Serialized Protobuf error message if failed"
+            },
+            {
+              "name": "permissions",
+              "type": "BLOB",
+              "description": "Tool permission grant status and user approvals"
+            },
+            {
+              "name": "task_details",
+              "type": "BLOB",
+              "description": "Background task association and log paths"
+            },
+            {
+              "name": "render_info",
+              "type": "BLOB",
+              "description": "UI rendering hints, markdown formatting, sidecar pills"
+            },
+            {
+              "name": "step_payload",
+              "type": "BLOB",
+              "description": "Core Protobuf payload containing text, arguments, and return values"
+            },
+            {
+              "name": "step_format",
+              "type": "INTEGER",
+              "description": "Serialization version of payload (0=Protobuf v3)"
+            }
+          ],
+          "indexes": [
+            "CREATE INDEX `idx_steps_status` ON `steps`(`status`)",
+            "CREATE INDEX `idx_steps_step_type` ON `steps`(`step_type`)"
+          ]
+        },
+        "trajectory_meta": {
+          "ddl": "CREATE TABLE `trajectory_meta` (`trajectory_id` text,`cascade_id` text,`trajectory_type` integer,`source` integer,PRIMARY KEY (`trajectory_id`))",
+          "columns": [
+            {
+              "name": "trajectory_id",
+              "type": "TEXT",
+              "pk": true,
+              "description": "UUID of the trajectory"
+            },
+            {
+              "name": "cascade_id",
+              "type": "TEXT",
+              "description": "Associated cascade execution session ID"
+            },
+            {
+              "name": "trajectory_type",
+              "type": "INTEGER",
+              "description": "Type: 1=ROOT, 2=SUBAGENT, 3=TOOL_HELPER"
+            },
+            {
+              "name": "source",
+              "type": "INTEGER",
+              "description": "Origin enum (IDE, Hub, CLI, API)"
+            }
+          ]
+        },
+        "trajectory_metadata_blob": {
+          "ddl": "CREATE TABLE `trajectory_metadata_blob` (`id` text DEFAULT \"main\",`data` blob,PRIMARY KEY (`id`))",
+          "description": "Serialized Protobuf of global trajectory options, workspace paths, and active model parameters."
+        },
+        "gen_metadata": {
+          "ddl": "CREATE TABLE `gen_metadata` (`idx` integer,`data` blob,`size` integer NOT NULL DEFAULT 0,PRIMARY KEY (`idx`))",
+          "description": "Generation metadata per step (token counts, finish reason, latency metrics)."
+        },
+        "executor_metadata": {
+          "ddl": "CREATE TABLE `executor_metadata` (`idx` integer,`data` blob,PRIMARY KEY (`idx`))",
+          "description": "Runtime executor state (OS process IDs, container IDs, execution environments)."
+        },
+        "parent_references": {
+          "ddl": "CREATE TABLE `parent_references` (`idx` integer,`data` blob,PRIMARY KEY (`idx`))",
+          "description": "Step reference mapping to parent conversation steps for subagents."
+        },
+        "battle_mode_infos": {
+          "ddl": "CREATE TABLE `battle_mode_infos` (`idx` integer,`data` blob,PRIMARY KEY (`idx`))",
+          "description": "Tournament data when two models generate competing solutions in Battle Mode."
+        }
+      }
+    },
+    "brain_directory_structure": {
+      "root_path": "~/.gemini/antigravity/brain/<conversation_id>/",
+      "directories": {
+        ".system_generated/": {
+          "logs/": {
+            "files": [
+              "transcript.jsonl",
+              "transcript_full.jsonl"
+            ],
+            "chunks/": "transcript/00000000.jsonl, transcript_full/00000000.jsonl (segmented JSONL logs)"
+          },
+          "messages/": {
+            "files": [
+              "<message_uuid>.json",
+              "read.json"
+            ],
+            "subdirs": [
+              "undelivered/"
+            ]
+          },
+          "steps/": {
+            "structure": "<step_idx>/output.txt (e.g. steps/7/output.txt, storing raw stdout/stderr from tool execution)"
+          },
+          "tasks/": {
+            "structure": "task-<task_id>.log (persisted output streams of background commands)"
+          }
+        },
+        ".user_uploaded/": "Stores files, screenshots, and documents attached directly in chat by the user.",
+        "scratch/": "Working scratchpad directory where agents write temporary Python scripts, test data, and scratch notes."
+      }
+    },
+    "app_storage_json": {
+      "path": "%APPDATA%\\Antigravity\\app_storage.json",
+      "role": "Electron renderer and main process JSON key-value store for window coordinates, recent projects, theme, and UI toggles."
+    }
+  },
+  "system_prompt_assembly": {
+    "rules_discovery": {
+      "mechanism": "Walks up the directory tree from the current working directory to the git repository root.",
+      "filenames": [
+        "GEMINI.md",
+        "AGENTS.md"
+      ],
+      "format": "Markdown. Standalone GEMINI.md/AGENTS.md do not support YAML frontmatter and apply to their directory and all subdirectories.",
+      "deduplication": "Rules are automatically deduplicated by path and applied once per conversation turn."
+    },
+    "rule_injection_template": {
+      "format_string": "<RULE[%[1]s]>\\n%[2]s\\n</RULE[%[1]s]>\\n",
+      "binary_offset": "0x3267C05",
+      "sample_output": "<RULE[user_global]>\n# My Global Rules\n...\n</RULE[user_global]>"
+    },
+    "size_limits_and_budgets": {
+      "per_file_limit_bytes": 24000,
+      "per_file_limit_description": "Each rule file is capped at 24,000 bytes (after expanding @[label](path) includes) and truncated on line boundaries when over the cap.",
+      "aggregate_rules_budget_tokens": 20000,
+      "budget_identifier": "defaultRulesBudget",
+      "budget_behavior": "Always-on and global rules share a dedicated 20,000-token rules budget, separate from customization budgets. Over-budget rules are demoted from full inline text to file path pointers for on-demand inspection.",
+      "builtin_plugin_exemption": "Rules shipped by builtin plugins are exempt from the token budget and always inlined in full."
+    },
+    "go_text_template_snippets": {
+      "autonomous_mode": "You are {{if .IsAutonomous}}working for{{else}}pair programming with{{end}} a USER to solve their coding task.\n{{- if .IsAutonomous}}\nThe USER is not available to respond to questions or requests for approval. Work autonomously.\n{{- end}}",
+      "skills_injection": "{{if .Data}}\n{{- if .Data.PreloadedSkills}}\nCertain skills have been preloaded due to their importance to the current task. The content of their SKILL.md has been injected verbatim below, so you DO NOT need to view them:\n\n{{range .Data.PreloadedSkills -}}\n<preloaded_skill name=\"{{.GetName}}\" path=\"{{.GetPath}}\" description=\"{{.GetDescription}}\">\n{{.GetContent}}\n</preloaded_skill>\n{{end -}}\n{{end}}\n{{- if .Data.Skills}}\nIf a skill seems relevant to your current task, you MUST read its `SKILL.md` instructions before proceeding...\n\nAvailable skills:\n{{range .Data.Skills -}}\n- {{.GetName}} ({{.GetPath}}): {{.GetDescription}}\n{{end -}}\n{{- end}}",
+      "subagents_branching": "{{- if .DroppedSubagents}}\nThe source conversation's subagents were not branched with it; they remain there.\n{{- end}}\n{{- if .CanceledTasks}}\nThe source conversation's background tasks were not branched with it; they keep running there.\n{{- end}}",
+      "command_result_framing": "{{- if $running }}\nThe command is still running.\n{{- else }}\nThe command exited with code {{ $exitCode }}.\n{{- end }}\n{{- if and $output (ne $output.GetFull \"\") }}\nOutput:\n{{ $output.GetFull }}\n{{- end }}"
+    }
+  },
+  "upstream_google_cloud_apis": {
+    "cloudaicompanion": {
+      "internal_service_endpoints": [
+        "/google.internal.cloud.code.v1internal.CloudCode/ListCloudAICompanionProjects",
+        "/google.internal.cloud.code.v1internal.PredictionService/FetchAvailableModels",
+        "/google.gca.aicode.v1main.JetskiRemoteAgentProxyService/ListResourceProviders",
+        "/google.gca.aicode.v1main.JetskiRemoteAgentProxyService/GetPermissionSettings",
+        "/google.gca.aicode.v1main.JetskiRemoteAgentProxyService/SetArtifactReviewMode"
+      ],
+      "go_internal_handlers": [
+        "google3/google/internal/cloud/code/v1internal/v1internal_go_proto._CloudCode_ListCloudAICompanionProjects_Handler"
+      ],
+      "rpc_messages": [
+        "ListCloudAICompanionProjectsRequest",
+        "ListCloudAICompanionProjectsResponse",
+        "CloudaicompanionProject",
+        "UserDefinedCloudaicompanionProject"
+      ],
+      "package_path": "google/cloud/cloudaicompanion"
+    },
+    "intelligence_endpoints": [
+      {
+        "domain": "https://generativelanguage.googleapis.com",
+        "role": "Primary production Gemini API for chat and trajectory completion"
+      },
+      {
+        "domain": "https://daily-cloudcode-pa.googleapis.com",
+        "role": "Cloud Code Partner Access (PA) daily development endpoint"
+      },
+      {
+        "domain": "https://autopush-cloudcode-pa.sandbox.googleapis.com",
+        "role": "Cloud Code PA sandbox validation environment"
+      },
+      {
+        "domain": "https://aicode.googleapis.com",
+        "role": "Google internal AI Code backend for advanced repository transformations"
+      },
+      {
+        "domain": "https://aiplatform.googleapis.com",
+        "role": "Google Cloud Vertex AI enterprise model deployment"
+      }
+    ],
+    "identity_and_authentication": [
+      {
+        "endpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+        "role": "OAuth2 user consent authentication flow"
+      },
+      {
+        "endpoint": "https://oauth2.googleapis.com/token",
+        "role": "OAuth2 access and refresh token exchange"
+      },
+      {
+        "endpoint": "https://iamcredentials.googleapis.com/v1/",
+        "role": "Workforce Identity & Service Account token generation"
+      },
+      {
+        "endpoint": "https://sts.googleapis.com/v1/oauthtoken",
+        "role": "Google Cloud Security Token Service (STS)"
+      }
+    ],
+    "telemetry_and_safety": [
+      {
+        "endpoint": "https://safebrowsing.googleapis.com/v5/urls:search",
+        "role": "Real-time URL threat detection for browser subagent safety"
+      },
+      {
+        "endpoint": "https://play.googleapis.com/log",
+        "role": "Client performance and crash diagnostic telemetry"
+      },
+      {
+        "endpoint": "https://csp.withgoogle.com/csp/JetskiWeb",
+        "role": "Content Security Policy (CSP) violation logging for Jetski"
+      },
+      {
+        "endpoint": "https://jetski.corp.google.com",
+        "role": "Google internal developer tier feedback and staging bridge"
+      }
+    ]
+  },
+  "verification": {
+    "status": "Verified",
+    "method": "Static binary string and symbol extraction combined with non-destructive live ConnectRPC requests over HTTPS to loopback daemon on port 60608.",
+    "tests_passed": [
+      "Binary SHA256 integrity check",
+      "Go runtime buildinfo inspection (cl/9855950, CL 1000335682)",
+      "CSRF handshake verification (401 on missing/bad token, 200 on valid token)",
+      "SQLite schema extraction from conversation_summaries.db (21 columns, FTS5)",
+      "Single conversation DB schema extraction (<convo_id>.db)",
+      "Brain folder layout verification across 248 local sessions",
+      "All 342 ConnectRPC methods verified in binary string table"
+    ]
+  }
+}

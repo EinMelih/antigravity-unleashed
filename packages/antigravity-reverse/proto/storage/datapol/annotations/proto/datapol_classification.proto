@@ -1,0 +1,19 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: storage/datapol/annotations/proto/datapol_classification.proto
+
+syntax = "proto3";
+
+package datapol.classification;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.EnumValueOptions {
+  datapol.classification.Options options = 268862122;
+}
+
+message Options {
+  repeated string implies = 1;
+  string description = 2;
+  string default_semantic_context = 3;
+}

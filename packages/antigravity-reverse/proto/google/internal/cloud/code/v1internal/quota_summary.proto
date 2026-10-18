@@ -1,0 +1,38 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/internal/cloud/code/v1internal/quota_summary.proto
+
+syntax = "proto3";
+
+package google.internal.cloud.code.v1internal;
+
+import "google/protobuf/timestamp.proto";
+
+message RetrieveUserQuotaSummaryRequest {
+  string project = 1;
+}
+
+message QuotaSummaryBucket {
+  string bucket_id = 1;
+  string display_name = 2;
+  string description = 7;
+  string window = 3;
+  oneof remaining {
+    float remaining_fraction = 4;
+    int64 remaining_amount = 5;
+  }
+  bool disabled = 8;
+  google.protobuf.Timestamp reset_time = 6;
+}
+
+message QuotaSummaryGroup {
+  string display_name = 2;
+  string description = 3;
+  repeated google.internal.cloud.code.v1internal.QuotaSummaryBucket buckets = 1;
+}
+
+message RetrieveUserQuotaSummaryResponse {
+  repeated google.internal.cloud.code.v1internal.QuotaSummaryBucket buckets = 1;
+  repeated google.internal.cloud.code.v1internal.QuotaSummaryGroup groups = 2;
+  string description = 3;
+}

@@ -1,0 +1,15 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: third_party/jetski_prod/actor/proto/custom_extensions.proto
+
+syntax = "proto3";
+
+package agency;
+
+extend agency.CustomExtensions {
+  string testing_string_payload = 101;
+}
+
+message CustomExtensions {
+  reserved "type", "event_type";
+}

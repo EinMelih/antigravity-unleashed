@@ -1,0 +1,28 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: storage/datapol/annotations/proto/retention_annotations.proto
+
+syntax = "proto3";
+
+package datapol;
+
+enum RetentionTag {
+  RT_DEFAULT = 0;
+  RT_OBSOLETE = 1;
+  RT_WEEK = 10;
+  RT_MONTH = 20;
+  RT_5_WEEKS = 21;
+  RT_QUARTER = 30;
+  RT_HALF_A_YEAR = 40;
+  RT_YEAR = 50;
+  RT_16_MONTHS = 58;
+  RT_YEAR_AND_A_HALF = 60;
+  RT_2_YEARS = 70;
+  RT_3_YEARS = 80;
+  RT_ARCHIVAL = 1000;
+}
+
+message RetentionSpec {
+  datapol.RetentionTag desired_retention = 1;
+  string context = 2;
+}

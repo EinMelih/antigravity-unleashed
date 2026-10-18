@@ -1,0 +1,105 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: learning/genai/api/interactions/proto/security_annotations.proto
+
+syntax = "proto3";
+
+package genai;
+
+import "google/protobuf/duration.proto";
+
+message SecurityAnnotations {
+  enum PartyBoundary {
+    PARTY_BOUNDARY_UNSPECIFIED = 0;
+    PARTY_BOUNDARY_FIRST_PARTY = 1;
+    PARTY_BOUNDARY_FIRST_PARTY_CALLS_THIRD_PARTY = 2;
+    PARTY_BOUNDARY_THIRD_PARTY = 3;
+  }
+
+  genai.ExternalCommunication external_communication = 1;
+  repeated genai.UndoWindow undo_difficulty_windows = 2;
+  genai.ChangeScope scope_of_change = 3;
+  genai.DataSensitivity expected_input_sensitivity = 4;
+  genai.DataSensitivity expected_output_sensitivity = 5;
+  bool introduces_untrusted_data = 6;
+  bool generative = 7;
+  genai.SecurityAnnotations.PartyBoundary party_boundary = 9;
+}
+
+message ExternalCommunication {
+  enum EgressCapability {
+    EGRESS_CAPABILITY_UNSPECIFIED = 0;
+    NO_EGRESS = 1;
+    USER_PRIVATE = 2;
+    TRUSTED_FIXED_DESTINATION = 3;
+    TRUSTED_DOMAIN_ARBITRARY_RECIPIENT = 4;
+    UNTRUSTED_ARBITRARY_DOMAIN = 5;
+    PUBLIC_BROADCAST = 6;
+  }
+
+  genai.ExternalCommunication.EgressCapability capability = 1;
+}
+
+message UndoWindow {
+  enum UndoDifficulty {
+    UNDO_DIFFICULTY_UNSPECIFIED = 0;
+    LOW = 1;
+    MEDIUM = 2;
+    HIGH = 3;
+    IMPOSSIBLE = 4;
+  }
+
+  genai.UndoWindow.UndoDifficulty undo_difficulty = 1;
+  google.protobuf.Duration duration = 2;
+}
+
+message ChangeScope {
+  enum Tier {
+    TIER_UNSPECIFIED = 0;
+    TIER0 = 1;
+    TIER1 = 2;
+    TIER2 = 3;
+    TIER3 = 4;
+    TIER4 = 5;
+  }
+
+  message ConversationWindowScope {
+  }
+
+  message ProductDomainScope {
+    string url = 1;
+  }
+
+  message HostEnvironmentScope {
+    enum AccessLevel {
+      ACCESS_LEVEL_UNSPECIFIED = 0;
+      INSPECTION = 1;
+      FILE_WRITE = 2;
+      SHELL_EXECUTION = 3;
+      ENVIRONMENT_MODIFICATION = 4;
+    }
+
+    genai.ChangeScope.HostEnvironmentScope.AccessLevel access_level = 1;
+  }
+
+  genai.ChangeScope.Tier sensitivity_tier = 1;
+  oneof scope {
+    genai.ChangeScope.ProductDomainScope product_domain = 3;
+    genai.ChangeScope.HostEnvironmentScope host_environment = 4;
+    genai.ChangeScope.ConversationWindowScope conversation_window = 5;
+  }
+  reserved 2;
+  reserved "current_interaction_window";
+}
+
+message DataSensitivity {
+  enum Confidentiality {
+    CONFIDENTIALITY_UNSPECIFIED = 0;
+    PUBLIC = 1;
+    CONFIDENTIAL = 2;
+    NEED_TO_KNOW = 3;
+  }
+
+  genai.DataSensitivity.Confidentiality confidentiality = 1;
+  string category = 2;
+}

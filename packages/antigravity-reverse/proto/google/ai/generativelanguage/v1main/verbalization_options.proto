@@ -1,0 +1,253 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/ai/generativelanguage/v1main/verbalization_options.proto
+
+syntax = "proto3";
+
+package google.ai.generativelanguage.v1main;
+
+import "google/ai/generativelanguage/v1main/resolution.proto";
+
+message VerbalizationOptions {
+  enum VerbalizationMode {
+    VERBALIZATION_MODE_UNSPECIFIED = 0;
+    CONTENT_ONLY = 1;
+    REFERENCE_ONLY = 2;
+    CONTENT_AND_REFERENCE = 3;
+  }
+
+  enum MergeStrategy {
+    MERGE_STRATEGY_UNSPECIFIED = 0;
+    MERGE = 1;
+    EXPLICIT_OPTIONS = 2;
+  }
+
+  enum ImageEncoderType {
+    IMAGE_ENCODER_TYPE_UNSPECIFIED = 0;
+    COCAPLUS = 1;
+    GEMVIS_V1P1 = 2;
+    GEMVIS_V1P2 = 3;
+  }
+
+  enum AudioEncoderType {
+    AUDIO_ENCODER_TYPE_UNSPECIFIED = 0;
+    HARD_TOKENS = 1;
+    V9P4 = 2;
+  }
+
+  google.ai.generativelanguage.v1main.VerbalizationSchema verbalization_schema = 1;
+  google.ai.generativelanguage.v1main.TokenManagementOptions token_management_options = 2;
+  optional string recipe_id = 4;
+  google.ai.generativelanguage.v1main.MediaResolution image_media_resolution = 5;
+  google.ai.generativelanguage.v1main.MediaResolution video_frame_media_resolution = 6;
+  google.ai.generativelanguage.v1main.VerbalizationOptions.VerbalizationMode verbalization_mode = 7;
+  google.ai.generativelanguage.v1main.VerbalizationOptions.MergeStrategy merge_strategy = 8;
+  google.ai.generativelanguage.v1main.VerbalizationOptions.ImageEncoderType image_encoder_type = 9;
+  google.ai.generativelanguage.v1main.VerbalizationOptions.AudioEncoderType audio_encoder_type = 10;
+  reserved 3;
+}
+
+message VerbalizationSchema {
+  enum TableOutputType {
+    TABLE_OUTPUT_TYPE_UNSPECIFIED = 0;
+    TABLE_OUTPUT_TYPE_CSV = 1;
+    TABLE_OUTPUT_TYPE_MARKDOWN = 2;
+  }
+
+  enum SpreadsheetOutputFormat {
+    SPREADSHEET_OUTPUT_FORMAT_UNSPECIFIED = 0;
+    SPREADSHEET_OUTPUT_FORMAT_WORKBOOK = 1;
+  }
+
+  message CitationChunkingOptions {
+    message CitationGranularityOptions {
+      optional bool only_file_level_citations = 1;
+    }
+
+    message CitationTranscriptOptions {
+      enum CitationLabelGranularity {
+        CITATION_LABEL_GRANULARITY_UNSPECIFIED = 0;
+        SECTION = 1;
+      }
+
+      google.ai.generativelanguage.v1main.VerbalizationSchema.CitationChunkingOptions.CitationTranscriptOptions.CitationLabelGranularity citation_label_granularity = 1;
+    }
+
+    optional bool citation_chunking_enabled = 1;
+    optional int32 citation_chunk_preferred_num_tokens = 2;
+    optional int32 citation_chunk_max_num_tokens = 3;
+    optional int32 citation_chunk_min_num_tokens = 4;
+    optional int32 citation_chunk_max_num_chunks = 5;
+    optional int32 citation_max_num_chunks_tokens_threshold = 6;
+    optional string table_top_caption = 7;
+    optional google.ai.generativelanguage.v1main.VerbalizationSchema.CitationChunkingOptions.CitationGranularityOptions citation_granularity_options = 8;
+    google.ai.generativelanguage.v1main.VerbalizationSchema.CitationChunkingOptions.CitationTranscriptOptions transcript_options = 9;
+  }
+
+  message PanAndScanSchema {
+    enum CoordinateFormat {
+      UNSPECIFIED = 0;
+      COORDINATE_FORMAT_DEFAULT = 1;
+    }
+
+    optional string original_image_text = 1;
+    optional string cropped_image_text = 2;
+    optional google.ai.generativelanguage.v1main.VerbalizationSchema.PanAndScanSchema.CoordinateFormat coordinate_format = 3;
+  }
+
+  message MMVerbalizationOptions {
+    enum TimestampPrecisionFormat {
+      TIMESTAMP_FORMAT_UNSPECIFIED = 0;
+      DEFAULT = 1;
+      WITH_MILLIS = 2;
+    }
+
+    enum AudioTimestampingMode {
+      AUDIO_TIMESTAMPING_MODE_DEFAULT = 0;
+      AT_MOST_EVERY_MILLIS = 1;
+    }
+
+    message AudioTimestampingOptions {
+      google.ai.generativelanguage.v1main.VerbalizationSchema.MMVerbalizationOptions.AudioTimestampingMode mode = 1;
+      int32 at_most_every_millis = 2;
+    }
+
+    optional bool bytes_enabled = 1;
+    optional bool selected_tokens_enabled = 2;
+    optional bool image_facts_enabled = 4;
+    optional bool image_latents_enabled = 3;
+    optional bool audio_transcription_enabled = 5;
+    optional google.ai.generativelanguage.v1main.VerbalizationSchema.MMVerbalizationOptions.TimestampPrecisionFormat timestamp_precision_format = 6;
+    optional google.ai.generativelanguage.v1main.VerbalizationSchema.MMVerbalizationOptions.AudioTimestampingOptions audio_timestamping_options = 7;
+  }
+
+  message VideoComponentVerbalizationOptions {
+    google.ai.generativelanguage.v1main.VerbalizationSchema.MMVerbalizationOptions frame_options = 1;
+    google.ai.generativelanguage.v1main.VerbalizationSchema.MMVerbalizationOptions audio_options = 2;
+  }
+
+  message ModalityInterleavingOptions {
+    enum TimestampPrecision {
+      TIMESTAMP_PRECISION_DEFAULT = 0;
+      TIMESTAMP_PRECISION_MILLIS = 1;
+    }
+
+    bool no_frames_interleaving = 1;
+    bool no_audio_interleaving = 2;
+    bool interleave_transcript = 3;
+    google.ai.generativelanguage.v1main.VerbalizationSchema.ModalityInterleavingOptions.TimestampPrecision timestamp_precision = 4;
+    int32 audio_timestamp_at_most_every_millis = 5;
+  }
+
+  message EmailQuotedTextDetectionOptions {
+    optional bool quoted_text_detection_enabled = 1;
+    optional bool email_text_cleaner_enabled = 2;
+    optional bool quotes_from_the_first_message_kept = 3;
+    optional bool fail_open = 4;
+    optional bool signatures_removed = 5;
+    optional bool group_footers_removed = 6;
+  }
+
+  message EmailOptions {
+    enum EmailOutputFormat {
+      EMAIL_OUTPUT_FORMAT_UNSPECIFIED = 0;
+      FORMATTED_TEXT = 1;
+      JSON = 2;
+    }
+
+    google.ai.generativelanguage.v1main.VerbalizationSchema.EmailOptions.EmailOutputFormat output_format = 1;
+    google.ai.generativelanguage.v1main.VerbalizationSchema.EmailQuotedTextDetectionOptions quoted_text_detection_options = 2;
+    repeated string attachment_mime_types = 3;
+  }
+
+  message ChatOptions {
+    optional bool verbalize_unread_message_count = 1;
+  }
+
+  message ImageFactsSchema {
+    message ImageFactsPiece {
+      oneof piece {
+        string plain_text = 1;
+        string ocr_text_format = 2;
+        string whole_image_entities_format = 3;
+        string image_region_entities_format = 4;
+        string entities_format = 5;
+        string people_entities_format = 6;
+        string high_confidence_results_format = 7;
+        string lens_scene_description_format = 8;
+      }
+    }
+
+    optional string piece_separator = 1;
+    optional string entities_separator = 2;
+    optional string hcc_separator = 3;
+    repeated google.ai.generativelanguage.v1main.VerbalizationSchema.ImageFactsSchema.ImageFactsPiece pieces = 4;
+    optional bool image_facts_after_image = 5;
+  }
+
+  message PdfSchema {
+    optional bool verbalize_page_number = 1;
+    optional bool verbalize_pdf_delimiters = 2;
+    optional bool verbalize_text_delimiters = 3;
+  }
+
+  message HighFidelityDocumentOptions {
+    enum CommentPlacement {
+      COMMENT_PLACEMENT_UNSPECIFIED = 0;
+      END_OF_CHAPTER = 1;
+      END_OF_PARAGRAPH = 2;
+      INLINE = 3;
+    }
+
+    google.ai.generativelanguage.v1main.VerbalizationSchema.HighFidelityDocumentOptions.CommentPlacement comment_placement = 1;
+  }
+
+  message MeetingOptions {
+    enum GeneralVerbalizationMode {
+      GENERAL_VERBALIZATION_MODE_UNSPECIFIED = 0;
+      FULL = 1;
+      WITH_METADATA = 2;
+    }
+
+    message MeetingTranscriptOptions {
+      enum TimestampGranularity {
+        TIMESTAMP_GRANULARITY_UNSPECIFIED = 0;
+        SECTION = 1;
+        PARAGRAPH = 2;
+      }
+
+      google.ai.generativelanguage.v1main.VerbalizationSchema.MeetingOptions.MeetingTranscriptOptions.TimestampGranularity timestamp_granularity = 1;
+    }
+
+    google.ai.generativelanguage.v1main.VerbalizationSchema.MeetingOptions.GeneralVerbalizationMode general_verbalization_mode = 1;
+    google.ai.generativelanguage.v1main.VerbalizationSchema.MeetingOptions.MeetingTranscriptOptions transcript_options = 2;
+  }
+
+  optional google.ai.generativelanguage.v1main.VerbalizationSchema.TableOutputType table_output_type = 2;
+  optional string separator = 4;
+  optional string page_index_format = 5;
+  optional string page_end_format = 26;
+  optional google.ai.generativelanguage.v1main.VerbalizationSchema.SpreadsheetOutputFormat spreadsheet_output_format = 27;
+  optional string truncation_marker = 8;
+  optional string timezone = 20;
+  google.ai.generativelanguage.v1main.VerbalizationSchema.CitationChunkingOptions citation_chunking_options = 9;
+  google.ai.generativelanguage.v1main.VerbalizationSchema.PanAndScanSchema pan_and_scan_schema = 11;
+  google.ai.generativelanguage.v1main.VerbalizationSchema.MMVerbalizationOptions image_verbalization_options = 15;
+  google.ai.generativelanguage.v1main.VerbalizationSchema.MMVerbalizationOptions audio_verbalization_options = 16;
+  oneof video_options {
+    google.ai.generativelanguage.v1main.VerbalizationSchema.MMVerbalizationOptions video_verbalization_options = 17;
+    google.ai.generativelanguage.v1main.VerbalizationSchema.VideoComponentVerbalizationOptions video_component_options = 23;
+  }
+  google.ai.generativelanguage.v1main.VerbalizationSchema.ModalityInterleavingOptions modality_interleaving_options = 25;
+  google.ai.generativelanguage.v1main.VerbalizationSchema.EmailOptions email_options = 19;
+  google.ai.generativelanguage.v1main.VerbalizationSchema.ChatOptions chat_options = 21;
+  google.ai.generativelanguage.v1main.VerbalizationSchema.ImageFactsSchema image_facts_schema = 18;
+  google.ai.generativelanguage.v1main.VerbalizationSchema.PdfSchema pdf_schema = 22;
+  google.ai.generativelanguage.v1main.VerbalizationSchema.HighFidelityDocumentOptions high_fidelity_document_options = 24;
+  google.ai.generativelanguage.v1main.VerbalizationSchema.MeetingOptions meeting_options = 28;
+  reserved 1, 3, 6 to 7, 10, 12 to 14;
+}
+
+message TokenManagementOptions {
+  optional int32 max_num_tokens = 1;
+}

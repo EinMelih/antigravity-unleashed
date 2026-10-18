@@ -1,0 +1,97 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: learning/genai/api/genai_versioning.proto
+
+syntax = "proto3";
+
+package gaos.api;
+
+import "google/api/http.proto";
+import "google/api/policy.proto";
+import "google/api/resource.proto";
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.ServiceOptions {
+  gaos.api.VersioningMap versioning_map = 525000157;
+  string platforms = 525000158;
+  string visibility_exclusion = 525000159;
+}
+
+extend proto2.MethodOptions {
+  gaos.api.VersioningMap method_versioning_map = 525000158;
+  string method_platforms = 525000159;
+  gaos.api.VisibilityMap method_visibility_map = 525000160;
+  gaos.api.HttpRuleMap method_http_map = 525000161;
+  gaos.api.MethodPolicyMap method_policy_map = 525000162;
+  gaos.api.ResponseMapping response_mappings = 525000165;
+  string request_schema = 525000166;
+  bool is_internal = 525000167;
+  string method_visibility_exclusion = 525000169;
+}
+
+extend proto2.MessageOptions {
+  gaos.api.VersioningMap message_versioning_map = 535801958;
+  string message_platforms = 535801959;
+  gaos.api.VisibilityMap message_visibility_map = 535801960;
+  gaos.api.ResourceDescriptorMap message_resource_map = 535801961;
+  string schema_name_override = 535801967;
+  string message_visibility_exclusion = 535900004;
+}
+
+extend proto2.FieldOptions {
+  gaos.api.VersioningMap field_versioning_map = 525000211;
+  string field_platforms = 525000212;
+  gaos.api.VisibilityMap field_visibility_map = 525000213;
+  gaos.api.ResourceReferenceMap field_resource_reference_map = 525000214;
+  string field_visibility_exclusion = 525000226;
+  string field_schema_name_override = 525000236;
+}
+
+extend proto2.EnumOptions {
+  gaos.api.VersioningMap enum_versioning_map = 525000153;
+  string enum_platforms = 525000154;
+  gaos.api.VisibilityMap enum_visibility_map = 525000155;
+  string enum_visibility_exclusion = 525000156;
+}
+
+extend proto2.EnumValueOptions {
+  gaos.api.VersioningMap value_versioning_map = 535802946;
+  string value_platforms = 535802947;
+  gaos.api.VisibilityMap value_visibility_map = 535802948;
+  string value_visibility_exclusion = 535802984;
+}
+
+message VersioningMap {
+  map<string, string> restriction = 1;
+}
+
+message VisibilityMap {
+  map<string, string> restriction = 1;
+}
+
+message HttpRuleMap {
+  map<string, google.api.HttpRule> platform_https = 1;
+}
+
+message MethodPolicyMap {
+  map<string, google.api.MethodPolicy> platform_policies = 1;
+}
+
+message ResourceReferenceMap {
+  map<string, google.api.ResourceReference> platform_resource_references = 1;
+}
+
+message ResourceDescriptorMap {
+  map<string, google.api.ResourceDescriptor> platform_resources = 1;
+}
+
+message ResponseMapping {
+  string media_type = 1;
+  string schema_name = 2;
+  repeated gaos.api.VendorExtension vendor_extensions = 3;
+}
+
+message VendorExtension {
+  string key = 1;
+  string value = 2;
+}

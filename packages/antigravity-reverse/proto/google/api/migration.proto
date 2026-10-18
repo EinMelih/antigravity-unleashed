@@ -1,0 +1,399 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/api/migration.proto
+
+syntax = "proto3";
+
+package google.api;
+
+import "google/protobuf/wrappers.proto";
+import "google/api/tex.proto";
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.MessageOptions {
+  google.api.MigrationMessageRule message_migration = 182434174;
+}
+
+extend proto2.EnumOptions {
+  google.api.MigrationEnumRule enum_migration = 214180820;
+}
+
+extend proto2.MethodOptions {
+  google.api.MigrationRule method_migration = 124888596;
+}
+
+extend proto2.FieldOptions {
+  google.api.MigrationFieldRule field_migration = 158016499;
+}
+
+extend proto2.EnumValueOptions {
+  google.api.MigrationEnumValueRule enum_value_migration = 272764843;
+}
+
+extend proto2.ServiceOptions {
+  google.api.MigrationApiRule api_migration = 351442474;
+}
+
+enum AltType {
+  ALT_TYPE_UNSPECIFIED = 0;
+  JSON = 1;
+  MEDIA = 2;
+  PROTO = 3;
+  JSPB = 4;
+  SSE = 5;
+}
+
+enum GaiaMintOption {
+  GAIA_MINT_OPTION_UNSPECIFIED = 0;
+  HOSTED_USER_INFO = 1;
+  GAIA_GROUPS = 2;
+}
+
+message Migration {
+  map<string, google.api.ErrorDomain> errors = 2;
+  repeated google.api.MigrationRule rules = 1;
+  bool prefer_distrib_discovery = 3;
+  bool disable_apiary_method_names_check = 28;
+  map<string, string> proto_to_apiary_method_names = 4;
+  repeated google.api.MigrationFieldRule field_rules = 5;
+  repeated google.api.MigrationMessageRule message_rules = 6;
+  repeated google.api.MigrationEnumRule enum_rules = 8;
+  string apiary_discovery_name = 7;
+  int32 batch_inner_requests_count_soft_limit = 9;
+  bool return_403_for_batch_quota_errors = 10;
+  bool allow_batch_inner_path_without_leading_slash = 12;
+  google.api.Tex tex = 11;
+  repeated google.api.FieldReplacementRule field_replacement_rules = 13;
+  map<string, google.api.JsonSchema> schemas = 14;
+  repeated google.api.JsonSchemaProperties schema_properties_per_version = 26;
+  bool use_apiary_style_discovery_url = 15;
+  google.api.UsageManagerConfig usage_manager_config = 16;
+  bool retry_for_unavailable_retriable_err = 17;
+  bool allow_backend_batch_request_without_content_id = 18;
+  repeated google.api.MigrationEnumValueRule enum_value_rules = 19;
+  google.api.DiscoveryConfig discovery_config = 20;
+  repeated google.api.MethodReplacementRule method_replacement_rules = 21;
+  repeated google.api.MethodParameterRule method_parameter_rules = 22;
+  google.api.GfeRedirectConfig batch_redirect_config = 23;
+  string force_alternative_service_header = 24;
+  bool allow_credential_project_fallback_for_malformed_api_key = 25;
+  google.api.ErrorFallbackConfig error_fallback_config = 27;
+  google.api.QuotaUserOverrideConfig quota_user_override = 29;
+  repeated google.api.MigrationApiRule api_rules = 30;
+  bool use_apiary_batch_response_header_allowlist = 31;
+  optional int32 service_suspended_enforcement_id = 33;
+  optional bool enable_domain_restriction = 34;
+  reserved 32;
+}
+
+message DiscoveryConfig {
+  message IconUrlOverrides {
+    string x16 = 1;
+    string x32 = 2;
+  }
+
+  bool use_proto_to_apiary_method_names = 1;
+  bool propagate_lower_camel_enums_flags = 2;
+  bool warn_for_propagation_conflicts = 3;
+  bool propagate_use_legacy_json_map_format_flags = 4;
+  bool derive_collection_from_discovery_per_version = 5;
+  bool derive_collection_from_multi_levels = 6;
+  bool allow_schema_inline_messages = 7;
+  string package_path = 8;
+  bool enable_top_level_methods = 9;
+  map<string, string> service_paths = 10;
+  bool skip_service_control_for_legacy_discovery_url = 11;
+  google.api.DiscoveryConfig.IconUrlOverrides icon_url_overrides = 12;
+  bool sort_required_query_params = 13;
+  bool suppress_empty_parameter_order = 14;
+  bool allow_batch_path_override = 15;
+  bool allow_discoverable_user_ip_system_parameter = 16;
+}
+
+message UsageManagerConfig {
+  string api_name = 1;
+  repeated google.api.UsageManagerConfigRule rules = 2;
+}
+
+message UsageManagerConfigRule {
+  string selector = 1;
+  string api_version = 2;
+  string quota_bucket_name = 4;
+  string address = 3;
+}
+
+message MigrationRule {
+  string selector = 1;
+  bool lower_camel_enums = 2;
+  bool use_ints_for_enums = 57;
+  bool use_v1_error_format = 3;
+  bool use_v1_error_legacy_format = 28;
+  bool use_backend_canonical_error_reason = 46;
+  bool use_web_safe_base64_for_byte_fields = 4;
+  bool ignore_unknown_fields = 5;
+  bool ignore_unknown_query_params = 41;
+  bool suppress_empty_repeated_fields = 6;
+  bool skip_activation_check = 7;
+  bool allow_unregistered_requests = 8;
+  bool return_204_for_empty_response = 9;
+  bool clear_json_body_for_backend_204_response = 52;
+  bool allow_int_to_string_conversion = 10;
+  bool allow_primitive_type_conversion = 30;
+  bool treat_invalid_boolean_string_as_false = 60;
+  bool drop_json_primitive_type_data_to_message_field = 62;
+  string apiary_method_name = 11;
+  bool return_403_for_quota_errors = 12;
+  bool allow_http_multipart_form_data = 13;
+  bool use_resource_project_override = 14;
+  bool always_output_empty_repeated_fields = 15;
+  repeated google.api.AltType supported_alt_types = 16;
+  google.api.AltType default_alt_type = 43;
+  google.api.Impersonation impersonation = 17;
+  string apiary_rpc_error_filter = 18;
+  bool hide_from_discovery = 19;
+  bool hide_additional_bindings_from_discovery = 64;
+  bool use_apiary_fields_parameter_syntax = 20;
+  bool ignore_fields_mask_for_httpbody_response = 44;
+  bool use_apiary_method_name_for_gws_log = 21;
+  bool use_apiary_method_name_for_reporting = 50;
+  bool pass_through_access_token = 22;
+  repeated google.api.GaiaMintOption gaia_mint_options = 23;
+  bool ignore_access_token = 24;
+  bool allow_auth_sub = 25;
+  bool ignore_invalid_enums = 26;
+  bool ignore_request_payload = 48;
+  bool ignore_request_payload_if_content_type_is_empty = 49;
+  bool ignore_non_message_json_payload = 29;
+  bool ignore_null_value_map_entry = 31;
+  bool use_legacy_json_map_format = 45;
+  bool suppress_empty_object_in_json_response = 32;
+  bool allow_liberal_unsigned_parsing = 33;
+  google.api.GfeRedirectConfig gfe_redirect_config = 34;
+  bool enable_project_blacklist_redirection = 35;
+  bool enable_alternative_field_for_json_array_deserialization = 36;
+  bool enable_quota_user_override = 37;
+  bool chemist_is_source_of_truth_in_dual_check_mode = 38;
+  bool allow_first_party_auth_v1 = 39;
+  bool use_client_ip_as_quota_user = 40;
+  bool return_500_for_client_error = 42;
+  bool do_not_require_wildcard_for_map_key_field = 47;
+  bool respect_root_wildcard_in_field_mask = 56;
+  bool ignore_pseudo_anonymous_credential_projects = 53;
+  bool ignore_anonymous_credential_projects = 67;
+  bool use_gdata_error_code_for_v1_legacy_error = 54;
+  bool return_401_for_session_error = 55;
+  string default_field_mask = 58;
+  bool ignore_field_mask = 59;
+  bool return_empty_response_for_empty_field_mask = 63;
+  bool concat_repeated_http_headers_in_context = 61;
+  bool use_default_alt_if_inferred_alt_unsupported = 65;
+  google.api.JsonFixupConfig json_fixup_config = 66;
+  bool use_location_from_gdata_error = 68;
+  bool disable_implicit_list = 69;
+  bool ignore_spatula = 70;
+  bool allow_scotty_download_use_http_head = 71;
+  bool always_present_empty_repeated_fields_for_legacy_map = 72;
+  reserved 27, 51;
+}
+
+message MethodParameterRule {
+  message ParameterConfig {
+    enum ParameterType {
+      PARAMETER_TYPE_UNSPECIFIED = 0;
+      STRING = 1;
+      BOOLEAN = 2;
+      INT32 = 3;
+      INT64 = 4;
+      UINT32 = 5;
+      UINT64 = 6;
+      FLOAT = 7;
+      DOUBLE = 8;
+      BYTES = 9;
+      DATETIME = 10;
+      DATE = 11;
+      ETAG = 12;
+    }
+
+    string param_name = 1;
+    google.api.FieldConstraintConfig constraint_config = 2;
+    bool is_required = 3;
+    bool is_repeated = 5;
+    google.api.MethodParameterRule.ParameterConfig.ParameterType type = 4;
+  }
+
+  string selector = 1;
+  repeated google.api.MethodParameterRule.ParameterConfig parameters = 2;
+}
+
+message GfeRedirectConfig {
+  message ErrorFilter {
+    message SubcodeConfig {
+      string subcode = 1;
+      google.protobuf.DoubleValue fraction_redirected = 3;
+      reserved 2;
+    }
+
+    string error_code_pattern = 1;
+    repeated google.api.GfeRedirectConfig.ErrorFilter.SubcodeConfig subcodes = 2;
+  }
+
+  repeated string error_code_pattern = 1;
+  bool enabled_on_request_flow = 2;
+  bool enabled_on_response_flow = 3;
+  bool enable_project_overrides = 4;
+  repeated google.api.GfeRedirectConfig.ErrorFilter error_filters = 5;
+  bool enable_inner_batch_error_fallback = 6;
+}
+
+message ErrorFallbackConfig {
+  string forwarding_httpservice_address = 2;
+  reserved 1;
+}
+
+message JsonFixupConfig {
+  bool enable_json_fixup = 1;
+}
+
+message Impersonation {
+  bool allow_first_party_auth = 1;
+  bool allow_oauth = 2;
+  repeated string allowed_oauth_client_ids = 3;
+}
+
+message QuotaUserOverrideConfig {
+  repeated string allowed_projects = 1;
+  repeated string denied_projects = 2;
+}
+
+message MigrationFieldRule {
+  string selector = 1;
+  bool always_output = 2;
+  bool hide_from_discovery = 3;
+  bool http_param = 4;
+  string pattern = 5;
+  string default_value = 6;
+  string alternative_field_name = 7;
+  google.api.FieldConstraintConfig constraint_config = 9;
+  repeated string requiring_methods = 10;
+  bool disable_inlining = 11;
+  bool map_key = 12;
+  bool enable_discovery_field_mask_paths_query_param = 13;
+  reserved 8;
+}
+
+message MigrationMessageRule {
+  string selector = 1;
+  bool hide_from_discovery = 2;
+  bool discovery_hide_empty_schema = 3;
+  bool discovery_use_proto_for_outer_message_name = 4;
+  google.api.DiscoveryMessageConfig discovery_message_config = 5;
+  string schema_name_override = 6;
+}
+
+message MigrationApiRule {
+  string selector = 1;
+  bool disable_api_package_version_consistency_check = 2;
+}
+
+message MigrationEnumValueRule {
+  string selector = 1;
+  bool hide_from_discovery = 2;
+}
+
+message MigrationEnumRule {
+  string selector = 1;
+  bool lower_camel_enums = 2;
+  map<string, string> proto_to_json_value_names = 3;
+  bool hide_from_discovery = 4;
+  bool discovery_sort_enum_values = 5;
+}
+
+message ErrorDomain {
+  map<string, google.api.ErrorDefinitions> error_definitions = 1;
+}
+
+message ErrorDefinitions {
+  repeated google.api.ErrorDefinition definitions = 1;
+}
+
+message ErrorDefinition {
+  string external_name = 1;
+  string error_message = 2;
+  string extended_help = 3;
+  string domain = 4;
+  string reason = 5;
+  string location = 6;
+  google.api.ErrorPredicate predicate = 7;
+  map<string, string> http_error_headers = 8;
+}
+
+message ErrorPredicate {
+  string location = 1;
+  string method = 2;
+}
+
+message FieldConstraintConfig {
+  google.protobuf.StringValue default_value = 2;
+  google.protobuf.StringValue pattern = 3;
+  google.protobuf.Int64Value min_value = 4;
+  google.protobuf.Int64Value max_value = 5;
+  google.protobuf.StringValue description = 6;
+  google.protobuf.BoolValue is_required = 8;
+  reserved 1, 7;
+}
+
+message DiscoveryMessageConfig {
+  bool inline_message = 1;
+  bool shallow_inline_message = 2;
+  bool hide_empty_schema = 3;
+  bool use_proto_for_outer_message_name = 4;
+}
+
+message JsonSchema {
+  message JsonSchemaAnnotations {
+    repeated google.protobuf.StringValue required = 1;
+  }
+
+  google.protobuf.StringValue id = 1;
+  google.protobuf.StringValue ref = 2;
+  google.protobuf.StringValue description = 3;
+  google.protobuf.StringValue default = 4;
+  google.protobuf.StringValue required = 5;
+  google.protobuf.StringValue minimum = 6;
+  google.protobuf.StringValue maximum = 7;
+  google.protobuf.StringValue pattern = 8;
+  google.protobuf.StringValue type = 9;
+  oneof additional_properties_kind {
+    google.api.JsonSchema additional_property_restrictions = 10;
+    google.protobuf.BoolValue additional_properties_allowed = 11;
+  }
+  google.api.JsonSchema items = 12;
+  map<string, google.api.JsonSchema> properties = 13;
+  google.protobuf.StringValue format = 14;
+  google.protobuf.BoolValue read_only = 15;
+  google.api.JsonSchema.JsonSchemaAnnotations annotations = 16;
+}
+
+message JsonSchemaProperties {
+  string version = 1;
+  repeated string hide_from_schemas = 2;
+}
+
+message FieldReplacementRule {
+  string selector = 1;
+  string schema = 2;
+  bool inline_schema = 3;
+}
+
+message MethodReplacementRule {
+  string selector = 1;
+  string request_schema = 2;
+  string response_schema = 3;
+  bool inline_request_schema = 4;
+  bool inline_response_schema = 5;
+  bool hide_request_body_from_discovery = 7;
+  bool hide_response_body_from_discovery = 8;
+  repeated string parameter_order = 9;
+  bool supports_subscription = 10;
+  string request_parameter_name = 11;
+}

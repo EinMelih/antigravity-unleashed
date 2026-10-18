@@ -1,0 +1,50 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: third_party/jetski/host_bridge_pb/host_bridge.proto
+
+syntax = "proto3";
+
+package exa.host_bridge_pb;
+
+import "google/protobuf/timestamp.proto";
+
+message GetUpdateStatusRequest {
+}
+
+message GetUpdateStatusResponse {
+  exa.host_bridge_pb.UpdateStatus status = 1;
+}
+
+message UpdateStatus {
+  string current_version = 1;
+  string latest_version = 2;
+  bool update_available = 3;
+}
+
+message ApplyUpdateRequest {
+}
+
+message ApplyUpdateResponse {
+  bool accepted = 1;
+}
+
+message GetOAuthTokenRequest {
+}
+
+message GetOAuthTokenResponse {
+  exa.host_bridge_pb.OAuthTokenInfo token_info = 1;
+}
+
+message OAuthTokenInfo {
+  string access_token = 1;
+  string token_type = 2;
+  string refresh_token = 3;
+  google.protobuf.Timestamp expiry = 4;
+  bool is_gcp_tos = 6;
+}
+
+service HostBridgeService {
+  rpc GetUpdateStatus (exa.host_bridge_pb.GetUpdateStatusRequest) returns (exa.host_bridge_pb.GetUpdateStatusResponse);
+  rpc ApplyUpdate (exa.host_bridge_pb.ApplyUpdateRequest) returns (exa.host_bridge_pb.ApplyUpdateResponse);
+  rpc GetOAuthToken (exa.host_bridge_pb.GetOAuthTokenRequest) returns (exa.host_bridge_pb.GetOAuthTokenResponse);
+}

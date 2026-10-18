@@ -1547,6 +1547,7 @@
         overlay.style.bottom = '80px';
         overlay.style.right = '20px';
         overlay.style.width = '320px';
+        overlay.dataset.amsQuickMenu = 'true';
         overlay.style.background = 'rgba(20, 20, 23, 0.85)';
         overlay.style.backdropFilter = 'blur(16px)';
         overlay.style.border = '1px solid rgba(255, 255, 255, 0.08)';
@@ -1809,10 +1810,32 @@
                     label.textContent = apiWindowVisible
                         ? 'API-Fenster: sichtbar (klicken zum Verstecken)'
                         : 'API-Fenster: versteckt (klicken zum Anzeigen)';
+                    if (typeof window.amsApplyI18nToDom === 'function') {
+                        window.amsApplyI18nToDom(apiWindowItem);
+                    }
                 }
             }).catch(() => {});
         }
+
+        const langSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+        const activeLang = (typeof window.amsGetLang === 'function') ? window.amsGetLang() : 'en';
+        const langItem = createMenuItem(
+            activeLang === 'de'
+                ? '🌐 Sprache: Deutsch (klicken für English)'
+                : '🌐 Language: English (click for Deutsch)',
+            langSvg,
+            async () => {
+                if (typeof window.amsToggleLang === 'function') {
+                    await window.amsToggleLang();
+                }
+            },
+        );
+        actionsSection.appendChild(langItem);
+
         overlay.appendChild(actionsSection);
+        if (typeof window.amsApplyI18nToDom === 'function') {
+            window.amsApplyI18nToDom(overlay);
+        }
 
         // Signature Footer ("Markenzeichen")
         const signatureFooter = document.createElement('div');

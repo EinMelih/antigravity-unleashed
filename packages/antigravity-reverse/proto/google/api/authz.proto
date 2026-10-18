@@ -1,0 +1,18 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/api/authz.proto
+
+syntax = "proto3";
+
+package google.api;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.FieldOptions {
+  google.api.AuthorizationRule authz = 119718449;
+}
+
+message AuthorizationRule {
+  string selector = 1;
+  string permissions = 2;
+}

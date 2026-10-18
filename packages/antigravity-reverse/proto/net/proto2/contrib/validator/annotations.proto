@@ -1,0 +1,47 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: net/proto2/contrib/validator/annotations.proto
+
+syntax = "proto3";
+
+package validator;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.MessageOptions {
+  validator.Definitions defs = 127878962;
+}
+
+extend proto2.FieldOptions {
+  validator.FieldValidationRule rule = 127878962;
+}
+
+extend proto2.OneofOptions {
+  validator.OneOfValidationRule one_of = 127878962;
+}
+
+message Definitions {
+  repeated string feature = 1;
+  repeated validator.OneOfGroup one_of_group = 2;
+}
+
+message FieldValidationRule {
+  oneof field_presence_predicate {
+    string is_required = 1;
+    string present_iff = 5;
+  }
+  repeated string predicate = 2;
+  repeated string element_predicate = 3;
+  string one_of = 4;
+  bool skip_message_validation = 6;
+  bool can_report_all_predicate_violations = 7;
+}
+
+message OneOfGroup {
+  string name = 1;
+  string is_required = 2;
+}
+
+message OneOfValidationRule {
+  string is_required = 1;
+}

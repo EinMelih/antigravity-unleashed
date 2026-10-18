@@ -1,0 +1,51 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: third_party/jetski/config_pb/config.proto
+
+syntax = "proto3";
+
+package exa.config_pb;
+
+import "third_party/jetski/cortex_pb/cortex.proto";
+import "third_party/jetski/jetbox_state_pb/jetbox_state.proto";
+
+enum ConversationGroupSortMode {
+  CONVERSATION_GROUP_SORT_MODE_UNSPECIFIED = 0;
+  CONVERSATION_GROUP_SORT_MODE_CUSTOM = 1;
+  CONVERSATION_GROUP_SORT_MODE_LAST_UPDATED = 2;
+  CONVERSATION_GROUP_SORT_MODE_DATE_CREATED = 3;
+  CONVERSATION_GROUP_SORT_MODE_LAST_USER_PROMPT = 4;
+}
+
+message UserConfig {
+  map<string, exa.cortex_pb.SidecarUserConfig> sidecars = 1;
+  jetbox_state_pb.UserSettings user_settings = 2;
+  map<string, exa.config_pb.PluginUserConfig> plugins = 3;
+  optional exa.config_pb.ConversationGroupRegistry conversation_groups = 4;
+  map<string, exa.config_pb.SkillUserConfig> skills = 5;
+}
+
+message ConversationGroupRegistry {
+  map<string, exa.config_pb.ConversationGroupConfig> groups = 1;
+}
+
+message ConversationGroupConfig {
+  optional string name = 1;
+  optional int32 sort_order = 2;
+  optional exa.config_pb.ConversationGroupSortMode sort_mode = 3;
+  repeated string conversation_ids = 4;
+}
+
+message PluginUserConfig {
+  optional bool enabled = 1;
+  optional exa.cortex_pb.MarketplaceInstall installed_from = 2;
+  map<string, exa.config_pb.PluginMcpUserConfig> mcp = 3;
+}
+
+message PluginMcpUserConfig {
+  map<string, string> variables = 1;
+}
+
+message SkillUserConfig {
+  optional exa.cortex_pb.MarketplaceInstall installed_from = 1;
+}

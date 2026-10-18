@@ -1,0 +1,81 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: third_party/jetski/plugin_context_pb/plugin_context.proto
+
+syntax = "proto3";
+
+package exa.plugin_context_pb;
+
+enum ContractVersion {
+  CONTRACT_VERSION_UNSPECIFIED = 0;
+  CONTRACT_VERSION_CURRENT = 1;
+}
+
+enum ProbeStatus {
+  PROBE_STATUS_UNSPECIFIED = 0;
+  PROBE_STATUS_OK = 1;
+  PROBE_STATUS_UNAUTHENTICATED = 2;
+  PROBE_STATUS_APPLICATION_VERSION_TOO_LOW = 3;
+  PROBE_STATUS_PLUGIN_VERSION_TOO_LOW = 4;
+  PROBE_STATUS_ERROR = 5;
+}
+
+message ProbeRequest {
+  int32 min_version = 1;
+  int32 max_version = 2;
+}
+
+message ProbeResponse {
+  int32 contract_version = 1;
+  exa.plugin_context_pb.ProbeStatus status = 2;
+  string status_message = 3;
+  string user_help = 4;
+}
+
+message CandidateItem {
+  string uri = 1;
+  string icon_uri = 2;
+  string label = 3;
+  string description = 4;
+}
+
+message ContextProviderDefinition {
+  string trigger = 1;
+  string label = 2;
+  string icon_uri = 3;
+  repeated string command = 4;
+  optional int32 debounce_ms = 5;
+  repeated string options = 6;
+  repeated string uri_patterns = 7;
+}
+
+message AntigravityPluginExtension {
+  map<string, exa.plugin_context_pb.ContextProviderDefinition> context_providers = 1;
+}
+
+message SearchRequest {
+  string query = 1;
+}
+
+message SearchResponse {
+  bool ok = 1;
+  string error_message = 2;
+  repeated exa.plugin_context_pb.CandidateItem items = 3;
+  int32 cache_ttl_seconds = 4;
+}
+
+message ResolveUriRequest {
+  string uri = 1;
+}
+
+message ResolveUriResponse {
+  bool ok = 1;
+  string error_message = 2;
+  exa.plugin_context_pb.CandidateItem item = 3;
+}
+
+service ContextProviderService {
+  rpc Probe (exa.plugin_context_pb.ProbeRequest) returns (exa.plugin_context_pb.ProbeResponse);
+  rpc Search (exa.plugin_context_pb.SearchRequest) returns (exa.plugin_context_pb.SearchResponse);
+  rpc ResolveUri (exa.plugin_context_pb.ResolveUriRequest) returns (exa.plugin_context_pb.ResolveUriResponse);
+}

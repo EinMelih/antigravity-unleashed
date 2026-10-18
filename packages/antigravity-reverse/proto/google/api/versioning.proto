@@ -1,0 +1,49 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/api/versioning.proto
+
+syntax = "proto3";
+
+package google.api;
+
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.FileOptions {
+  google.api.VersioningFileInfo versioning_file_info = 244132745;
+}
+
+extend proto2.ServiceOptions {
+  google.api.VersioningRule api_versioning = 143069646;
+}
+
+extend proto2.MethodOptions {
+  google.api.VersioningRule method_versioning = 143069646;
+}
+
+extend proto2.MessageOptions {
+  google.api.VersioningRule message_versioning = 143069646;
+}
+
+extend proto2.FieldOptions {
+  google.api.VersioningRule field_versioning = 143069646;
+}
+
+extend proto2.EnumOptions {
+  google.api.VersioningRule enum_versioning = 143069646;
+}
+
+extend proto2.EnumValueOptions {
+  google.api.VersioningRule value_versioning = 143069646;
+}
+
+message VersioningRule {
+  string selector = 1;
+  string restriction = 2;
+}
+
+message VersioningFileInfo {
+  string original_name = 1;
+  string original_proto_package = 2;
+  string new_api_version = 3;
+  proto2.FileOptions original_file_options = 4;
+}

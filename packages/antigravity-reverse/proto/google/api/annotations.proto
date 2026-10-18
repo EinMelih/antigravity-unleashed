@@ -1,0 +1,14 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/api/annotations.proto
+
+syntax = "proto3";
+
+package google.api;
+
+import "google/api/http.proto";
+import "net/proto2/proto/descriptor.proto";
+
+extend proto2.MethodOptions {
+  google.api.HttpRule http = 72295728;
+}

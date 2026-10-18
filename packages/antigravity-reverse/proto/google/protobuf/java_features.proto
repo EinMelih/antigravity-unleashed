@@ -1,0 +1,37 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/protobuf/java_features.proto
+
+syntax = "proto3";
+
+package pb;
+
+extend google.protobuf.FeatureSet {
+  pb.JavaFeatures java = 1001;
+}
+
+message JavaFeatures {
+  enum Utf8Validation {
+    UTF8_VALIDATION_UNKNOWN = 0;
+    DEFAULT = 1;
+    VERIFY = 2;
+  }
+
+  message NestInFileClassFeature {
+    enum NestInFileClass {
+      NEST_IN_FILE_CLASS_UNKNOWN = 0;
+      NO = 1;
+      YES = 2;
+      LEGACY = 3;
+    }
+
+    reserved 1 to 536870911;
+  }
+
+  bool legacy_closed_enum = 1;
+  pb.JavaFeatures.Utf8Validation utf8_validation = 2;
+  bool large_enum = 3;
+  bool use_old_outer_classname_default = 4;
+  pb.JavaFeatures.NestInFileClassFeature.NestInFileClass nest_in_file_class = 5;
+  reserved 6;
+}

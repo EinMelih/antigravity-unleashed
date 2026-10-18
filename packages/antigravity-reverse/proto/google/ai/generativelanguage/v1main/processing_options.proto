@@ -1,0 +1,339 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/ai/generativelanguage/v1main/processing_options.proto
+
+syntax = "proto3";
+
+package google.ai.generativelanguage.v1main;
+
+import "google/protobuf/duration.proto";
+import "google/ai/generativelanguage/v1main/resolution.proto";
+
+message ProcessingOptions {
+  enum MergeStrategy {
+    MERGE_STRATEGY_UNSPECIFIED = 0;
+    MERGE = 1;
+    EXPLICIT_OPTIONS = 2;
+  }
+
+  google.ai.generativelanguage.v1main.ParsingOptions parsing_options = 1;
+  google.ai.generativelanguage.v1main.ExtractedContentOptions extracted_content_options = 2;
+  string main_recipe_id = 7;
+  repeated string token_and_safety_recipe_ids = 3;
+  repeated google.ai.generativelanguage.v1main.MediaResolution image_media_resolutions = 4;
+  repeated google.ai.generativelanguage.v1main.MediaResolution video_frame_media_resolutions = 5;
+  google.ai.generativelanguage.v1main.BeyondProcessorConfig beyond_processor_config = 6;
+  google.ai.generativelanguage.v1main.ProcessingOptions.MergeStrategy merge_strategy = 8;
+  optional string role = 9;
+  bool c2pa_model_gen_check_enabled = 10;
+}
+
+message BeyondProcessorConfig {
+  message ParsersConfig {
+    repeated google.ai.generativelanguage.v1main.BeyondProcessorConfig.ParsersConfig.RoutingMapEntry routing_map = 1;
+  }
+
+  google.ai.generativelanguage.v1main.BeyondProcessorConfig.ParsersConfig parsers_config = 1;
+}
+
+message ParsingOptions {
+  google.ai.generativelanguage.v1main.DocumentOptions document_options = 1;
+  google.ai.generativelanguage.v1main.SpreadsheetOptions spreadsheet_options = 7;
+  google.ai.generativelanguage.v1main.VideoOptions video_options = 3;
+  google.ai.generativelanguage.v1main.AudioOptions audio_options = 4;
+  google.ai.generativelanguage.v1main.ImageOptions image_options = 5;
+  google.ai.generativelanguage.v1main.FormatSpecificOptions format_specific_options = 2;
+}
+
+message DocumentPageRange {
+  optional int32 start_page_index = 1;
+  optional int32 end_page_index = 2;
+}
+
+message DocumentOptions {
+  enum OfficeParsingMode {
+    OFFICE_PARSING_MODE_UNSPECIFIED = 0;
+    LOW_FIDELITY = 1;
+    HIGH_FIDELITY = 2;
+    RENDER_AS_IMAGE = 3;
+  }
+
+  enum ContentLayer {
+    CONTENT_UNSPECIFIED = 0;
+    PAGE_IMAGE = 1;
+    PAGE_TEXT = 2;
+  }
+
+  optional int32 max_extracted_images = 1;
+  optional google.ai.generativelanguage.v1main.DocumentPageRange page_range = 3;
+  optional google.ai.generativelanguage.v1main.DocumentOptions.OfficeParsingMode office_parsing_mode = 5;
+  repeated google.ai.generativelanguage.v1main.DocumentOptions.ContentLayer content_layers = 6;
+  reserved 2, 4;
+}
+
+message SpreadsheetOptions {
+  enum ContentLayer {
+    CONTENT_UNSPECIFIED = 0;
+    VISUAL = 1;
+    DATA = 2;
+    FORMULAS = 3;
+  }
+
+  optional int32 sheet_index = 1;
+  optional string visible_cells = 2;
+  repeated google.ai.generativelanguage.v1main.SpreadsheetOptions.ContentLayer content_layers = 3;
+}
+
+message FormatSpecificOptions {
+  google.ai.generativelanguage.v1main.PdfOptions pdf_options = 1;
+  google.ai.generativelanguage.v1main.VideoOptions video_options = 2;
+  google.ai.generativelanguage.v1main.WorkspaceOptions workspace_options = 3;
+  google.ai.generativelanguage.v1main.EmailThreadOptions email_thread_options = 4;
+  google.ai.generativelanguage.v1main.ApcOptions apc_options = 5;
+}
+
+message ApcOptions {
+  enum OptimizationMode {
+    OPTIMIZATION_MODE_UNSPECIFIED = 0;
+    IN_VIEWPORT = 1;
+    UP_TO_VIEWPORT = 2;
+  }
+
+  message UrlMapping {
+    string original_url = 1;
+    string shortened_url = 2;
+  }
+
+  bool use_markdown_syntax_for_anchors = 2;
+  repeated google.ai.generativelanguage.v1main.ApcOptions.UrlMapping existing_shortened_url_mappings = 3;
+  google.ai.generativelanguage.v1main.ApcOptions.OptimizationMode optimization_mode = 4;
+  bool node_ids_disabled = 5;
+}
+
+message PdfOptions {
+  enum ImageMode {
+    UNSPECIFIED = 0;
+    EMBEDDED_IMAGES_ONLY = 1;
+    PAGE_IMAGES_ONLY = 2;
+  }
+
+  optional int32 ocr_page_count = 1;
+  optional google.ai.generativelanguage.v1main.PdfOptions.ImageMode image_mode = 2;
+  optional int32 max_rendered_image_size_px = 3;
+  optional bool native_text_extraction_disabled = 4;
+  optional int32 page_image_jpeg_quality = 5;
+}
+
+message VideoOptions {
+  enum CaptionInclusionMode {
+    CAPTION_INCLUSION_MODE_UNSPECIFIED = 0;
+    EXCLUDED = 1;
+    REQUIRED = 2;
+    OPTIONAL = 3;
+  }
+
+  message YoutubeOptions {
+    enum LiveVideoMode {
+      LIVE_VIDEO_MODE_UNSPECIFIED = 0;
+      AUTO_DETECT = 1;
+      FORCE_LIVE = 2;
+      FORCE_VOD = 3;
+    }
+
+    google.ai.generativelanguage.v1main.VideoOptions.YoutubeOptions.LiveVideoMode live_video_mode = 2;
+    reserved 1;
+  }
+
+  optional double fps = 1;
+  optional double start_pos_sec = 2;
+  optional double end_pos_sec = 3;
+  google.protobuf.Duration start_offset = 6;
+  google.protobuf.Duration end_offset = 7;
+  google.ai.generativelanguage.v1main.ImageOptions image_options = 4;
+  google.ai.generativelanguage.v1main.AudioOptions audio_options = 5;
+  google.protobuf.Duration tail_segment_duration = 8;
+  optional int32 max_frame_count = 9;
+  string sampling_seed = 11;
+  double jitter = 10;
+  optional bool exclude_audio = 16;
+  optional bool exclude_frames = 17;
+  optional bool include_captions = 14;
+  google.ai.generativelanguage.v1main.VideoOptions.CaptionInclusionMode caption_inclusion_mode = 19;
+  google.ai.generativelanguage.v1main.VideoOptions.YoutubeOptions youtube_options = 18;
+  reserved 12 to 13, 15;
+}
+
+message ImageOptions {
+  message JPEGFormat {
+    int32 jpeg_quality = 1;
+  }
+
+  message PNGFormat {
+    int32 compression_level = 1;
+  }
+
+  message ImageDimensions {
+    int32 width_px = 1;
+    int32 height_px = 2;
+  }
+
+  oneof output {
+    google.ai.generativelanguage.v1main.ImageOptions.JPEGFormat output_jpeg = 1;
+    google.ai.generativelanguage.v1main.ImageOptions.PNGFormat output_png = 2;
+  }
+  oneof size_constraint {
+    int64 max_total_px = 3;
+    google.ai.generativelanguage.v1main.ImageOptions.ImageDimensions fixed_dimensions = 8;
+    google.ai.generativelanguage.v1main.ImageOptions.ImageDimensions max_dimensions = 9;
+  }
+}
+
+message SilencePaddingOptions {
+  google.protobuf.Duration start_padding = 1;
+  google.protobuf.Duration end_padding = 2;
+}
+
+message SilenceAttenuationOptions {
+  int32 max_threshold = 1;
+  int32 min_threshold = 2;
+}
+
+message AudioOptions {
+  int32 sample_rate_hz = 1;
+  int32 channel_count = 2;
+  google.protobuf.Duration start_offset = 3;
+  google.protobuf.Duration end_offset = 4;
+  google.ai.generativelanguage.v1main.SilencePaddingOptions silence_padding_options = 5;
+  google.ai.generativelanguage.v1main.SilenceAttenuationOptions silence_attenuation_options = 6;
+}
+
+message WorkspaceOptions {
+  message DocsOptions {
+    enum ImageMode {
+      IMAGE_MODE_UNSPECIFIED = 0;
+      EMBEDDED_IMAGES_ONLY = 1;
+    }
+
+    message FullFidelity {
+      optional bool model_references_enabled = 1;
+      optional bool cursor_info_enabled = 2;
+      optional bool user_selection_info_enabled = 3;
+      optional int32 document_model_version = 4;
+    }
+
+    message LowFidelity {
+    }
+
+    oneof representation {
+      google.ai.generativelanguage.v1main.WorkspaceOptions.DocsOptions.FullFidelity full_fidelity = 1;
+      google.ai.generativelanguage.v1main.WorkspaceOptions.DocsOptions.LowFidelity low_fidelity = 2;
+    }
+    google.ai.generativelanguage.v1main.DriveItemOptions drive_item_options = 3;
+    bool enable_comment_info = 4;
+    bool user_selection_info_enabled = 6;
+    google.ai.generativelanguage.v1main.WorkspaceOptions.DocsOptions.ImageMode image_mode = 7;
+  }
+
+  message SheetsOptions {
+    enum CommentsProcessingMode {
+      COMMENTS_PROCESSING_MODE_UNSPECIFIED = 0;
+      FULL_CONTENT = 1;
+      METADATA_ONLY = 2;
+      DISABLED = 3;
+    }
+
+    google.ai.generativelanguage.v1main.DriveItemOptions drive_item_options = 1;
+    bool truncation_disabled = 2;
+    google.ai.generativelanguage.v1main.WorkspaceOptions.SheetsOptions.CommentsProcessingMode comments_processing_mode = 3;
+  }
+
+  google.ai.generativelanguage.v1main.WorkspaceOptions.DocsOptions docs_options = 1;
+  google.ai.generativelanguage.v1main.WorkspaceOptions.SheetsOptions sheets_options = 2;
+  bool pure_parsing = 3;
+}
+
+message EmailThreadOptions {
+  enum AttachmentProcessingMode {
+    ATTACHMENT_PROCESSING_MODE_UNSPECIFIED = 0;
+    NONE = 1;
+    ALL = 2;
+    ALLOWLISTED = 3;
+  }
+
+  google.ai.generativelanguage.v1main.EmailThreadOptions.AttachmentProcessingMode attachment_processing_mode = 8;
+  bool email_attachment_processing_enabled = 1;
+  bool email_attachment_metadata_only_enabled = 7;
+  repeated string allowed_attachment_mime_types = 9;
+  bool html_google_link_markdown_conversion_enabled = 2;
+  bool remove_quoted_text_enabled = 3;
+  bool convert_html_to_plain_text_enabled = 4;
+  bool remove_drafts_enabled = 5;
+  bool remove_emoji_reactions_enabled = 6;
+}
+
+message DriveItemOptions {
+  bool catch_me_up_activity_context_lookup_enabled = 1;
+}
+
+message ExtractedContentOptions {
+  google.ai.generativelanguage.v1main.ImageContentOptions image_content_options = 1;
+  google.ai.generativelanguage.v1main.TextContentOptions text_content_options = 2;
+  google.ai.generativelanguage.v1main.AudioContentOptions audio_content_options = 3;
+  google.ai.generativelanguage.v1main.VideoContentOptions video_content_options = 4;
+  optional string role = 8;
+}
+
+message ImageFactsOptions {
+  enum ImageFactsSignals {
+    IMAGE_FACTS_SIGNALS_UNSPECIFIED = 0;
+    LENS = 1;
+    OCR = 2;
+  }
+
+  repeated google.ai.generativelanguage.v1main.ImageFactsOptions.ImageFactsSignals image_facts_signals = 1;
+  bool policy_checking_enabled = 2;
+}
+
+message ImageContentOptions {
+  enum Encoding {
+    UNSPECIFIED = 0;
+    LOSSLESS = 1;
+    LOSSY = 2;
+  }
+
+  optional google.ai.generativelanguage.v1main.ImageContentOptions.Encoding encoding = 2;
+  optional bool tokenization_enabled = 3;
+  optional bool policy_checking_enabled = 4;
+  optional bool image_facts_enabled = 5;
+  optional google.ai.generativelanguage.v1main.ImageFactsOptions image_facts_options = 10;
+  optional bool image_latents_enabled = 6;
+  optional int32 lossless_compression_level = 7;
+  optional int32 lossy_quality_level = 8;
+  optional int32 max_axis_size_px = 9;
+  reserved 1;
+}
+
+message TextContentOptions {
+  bool policy_checking_enabled = 1;
+}
+
+message AudioContentOptions {
+  enum TranscriberQuality {
+    TRANSCRIBER_QUALITY_UNSPECIFIED = 0;
+    STANDARD_QUALITY = 1;
+    HIGH_QUALITY = 2;
+  }
+
+  optional bool tokenization_enabled = 2;
+  optional bool policy_checking_enabled = 3;
+  optional bool transcription_enabled = 4;
+  google.ai.generativelanguage.v1main.AudioContentOptions.TranscriberQuality transcriber_quality = 5;
+  reserved 1;
+}
+
+message VideoContentOptions {
+  google.ai.generativelanguage.v1main.ImageContentOptions video_frame_options = 3;
+  optional int32 video_frame_image_facts_stride = 4;
+  google.ai.generativelanguage.v1main.AudioContentOptions audio_content_options = 5;
+  reserved 1 to 2;
+}

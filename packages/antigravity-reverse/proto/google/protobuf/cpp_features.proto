@@ -1,0 +1,24 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/protobuf/cpp_features.proto
+
+syntax = "proto3";
+
+package pb;
+
+extend google.protobuf.FeatureSet {
+  pb.CppFeatures cpp = 1000;
+}
+
+message CppFeatures {
+  enum StringType {
+    STRING_TYPE_UNKNOWN = 0;
+    VIEW = 1;
+    CORD = 2;
+    STRING = 3;
+  }
+
+  bool legacy_closed_enum = 1;
+  pb.CppFeatures.StringType string_type = 2;
+  bool enum_name_uses_string_view = 3;
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@antigravity/reverse",
+  "version": "2.24.0",
+  "description": "Comprehensive reverse engineering catalog, extracted Electron & frontend sources, and architecture specifications for Google Antigravity v2.24.0",
+  "author": "Antigravity Reverse Engineering Team",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "extracted/electron/dist/main.js",
+  "exports": {
+    "./catalog": "./catalog/ui_internals.json",
+    "./modules": "./extracted/frontend/modules/index.js",
+    "./electron": "./extracted/electron/dist/main.js"
+  },
+  "scripts": {
+    "verify:catalog": "python -c \"import json, sys; d=json.load(open('catalog/ui_internals.json', encoding='utf-8')); assert len(d['ipc_channels'])>=15, 'IPC < 15'; assert len(d['actions'])>=25, 'Actions < 25'; assert len(d['feature_flags'])>=20, 'Flags < 20'; assert len(d['user_tiers'])>=4, 'Tiers < 4'; print('OK: Catalog verified with %d IPC channels, %d actions, %d feature flags, %d user tiers' % (len(d['ipc_channels']), len(d['actions']), len(d['feature_flags']), len(d['user_tiers'])))\"",
+    "format": "prettier --write \"extracted/electron/**/*.js\" \"extracted/frontend/modules/*.js\"",
+    "test": "npm run verify:catalog"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.11.0",
+    "@connectrpc/connect": "^2.1.2",
+    "@connectrpc/connect-node": "^2.1.2"
+  },
+  "devDependencies": {
+    "js-beautify": "^2.0.3",
+    "prettier": "^3.9.10"
+  }
+}

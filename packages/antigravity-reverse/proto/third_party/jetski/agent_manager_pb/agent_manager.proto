@@ -1,0 +1,152 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: third_party/jetski/agent_manager_pb/agent_manager.proto
+
+syntax = "proto3";
+
+package exa.agent_manager_pb;
+
+import "google/protobuf/timestamp.proto";
+import "third_party/jetski/codeium_common_pb/codeium_common.proto";
+import "third_party/jetski/jetski_cortex_pb/jetski_cortex.proto";
+import "third_party/jetski/language_server_pb/language_server.proto";
+
+enum WindowVisibility {
+  WINDOW_VISIBILITY_UNSPECIFIED = 0;
+  WINDOW_VISIBILITY_SHADOW = 1;
+  WINDOW_VISIBILITY_MATERIALIZED = 2;
+}
+
+enum AgentManagerWindowState {
+  AGENT_MANAGER_WINDOW_STATE_UNSPECIFIED = 0;
+  AGENT_MANAGER_WINDOW_STATE_UNINITIALIZED = 1;
+  AGENT_MANAGER_WINDOW_STATE_MATERIALIZED = 2;
+}
+
+enum WindowMode {
+  WINDOW_MODE_UNSPECIFIED = 0;
+  WINDOW_MODE_FULLSCREEN = 1;
+  WINDOW_MODE_MAXIMIZED = 2;
+  WINDOW_MODE_NORMAL = 3;
+}
+
+enum ManagerOnboardingState {
+  MANAGER_ONBOARDING_STATE_UNSPECIFIED = 0;
+  MANAGER_ONBOARDING_STATE_INCOMPLETE = 1;
+  MANAGER_ONBOARDING_STATE_COMPLETED = 2;
+}
+
+enum ConversationSortField {
+  CONVERSATION_SORT_FIELD_UNSPECIFIED = 0;
+  CONVERSATION_SORT_FIELD_CREATED_AT = 1;
+  CONVERSATION_SORT_FIELD_LAST_UPDATED_AT = 2;
+}
+
+enum ConversationGrouping {
+  CONVERSATION_GROUPING_UNSPECIFIED = 0;
+  CONVERSATION_GROUPING_NONE = 1;
+  CONVERSATION_GROUPING_UNREAD = 2;
+}
+
+enum SectionType {
+  SECTION_TYPE_UNSPECIFIED = 0;
+  SECTION_TYPE_WORKSPACE = 1;
+  SECTION_TYPE_NEXUS = 2;
+}
+
+message WindowPosition {
+  optional int32 width = 1;
+  optional int32 height = 2;
+  optional int32 x = 3;
+  optional int32 y = 4;
+  exa.agent_manager_pb.WindowMode window_mode = 5;
+}
+
+message PostOnboarding {
+  repeated string completed_steps = 1;
+}
+
+message ZoomState {
+  optional int32 zoom_level = 1;
+}
+
+message ManagerInboxState {
+  exa.agent_manager_pb.ConversationSortField sort_field = 1;
+  exa.agent_manager_pb.ConversationGrouping grouping = 2;
+}
+
+message WorkspaceSectionDisplayState {
+  bool is_collapsed = 1;
+  bool only_show_first_few_convos = 2;
+  optional int32 sidebar_order = 3;
+}
+
+message SidebarWorkspace {
+  string uri = 4;
+  optional exa.agent_manager_pb.WorkspaceSectionDisplayState display_state = 5;
+  reserved 1 to 3, 6 to 8;
+}
+
+message SectionDisplayState {
+  bool is_collapsed = 1;
+}
+
+message SidebarSection {
+  string uri = 1;
+  exa.agent_manager_pb.SectionDisplayState display_state = 2;
+  string label = 3;
+  string detail = 4;
+  repeated exa.agent_manager_pb.Conversation conversations = 5;
+  oneof section_kind {
+    exa.agent_manager_pb.WorkspaceSection workspace_section = 7;
+    exa.agent_manager_pb.StandaloneSection standalone_section = 8;
+    exa.agent_manager_pb.ProjectSection project_section = 9;
+  }
+  reserved 6;
+}
+
+message WorkspaceSection {
+  string workspace_uri = 1;
+  repeated string folder_uris = 2;
+}
+
+message StandaloneSection {
+}
+
+message ProjectSection {
+}
+
+message AgentManagerInitState {
+  exa.codeium_common_pb.UserStatus user_status = 19;
+  exa.jetski_cortex_pb.CascadeTrajectorySummaries trajectory_summaries = 1;
+  exa.agent_manager_pb.WindowPosition agent_manager_window_position = 5;
+  exa.language_server_pb.OAuthTokenInfo oauth_token_info = 6;
+  exa.agent_manager_pb.PostOnboarding post_onboarding = 7;
+  exa.agent_manager_pb.ManagerOnboardingState manager_onboarding_state = 8;
+  exa.agent_manager_pb.ZoomState zoom_state = 9;
+  map<string, google.protobuf.Timestamp> conversation_last_viewed_times = 10;
+  exa.agent_manager_pb.ManagerInboxState inbox_state = 11;
+  optional string current_reserved_scratch_workspace_uri = 12;
+  repeated string sidebar_workspace_uris = 13;
+  repeated exa.agent_manager_pb.SidebarWorkspace sidebar_workspaces = 14;
+  exa.agent_manager_pb.WorkspaceSectionDisplayState scratch_display_state = 15;
+  map<string, exa.codeium_common_pb.ArtifactMetadata> artifact_metadata_map = 16;
+  map<string, bool> recently_updated_map = 17;
+  map<uint32, bool> seen_nux_ids = 18;
+  reserved 2 to 4;
+}
+
+message UserSettingsState {
+  map<string, exa.codeium_common_pb.UserSettings> user_settings_by_authority = 1;
+}
+
+message SidebarState {
+  repeated exa.agent_manager_pb.SidebarSection sidebar_sections = 3;
+  reserved 1 to 2, 4;
+  reserved "playground";
+}
+
+message Conversation {
+  string conversation_id = 1;
+  string summary = 2;
+}

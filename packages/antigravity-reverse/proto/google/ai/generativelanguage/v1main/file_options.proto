@@ -1,0 +1,22 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/ai/generativelanguage/v1main/file_options.proto
+
+syntax = "proto3";
+
+package google.ai.generativelanguage.v1main;
+
+import "google/protobuf/any.proto";
+import "google/ai/generativelanguage/v1main/processing_options.proto";
+import "google/ai/generativelanguage/v1main/verbalization_options.proto";
+
+message FileOptions {
+  google.ai.generativelanguage.v1main.ProcessingOptions processing_options = 1;
+  google.ai.generativelanguage.v1main.ProcessingOptions cache_prewarm_processing_options = 4;
+  google.ai.generativelanguage.v1main.FileMetadata file_metadata = 2;
+  google.ai.generativelanguage.v1main.VerbalizationOptions verbalization_options = 3;
+}
+
+message FileMetadata {
+  repeated google.protobuf.Any extended_metadata = 1;
+}

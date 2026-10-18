@@ -1,0 +1,35 @@
+// Reconstructed by Antigravity Unleashed Protobuf Reverse Engineering Pipeline
+// Source: Antigravity IDE v2.24.0 (Electron Client / Embedded Language Server)
+// Original descriptor path: google/ai/generativelanguage/v1main/resolution.proto
+
+syntax = "proto3";
+
+package google.ai.generativelanguage.v1main;
+
+enum Resolution {
+  RESOLUTION_UNSPECIFIED = 0;
+  RESOLUTION_P1280X720 = 1;
+  RESOLUTION_P720X1280 = 2;
+  RESOLUTION_P1920X1080 = 3;
+  RESOLUTION_P1080X1920 = 4;
+  RESOLUTION_P3840X2160 = 5;
+  RESOLUTION_P2160X3840 = 6;
+  RESOLUTION_P720X720 = 7;
+  RESOLUTION_P640X368 = 8;
+  RESOLUTION_P368X640 = 9;
+}
+
+message MediaResolution {
+  enum Level {
+    MEDIA_RESOLUTION_UNSPECIFIED = 0;
+    MEDIA_RESOLUTION_LOW = 1;
+    MEDIA_RESOLUTION_MEDIUM = 2;
+    MEDIA_RESOLUTION_HIGH = 3;
+    MEDIA_RESOLUTION_ULTRA_HIGH = 4;
+  }
+
+  oneof value {
+    google.ai.generativelanguage.v1main.MediaResolution.Level level = 1;
+    int32 num_tokens = 2;
+  }
+}
