@@ -4074,17 +4074,24 @@ const amsScriptContent = `(async function() {
         syncRow.innerHTML = \`<span style="color: rgba(255,255,255,0.5)">Sync Status:</span><span id="ams-sync-indicator" style="font-weight: 500">Checking...</span>\`;
         statusSection.appendChild(syncRow);
 
-        const hubRow = document.createElement('div');
-        hubRow.style.display = 'flex';
-        hubRow.style.justifyContent = 'space-between';
-        hubRow.innerHTML = \`<span style="color: rgba(255,255,255,0.5)">Anti-Gravity Hub:</span><span id="ams-antigravity-hub-indicator" style="font-weight:500;color:#fbbf24">● Checking…</span>\`;
-        statusSection.appendChild(hubRow);
+        const localHubEnabled = (
+            window.__antigravity_enable_local_hub === true ||
+            (window.localStorage && window.localStorage.getItem('antigravity_enable_local_hub') === '1')
+        );
 
-        const bridgeRow = document.createElement('div');
-        bridgeRow.style.display = 'flex';
-        bridgeRow.style.justifyContent = 'space-between';
-        bridgeRow.innerHTML = \`<span style="color: rgba(255,255,255,0.5)">Anti-Gravity API Bridge:</span><span id="ams-antigravity-bridge-indicator" style="font-weight:500;color:#fbbf24">● Checking…</span>\`;
-        statusSection.appendChild(bridgeRow);
+        if (localHubEnabled) {
+            const hubRow = document.createElement('div');
+            hubRow.style.display = 'flex';
+            hubRow.style.justifyContent = 'space-between';
+            hubRow.innerHTML = \`<span style="color: rgba(255,255,255,0.5)">Anti-Gravity Hub:</span><span id="ams-antigravity-hub-indicator" style="font-weight:500;color:#fbbf24">● Checking…</span>\`;
+            statusSection.appendChild(hubRow);
+
+            const bridgeRow = document.createElement('div');
+            bridgeRow.style.display = 'flex';
+            bridgeRow.style.justifyContent = 'space-between';
+            bridgeRow.innerHTML = \`<span style="color: rgba(255,255,255,0.5)">Anti-Gravity API Bridge:</span><span id="ams-antigravity-bridge-indicator" style="font-weight:500;color:#fbbf24">● Checking…</span>\`;
+            statusSection.appendChild(bridgeRow);
+        }
 
         overlay.appendChild(statusSection);
 
@@ -4141,28 +4148,30 @@ const amsScriptContent = `(async function() {
             }
         }));
 
-        const webSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg>\`;
-        actionsSection.appendChild(createMenuItem('Anti-Gravity Hub öffnen', webSvg, () => {
-            if (window.amsAntigravityHub && window.amsAntigravityHub.openHub) {
-                window.amsAntigravityHub.openHub();
-            }
-        }));
-
-        const startSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>\`;
         const restartSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>\`;
-        const servicesItem = createMenuItem('Hub & API Bridge starten', startSvg, async () => {
-            const restart = servicesItem.dataset.restart === 'true';
-            try {
-                if (window.amsAntigravityHub && window.amsAntigravityHub.startServices) {
-                    await window.amsAntigravityHub.startServices(restart);
+        if (localHubEnabled) {
+            const webSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg>\`;
+            actionsSection.appendChild(createMenuItem('Anti-Gravity Hub öffnen', webSvg, () => {
+                if (window.amsAntigravityHub && window.amsAntigravityHub.openHub) {
+                    window.amsAntigravityHub.openHub();
                 }
-            } catch (err) {
-                console.error(\`[AMS Services] \${restart ? 'Restart' : 'Start'} failed:\`, err);
-            }
-        });
-        servicesItem.id = 'ams-services-menu-item';
-        servicesItem.dataset.restart = 'false';
-        actionsSection.appendChild(servicesItem);
+            }));
+
+            const startSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>\`;
+            const servicesItem = createMenuItem('Hub & API Bridge starten', startSvg, async () => {
+                const restart = servicesItem.dataset.restart === 'true';
+                try {
+                    if (window.amsAntigravityHub && window.amsAntigravityHub.startServices) {
+                        await window.amsAntigravityHub.startServices(restart);
+                    }
+                } catch (err) {
+                    console.error(\`[AMS Services] \${restart ? 'Restart' : 'Start'} failed:\`, err);
+                }
+            });
+            servicesItem.id = 'ams-services-menu-item';
+            servicesItem.dataset.restart = 'false';
+            actionsSection.appendChild(servicesItem);
+        }
 
         const planSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M3 20h.01"/><path d="M3 14h.01"/><path d="M3 8h.01"/><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="m9 11 2 2 4-4"/></svg>\`;
         actionsSection.appendChild(createMenuItem('Task-Plan öffnen', planSvg, () => {
@@ -4240,28 +4249,30 @@ const amsScriptContent = `(async function() {
             }
         }));
 
-        const apiWindowSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg>\`;
-        let apiWindowVisible = false;
-        const apiWindowItem = createMenuItem('API-Fenster: wird geladen ...', apiWindowSvg, () => {
-            const bridge = window.electronNative;
-            if (bridge && bridge.setApiWindowVisible) {
-                bridge.setApiWindowVisible(!apiWindowVisible);
-            }
-        });
-        actionsSection.appendChild(apiWindowItem);
-        if (window.electronNative && window.electronNative.getApiWindowVisible) {
-            window.electronNative.getApiWindowVisible().then((result) => {
-                apiWindowVisible = !!(result && result.visible);
-                const label = apiWindowItem.querySelector('span');
-                if (label) {
-                    label.textContent = apiWindowVisible
-                        ? 'API-Fenster: sichtbar (klicken zum Verstecken)'
-                        : 'API-Fenster: versteckt (klicken zum Anzeigen)';
-                    if (typeof window.amsApplyI18nToDom === 'function') {
-                        window.amsApplyI18nToDom(apiWindowItem);
-                    }
+        if (localHubEnabled) {
+            const apiWindowSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg>\`;
+            let apiWindowVisible = false;
+            const apiWindowItem = createMenuItem('API-Fenster: wird geladen ...', apiWindowSvg, () => {
+                const bridge = window.electronNative;
+                if (bridge && bridge.setApiWindowVisible) {
+                    bridge.setApiWindowVisible(!apiWindowVisible);
                 }
-            }).catch(() => {});
+            });
+            actionsSection.appendChild(apiWindowItem);
+            if (window.electronNative && window.electronNative.getApiWindowVisible) {
+                window.electronNative.getApiWindowVisible().then((result) => {
+                    apiWindowVisible = !!(result && result.visible);
+                    const label = apiWindowItem.querySelector('span');
+                    if (label) {
+                        label.textContent = apiWindowVisible
+                            ? 'API-Fenster: sichtbar (klicken zum Verstecken)'
+                            : 'API-Fenster: versteckt (klicken zum Anzeigen)';
+                        if (typeof window.amsApplyI18nToDom === 'function') {
+                            window.amsApplyI18nToDom(apiWindowItem);
+                        }
+                    }
+                }).catch(() => {});
+            }
         }
 
         const langSvg = \`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>\`;
@@ -4321,7 +4332,7 @@ const amsScriptContent = `(async function() {
 
         document.body.appendChild(overlay);
 
-        if (window.amsAntigravityHub && window.amsAntigravityHub.getStatus) {
+        if (localHubEnabled && window.amsAntigravityHub && window.amsAntigravityHub.getStatus) {
             window.amsAntigravityHub.getStatus().then((status) => {
                 const renderService = (elementId, service) => {
                     const indicator = document.getElementById(elementId);
