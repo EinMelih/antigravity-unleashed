@@ -13,7 +13,12 @@ DATABASE_SCHEMA_VERSION = 5
 MANAGED_ANTIGRAVITY_CONVERSATION_STATES = frozenset(
     {"active", "archived", "deleted"}
 )
-DB_PATH = Path(os.environ.get(DB_ENV_VAR, BASE_DIR / "dashboard.db")).expanduser().resolve()
+_DEFAULT_DB_PATH = (
+    Path("/data/antigravity-api/dashboard.db")
+    if os.name != "nt" and (os.environ.get("ANTIGRAVITY_DOCKER") == "1" or Path("/data/antigravity-api").exists())
+    else (BASE_DIR / "dashboard.db")
+)
+DB_PATH = Path(os.environ.get(DB_ENV_VAR, _DEFAULT_DB_PATH)).expanduser().resolve()
 CORE_INDEX_QUERIES = (
     """
     CREATE INDEX IF NOT EXISTS idx_issues_project_github_number
