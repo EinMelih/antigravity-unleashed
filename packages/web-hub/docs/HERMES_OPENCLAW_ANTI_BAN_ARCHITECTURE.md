@@ -49,10 +49,12 @@ flowchart LR
 - Alle Anfragen gehen ausschließlich lokal (`127.0.0.1`) an den unveränderten Go-Prozess `language_server.exe`, der mit den offiziellen IDE-Flags gestartet wird (`--override_ide_name antigravity --subclient_type hub --override_ide_version 2.24.0`).
 - Dadurch stammen TLS-Handshake (JA3/JA4), HTTP/2-Framing, OAuth-Token-Refresh und Depot-CL-Header zu 100 % vom offiziellen Google-Binary.
 
-### Schild 2: Keyword-Firewall & Offizielle `AGENTS.md`-Systemprompt-Injektion
-- **Kein `[System: ...]` mehr im User-Prompt:** In früheren Versionen wurde `role == "system"` als `[System: ...]` vor die User-Nachricht geklebt. Das landet innerhalb von `<USER_REQUEST>` und sieht für Googles Klassifizierer wie ein Prompt-Injection-/Proxy-Angriff aus.
-- **Offizielle `<RULE[AGENTS.md]>`-Engine:** Der System-Prompt von Hermes/OpenClaw wird bereinigt und vor dem Senden als strukturierte Projekt-Richtlinie in `<workspace_slot>/AGENTS.md` (max. 24 KB) geschrieben. `language_server.exe` liest diese Datei nativ über seine eigene Rule-Engine (`0x3267C05`) als offizielles System-Rule-Tag ein.
-- **Keyword-Firewall:** Verräterische Begriffe (`OpenClaw`, `Hermes`, `Cline`, `RooCode`, `SOUL.md`, `HEARTBEAT.md`, `TOOLS.md`, `Ignore previous instructions`, `You are no longer Antigravity`) werden automatisch neutralisiert, bevor sie `language_server.exe` erreichen.
+### Schild 2: Bidirektionale Persona-Firewall & 0 `AGENTS.md`-Overhead
+- **0 `AGENTS.md`-Overhead (`write_workspace_agents_md`):** Weil interne IDE-Tools und die Antigravity-Standard-Persona direkt nativ im lokalen `language_server` über `customAgent` (`toolNames: []`) deaktiviert werden (siehe Schild 5), wird **keine** `AGENTS.md`-Datei im Workspace abgelegt (`0` Extra-Rule-Tokens pro Request, kein unnatürlicher Override-Text).
+- **Turn-1 System-Prompt-Injektion:** Der bereinigte System-Prompt von Hermes/OpenClaw wird nur ein einziges Mal beim ersten Turn einer `cascadeId`-Session übergeben und bei allen Folge-Turns derselben Session weggelassen (spart ~800 Tokens pro Turn).
+- **Bidirektionale Keyword-Firewall (`sanitize_prompt_text` $\leftrightarrow$ `unmask_response_text`):**
+  - **Ausgehend (zum `language_server`):** Begriffe wie `OpenClaw` $\rightarrow$ `Workspace Assistant`, `Hermes` $\rightarrow$ `Project Assistant`, `Nous Research` $\rightarrow$ `Workspace Team`, `SOUL.md` $\rightarrow$ `PROJECT_CONTEXT.md` werden lokal maskiert (wobei Lookaround-Assertions CLI-Befehle wie `hermes status` und Dateipfade unangetastet lassen).
+  - **Eingehend (zurück an Hermes/OpenClaw):** `unmask_response_text` wandelt `Project Assistant` $\rightarrow$ `Hermes`, `Workspace Team` $\rightarrow$ `Nous Research` und `Workspace Assistant` $\rightarrow$ `OpenClaw` im Live-SSE-Stream und JSON-Response transparent zurück.
 
 ### Schild 3: Lokaler Heartbeat-Blocker & Smart Adaptive Pacing
 - **Lokaler Heartbeat-Abfangjäger (`0 ms`):** Periodische Hintergrund-Pings von OpenClaw/Hermes (z. B. `HEARTBEAT_OK`, leere Cron-Checks) werden von `HeartbeatAndPacingGuard` erkannt und direkt lokal von der Bridge beantwortet – sie verbrauchen **0 Tokens** und erzeugen keinen Traffic bei Google.
@@ -60,32 +62,28 @@ flowchart LR
   - Liegt der letzte Request auf einem Slot mehr als `3 Sekunden` zurück (normales interaktives Arbeiten), startet der Request **sofort** mit minimalem Mikro-Jitter (`0.1s–0.4s`).
   - Feuert ein Agent jedoch in einer engen Endlosschleife (`< 2.0s` nach Antwortende), schaltet sich automatisch ein menschlicher Pacing-Jitter (`1.5s–4.5s`) sowie das konfigurierbare RPM-Limit ein.
 
-### Schild 4: Multi-Turn Session-Reuse & Echte Workspace-Struktur
+### Schild 4: Multi-Turn Session-Reuse, Konversations-Isolation & Auto-Cleanup (`DeleteCascadeTrajectory`)
 - Statt für jeden Request einen verdächtigen 1-Turn-Chat (`step_count == 1`) ohne Projektbezug anzulegen, verwaltet `src/rpc_pool.py` **10 echte Workspace-Ordner** (`ws-00` bis `ws-09`).
-- Jeder Workspace-Slot besitzt echte Projektdateien (`README.md`, `src/main.py`, `AGENTS.md`), sodass `workspaceUris` und `editorState` immer auf reale Dateien zeigen.
-- Zusammengehörige Konversationen von Hermes/OpenClaw werden über das `messages`-Präfix (oder `X-Conversation-Id`) automatisch derselben `cascadeId` zugeordnet und erst nach `20 Turns` (konfigurierbar) sauber rotiert.
+- Zusammengehörige Konversationen von Hermes/OpenClaw werden über eine strikte Konversations-Signatur (System-Prompt + erstes User-Turn-Paar + Vorgänger-Antwort) exakt derselben `cascadeId` zugeordnet.
+- Startet in Hermes/OpenClaw ein neuer Chat oder wird nach `20 Turns` rotiert, wird die alte `cascadeId` sofort per `DeleteCascadeTrajectory` gelöscht, damit sich niemals zwei Sessions vermischen.
 
-### Schild 5: 1:1 React-UI Payload-Klon (`main_root.formatted.js`)
-Alle lokalen ConnectRPC-Aufrufe in `src/rpc_client.py` bilden exakt die Payloads der echten React-Oberfläche nach:
-- **`StartCascade` (`main_root.formatted.js:80423`):**
-  - `source: 1` (`CORTEX_TRAJECTORY_SOURCE_CASCADE_CLIENT`)
-  - `workspaceUris: ["file:///.../ws-XX"]`
-  - `requestedModel: <ModelEnum>`
+### Schild 5: 1:1 React-UI Payload-Klon + Native IDE-Tool-Abschaltung (`customAgent`), Live-Thinking & Vision
+Alle lokalen ConnectRPC-Aufrufe in `src/rpc_client.py` nutzen ausschließlich offizielle Protobuf-Felder der echten Antigravity-IDE (`v2.24.0`), die lokal im Go-Binary `language_server` auf `127.0.0.1` ausgewertet werden:
+- **Native IDE-Tool- & Identity-Abschaltung (`plannerConfig.customAgent`):**
+  - Nutzt das offizielle Protobuf-Feld `CustomAgentConfig` (`proto/codeium_common.proto`, Feld 10), das Antigravity selbst für Subagenten (`invoke_subagent`) verwendet.
+  - `toolNames: []` schaltet lokal im `language_server` alle internen IDE-Tools (`run_command`, `view_file`, `write_to_file` etc.) ab. Dadurch funktionieren externe **Client-Tools** von Hermes und OpenClaw (`tools=[...]`) zu 100 % konfliktfrei als echte OpenAI-`tool_calls`, ohne dass das Modell jemals versucht, Befehle im API-Container auszuführen.
+  - `systemPromptConfig.includeSections` lässt den lokalen `language_server` den internen Antigravity-Boilerplate-Block nativ weglassen – komplett **ohne** verdächtige Prompt-Injection-Sätze („ignore previous instructions“) an Google zu senden.
+- **Echtes Live-Thinking (`reasoning_content` / `reasoning`):**
+  - `extract_planner_response_state` liest während der Generierung `plannerResponse.thinking` in Echtzeit aus `GetCascadeTrajectorySteps` und streamt die Deltas live als OpenAI-/Hermes-kompatibles `delta.reasoning_content` (und `delta.reasoning`) vor dem eigentlichen Antworttext.
+- **Native Multimodal-Vision (`SendUserCascadeMessageRequest.media`):**
+  - Base64-Bilder (`image_url` / `input_image` / `image`) werden in das offizielle Protobuf-Feld `media: [{"mimeType": ..., "inlineData": "<base64>", "description": ...}]` (`proto/language_server.proto`, Feld 14) konvertiert – exakt wie beim Einfügen eines Bildes in der echten Antigravity-IDE. Dateipfad-Wrapper von WebUIs (`[Attached files: ...]`) werden dabei spurlos entfernt.
 - **`SendUserCascadeMessage` (`main_root.formatted.js:75508` & `80308`):**
-  - `messageOrigin: 1` (`AGENT_MESSAGE_ORIGIN_IDE` statt `0 = UNSPECIFIED` oder `2 = SDK`)
-  - `clientType: 1`
-  - `metadata`: `{"ideName": "antigravity", "ideVersion": "2.24.0", "extensionName": "antigravity"}`
-  - `cascadeConfig.plannerConfig`:
-    - `autoExecutionPolicy: 3` (Eager/Turbo) & `artifactReviewMode: 2` -> **0 Approval-Hänger!**
-    - `effectiveGrants`: Voller Lese-/Schreib-/Command-Zugriff im Slot-Workspace.
-    - `knowledgeConfig: {"enabled": false}` & `conversationHistoryConfig: {"enabled": false}` -> **100 % Kontext-Isolation** (kein Lesen fremder Chats oder Memories).
+  - `messageOrigin: 1` (`AGENT_MESSAGE_ORIGIN_IDE`), `clientType: 1`, `autoExecutionPolicy: 3`, `knowledgeConfig: {"enabled": false}`, `conversationHistoryConfig: {"enabled": false}`.
 
-### Schild 6: Pre-Flight Quota Circuit Breaker (Nahtloser Hermes-Fallback)
-- Vor jedem Request prüft `QuotaCircuitBreaker` über `RetrieveUserQuotaSummary` (mit 30s Cache) die `remainingFraction` des angefragten Modells.
-- Fällt das Modell-Quota unter den Sicherheitswert (Standard: **`5 %`**), schickt unsere Bridge den Request **nicht** an Google, sondern gibt lokal sofort einen standardkonformen OpenAI-Fehler zurück:
-  - Status: `HTTP 429 Too Many Requests`
-  - Code: `"model_quota_exhausted"` / `"insufficient_quota"`
-- **Vorteil für Hermes / OpenClaw:** Da Hermes eine eigene Fallback-Kette besitzt, erkennt Hermes den lokalen `429`-Status sofort und wechselt in Millisekunden automatisch auf das in Hermes hinterlegte Fallback-Modell (z. B. von Claude Opus auf Sonnet oder Gemini 3.1 Pro), ohne dass Google jemals mit `RESOURCE_EXHAUSTED`-Fehlern bombardiert wird!
+### Schild 6: Pre-Flight Quota Circuit Breaker mit Hard-Latch bis `resetTime` (Kein Zwangs-Fallback)
+- Vor jedem Request prüft `QuotaCircuitBreaker` über `RetrieveUserQuotaSummary` die `remainingFraction` und `resetTime` des angefragten Modells.
+- Fällt das Modell-Quota unter den Sicherheitswert (Standard: **`5 %`**) oder meldet das Backend ein erschöpftes Kontingent, verriegelt (`_latched_until`) die Bridge dieses Modell **lokal in `0 ms`** exakt bis zur offiziellen Google-`resetTime`.
+- **Kein ungewollter Auto-Fallback:** Die Bridge wechselt **niemals** heimlich auf ein anderes Modell, sondern gibt sofort einen ehrlichen `HTTP 429 Too Many Requests` (`code: "model_quota_exhausted"`, inkl. `Retry-After`-Header und exakter Reset-Uhrzeit) zurück. So treffen **0 weitere Requests** für ein gesperrtes Modell bei Google ein, und Hermes bzw. OpenClaw steuern ihren Fallback selbst.
 
 ### Schild 7: Null-CSP-Leak & Telemetrie-Sperre
 - Im `rpc`-Modus wird kein Chromium-DOM manipuliert -> `0` CSP-Violation-Reports an `csp.withgoogle.com/csp/JetskiWeb`.
@@ -109,4 +107,4 @@ Alle lokalen ConnectRPC-Aufrufe in `src/rpc_client.py` bilden exakt die Payloads
 2. **Exakte Token- & Kontext-Metriken (`GetCascadeTrajectoryGeneratorMetadata`):**
    - Nach jedem Turn liest `src/api_token_reader.py` die echten Werte aus `chatModelMetadata.usage` (`inputTokens`, `outputTokens`, `cacheReadInputTokens`, `thinkingOutputTokens`) sowie `contextWindowMetadata` (`estimatedTokensUsed`, `maxContextTokens`) aus und gibt sie im OpenAI-`usage`-Objekt zurück.
 3. **Persistentes Audit-Logging (`#/api-logs`):**
-   - Jeder Request, jedes Revert-Event und jede Schild-Aktion wird dauerhaft in SQLite (`api_request_logs`, `api_revert_events`) und `~/.antigravity-hub/api_audit_logs.jsonl` gespeichert und ist im Dashboard unter `#/api-logs` einsehbar und exportierbar.
+   - Jeder Request, jedes Revert-Event und jede Schild-Aktion wird dauerhaft in SQLite (`api_request_logs`, `api_revert_events`) und `~/.antigravity-hub/api_audit_logs.jsonl` gespeichert und ist im Dashboard unter `#/api-logs` einsehbar und über den Button „Logs leeren“ jederzeit manuell löschbar.

@@ -212,16 +212,16 @@ const EIGHT_SHIELDS_INFO = [
   {
     numDe: "Schild 2",
     numEn: "Shield 2",
-    titleDe: "Native AGENTS.md <RULE> statt [System: ...] + Keyword-Filter",
-    titleEn: "Native AGENTS.md <RULE> instead of [System: ...] + Keyword Filter",
+    titleDe: "Bidirektionale Persona-Firewall & 0 AGENTS.md-Overhead",
+    titleEn: "Bidirectional Persona Firewall & Zero AGENTS.md Overhead",
     threatDe:
-      "System-Prompts als '[System: ...]' im User-Text sowie Bot-Signaturen (OpenClaw, Hermes, SOUL.md, HEARTBEAT.md) wirken wie Proxy-Injektionen.",
+      "Bot-Signaturen (OpenClaw, Hermes, Nous Research, SOUL.md) im ausgehenden Prompt oder künstliche Override-Regeln in AGENTS.md fallen auf und kosten bei jedem Turn extra Tokens.",
     threatEn:
-      "System prompts prepended as '[System: ...]' inside user messages and bot signatures (OpenClaw, Hermes, SOUL.md, HEARTBEAT.md) look like proxy injections.",
+      "Bot signatures (OpenClaw, Hermes, Nous Research, SOUL.md) in outbound prompts or artificial override rules in AGENTS.md stand out and waste tokens on every turn.",
     measureDe:
-      "role=='system' wird als saubere Projekt-Regel in AntigravityApiProfile/home/workspace/ws-XX/AGENTS.md geschrieben und nativ über <RULE[AGENTS.md]> geladen.",
+      "Maskiert 'Hermes'/'OpenClaw' vor language_server lokal (schont CLI-Befehle & Pfade) und stellt sie in der API-Antwort automatisch wieder her. Keine AGENTS.md nötig (0 Extra-Tokens).",
     measureEn:
-      "role=='system' is written as a clean project rule into AntigravityApiProfile/home/workspace/ws-XX/AGENTS.md and loaded natively via <RULE[AGENTS.md]>.",
+      "Masks 'Hermes'/'OpenClaw' locally before language_server (preserving CLI commands & paths) and transparently unmasks them in the API response. Zero AGENTS.md overhead (0 extra tokens).",
     settingKey: "keyword_firewall_enabled" as const,
   },
   {
@@ -257,31 +257,31 @@ const EIGHT_SHIELDS_INFO = [
   {
     numDe: "Schild 5",
     numEn: "Shield 5",
-    titleDe: "1:1 UI-Payload-Klon (AGENT_MESSAGE_ORIGIN_IDE)",
-    titleEn: "1:1 UI Payload Clone (AGENT_MESSAGE_ORIGIN_IDE)",
+    titleDe: "1:1 UI-Payload + Native IDE-Tool-Abschaltung (customAgent), Thinking & Vision",
+    titleEn: "1:1 UI Payload + Native IDE Tool Deactivation (customAgent), Thinking & Vision",
     threatDe:
-      "Unvollständige RPC-Aufrufe ohne clientType, editorState oder cascadeConfig weichen vom echten Desktop-Frontend ab.",
+      "Aktive interne IDE-Tools (run_command, view_file) kollidieren mit Client-Tools (Hermes/OpenClaw), und fehlendes Thinking oder Bild-Pfade statt echtem Vision-Payload wirken unnatürlich.",
     threatEn:
-      "Incomplete RPC calls missing clientType, editorState, or cascadeConfig deviate from the real desktop frontend.",
+      "Active internal IDE tools (run_command, view_file) collide with client tools (Hermes/OpenClaw), while missing thinking or local image paths instead of native vision payloads break API parity.",
     measureDe:
-      "StartCascade und SendUserCascadeMessage senden exakt die Payload-Struktur der echten React-UI (clientType: 1, messageOrigin: 1 = IDE).",
+      "Schaltet interne IDE-Tools & Antigravity-Persona lokal im language_server nativ über customAgent (toolNames: []) ab, streamt Live-Thinking (reasoning_content) und übergibt Bilder nativ als Protobuf-Media (SendUserCascadeMessage.media).",
     measureEn:
-      "StartCascade and SendUserCascadeMessage send the exact payload structure of the real React UI (clientType: 1, messageOrigin: 1 = IDE).",
+      "Natively disables internal IDE tools & Antigravity persona locally inside language_server via customAgent (toolNames: []), streams live thinking (reasoning_content), and attaches images natively via Protobuf Media (SendUserCascadeMessage.media).",
     alwaysActive: true,
   },
   {
     numDe: "Schild 6",
     numEn: "Shield 6",
-    titleDe: "Pre-Flight Quota-Breaker (RetrieveUserQuotaSummary)",
-    titleEn: "Pre-Flight Quota Breaker (RetrieveUserQuotaSummary)",
+    titleDe: "Pre-Flight Quota-Breaker mit Hard-Latch bis resetTime (Kein Zwangs-Fallback)",
+    titleEn: "Pre-Flight Quota Breaker with Hard Latch until resetTime (No Forced Fallback)",
     threatDe:
-      "Endlose Retry-Schleifen bei leerem Kontingent erzeugen hunderte HTTP 429 RESOURCE_EXHAUSTED Fehler.",
+      "Endlose Retry-Schleifen bei leerem Kontingent erzeugen hunderte HTTP 429 RESOURCE_EXHAUSTED Fehler bei Google.",
     threatEn:
-      "Infinite retry loops on exhausted quotas generate hundreds of HTTP 429 RESOURCE_EXHAUSTED errors.",
+      "Infinite retry loops on exhausted quotas generate hundreds of HTTP 429 RESOURCE_EXHAUSTED errors on Google's servers.",
     measureDe:
-      "Prüft vorab lokal die verbleibende Modell-Quota und bremst lokal ab, sobald weniger als 5 % Reserve übrig sind.",
+      "Prüft vorab lokal die Modell-Quota und verriegelt erschöpfte Modelle sofort lokal (0 ms, HTTP 429 + Retry-After) exakt bis zur offiziellen Google-resetTime – ohne heimlichen Modell-Fallback, damit Hermes/OpenClaw selbst entscheiden.",
     measureEn:
-      "Checks remaining model quota locally before dispatch and stops locally whenever less than 5% reserve remains.",
+      "Checks model quota locally before dispatch and latches exhausted models locally (0 ms, HTTP 429 + Retry-After) until Google's official resetTime — with zero silent model fallback so Hermes/OpenClaw stay in full control.",
     settingKey: "quota_breaker_enabled" as const,
   },
   {
@@ -878,8 +878,8 @@ export function ApiLogsPage() {
               />
               <span>
                 {en
-                  ? "Shield 2: AGENTS.md & Firewall"
-                  : "Schild 2: AGENTS.md & Firewall"}
+                  ? "Shield 2: Persona Firewall (0 AGENTS.md)"
+                  : "Schild 2: Persona-Firewall (0 AGENTS.md)"}
               </span>
             </label>
             <label className="flex items-center gap-2">
@@ -939,29 +939,39 @@ export function ApiLogsPage() {
           <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
             <Info className="size-4 text-primary" />
             {en
-              ? "Background & Client Hardening:"
-              : "Hintergrund & Client-Härtung:"}
+              ? "Pure Standalone API Parity & Zero-Detection Hardening:"
+              : "100 % Echte API-Parität & Undetected-Härtung:"}
           </span>
           <span>
             {en ? (
               <>
-                This bridge was specifically hardened so external agents and
-                clients (such as <strong>Hermes Agent</strong>,{" "}
-                <strong>OpenClaw</strong>, or <strong>OpenWebUI</strong>) run
-                through the local <code>language_server.exe</code> without
-                triggering OAuth spoofing, <code>[System: ...]</code> tags, or
-                1-turn chat spam. All parameters default to the safe undetected
-                profile.
+                Internal IDE tools and the Antigravity persona are disabled{" "}
+                <strong>natively</strong> inside the local{" "}
+                <code>language_server</code> via{" "}
+                <code>customAgent: &#123;toolNames: []&#125;</code> (zero{" "}
+                <code>AGENTS.md</code> token overhead, zero prompt-injection
+                text). External clients (<strong>Hermes Agent</strong>,{" "}
+                <strong>OpenClaw</strong>, <strong>OpenWebUI</strong>) get full{" "}
+                <strong>Client-Tool execution</strong>, live{" "}
+                <strong>Thinking streaming</strong> (
+                <code>reasoning_content</code>), and native{" "}
+                <strong>Multimodal Vision</strong> (<code>media</code>) while
+                remaining 100% indistinguishable from official local IDE
+                traffic.
               </>
             ) : (
               <>
-                Diese Bridge wurde gezielt dafür abgesichert, dass externe
-                Agenten und Clients (wie <strong>Hermes Agent</strong>,{" "}
-                <strong>OpenClaw</strong> oder <strong>OpenWebUI</strong>) über
-                den lokalen <code>language_server.exe</code> laufen, ohne durch
-                OAuth-Spoofing, <code>[System: ...]</code>-Tags oder
-                1-Turn-Spam aufzufallen. Standardmäßig bleiben alle Parameter
-                auf dem sicheren Undetected-Profil.
+                Interne IDE-Tools und die Antigravity-Persona werden{" "}
+                <strong>nativ</strong> im lokalen <code>language_server</code>{" "}
+                über <code>customAgent: &#123;toolNames: []&#125;</code>{" "}
+                abgeschaltet (<code>0</code> <code>AGENTS.md</code>-Overhead,
+                kein Jailbreak-Text). Dadurch funktionieren{" "}
+                <strong>Client-Tools</strong> (von <strong>Hermes Agent</strong>
+                , <strong>OpenClaw</strong>, <strong>OpenWebUI</strong>),{" "}
+                <strong>Live-Thinking</strong> (<code>reasoning_content</code>)
+                und <strong>Multimodal-Vision (Bilder)</strong> exakt wie bei
+                einer echten Standalone-API – für Google zu 100 % ununterscheidbar
+                vom offiziellen lokalen IDE-Betrieb.
               </>
             )}
           </span>
@@ -1729,8 +1739,8 @@ export function ApiLogsPage() {
             <div>
               <h3 className="text-xs font-semibold uppercase text-muted-foreground">
                 {en
-                  ? "System Prompt (loaded via AGENTS.md <RULE>)"
-                  : "System-Prompt (via AGENTS.md <RULE> geladen)"}
+                  ? "System Prompt (Turn-1 Injection + Native customAgent, 0 AGENTS.md)"
+                  : "System-Prompt (Turn-1-Injektion + Natives customAgent, 0 AGENTS.md)"}
               </h3>
               <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs whitespace-pre-wrap">
                 {selectedLog.system_prompt ||
@@ -1940,7 +1950,7 @@ model: claude-sonnet-4-6   # or gemini-4-argon-high / claude-opus-4-6-thinking`}
                 </button>
               </div>
               <pre className="mt-2 overflow-x-auto rounded-lg bg-muted/40 p-2.5 font-mono text-[11px]">
-{`# 1. Chat-Completion (role=="system" is loaded natively as AGENTS.md <RULE>)
+{`# 1. Chat-Completion (native customAgent toolNames:[], live reasoning_content & vision media)
 POST http://127.0.0.1:8001/v1/chat/completions
 {
   "model": "Gemini 4 Argon (Medium)",

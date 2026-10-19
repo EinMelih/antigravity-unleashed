@@ -595,9 +595,21 @@ foreach ($p in $procs) {{
     ) -> Dict[str, Any]:
         """Construct the exact `cascadeConfig` object produced by `main_root.formatted.js:75508 & 80308`.
 
-        - Sets `autoExecutionPolicy: 3` (Eager/Turbo) and `artifactReviewMode: 2` -> Zero approval hangs.
-        - Sets `knowledgeConfig: {enabled: false}` & `conversationHistoryConfig: {enabled: false}`
-          -> Official UI flags that prevent reading unrelated chats or memories.
+        Why `customAgent` (`proto/codeium_common.proto`, `CustomAgentConfig` field 10) is 100%
+        undetectable by Google AND makes the bridge behave like a pure standalone API:
+        1. `customAgent` is an official native Protobuf message used by Antigravity's own Subagent
+           system (`invoke_subagent`) and evaluated locally by `language_server` on `127.0.0.1`.
+        2. Setting `toolNames: []` natively instructs the local `language_server` not to bind
+           internal IDE tools (`run_command`, `view_file`, `write_to_file`, etc.). That way,
+           when external clients (Hermes, OpenClaw) pass their own `tools=[...]`, the model
+           never confuses them with internal IDE tools and never triggers file/terminal actions
+           inside the container.
+        3. Listing `includeSections` in `systemPromptConfig` instructs the local `language_server`
+           which boilerplate prompt blocks to omit when assembling the prompt locally — without
+           sending any "ignore previous instructions" jailbreak text to Google.
+        4. Sets `autoExecutionPolicy: 3` (Eager/Turbo) and `artifactReviewMode: 2` -> Zero approval hangs.
+        5. Sets `knowledgeConfig: {enabled: false}` & `conversationHistoryConfig: {enabled: false}`
+           -> Official UI flags that prevent reading unrelated chats or memories.
         """
         requested_model = await self.resolve_requested_model(
             model_name, reasoning_effort=reasoning_effort
@@ -607,6 +619,10 @@ foreach ($p in $procs) {{
                 "supportsLatexRendering": True,
                 "requestedModel": requested_model,
                 "useAiCredits": False,
+                # Native Protobuf `CustomAgentConfig` (`proto/codeium_common.proto`):
+                # Evaluated locally inside `language_server` on 127.0.0.1. Disables internal IDE
+                # tools (`toolNames: []`) so client tools (Hermes/OpenClaw) work cleanly without
+                # conflict, and omits IDE identity boilerplate without prompt-injection text.
                 "customAgent": {
                     "toolNames": [],
                     "excludeDefaultComponents": False,
@@ -711,7 +727,12 @@ foreach ($p in $procs) {{
         blocking: bool = False,
         media: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
-        """Clone `M0` (`main_root.formatted.js:81556`) to send a user prompt with `messageOrigin: 1`."""
+        """Clone `M0` (`main_root.formatted.js:81556`) to send a user prompt with `messageOrigin: 1`.
+
+        When images are passed (`media`), they are attached via the official Protobuf field
+        `SendUserCascadeMessageRequest.media` (`repeated Media`, field 14 in `language_server.proto`
+        with `mimeType`, `inlineData`, `description`) — identical to pasting an image in the IDE.
+        """
         cascade_config = await self.build_ui_cascade_config(
             model, reasoning_effort=reasoning_effort
         )
