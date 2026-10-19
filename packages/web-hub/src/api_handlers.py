@@ -359,6 +359,8 @@ async def chat_completions_handler(request: web.Request) -> web.Response:
         duration = (time.monotonic() - start) * 1000
         response_text = rpc_result.get("response", "")
         tool_calls = rpc_result.get("tool_calls") or []
+        if not tool_calls and response_text and (tools or '"tool_call' in response_text):
+            response_text, tool_calls = DirectRPCPool._parse_possible_tool_calls(response_text)
         conv_id = rpc_result.get("conversation_id")
         if conv_id and run_id:
             try:
@@ -647,6 +649,90 @@ async def _handle_streaming(
                     headers={"X-Request-Id": req_id},
                 )
 
+    total_content = ""
+    error_occurred = False
+    conv_id = explicit_conv_id
+    rpc_state: Dict[str, Any] = {}
+    first_rpc_delta: Optional[str] = None
+    rpc_stream_iter = None
+
+    if engine_mode == "rpc":
+        pool = (
+            request.app.get("rpc_pool")
+            if hasattr(getattr(request, "app", None), "get") and request.app.get("rpc_pool")
+            else rpc_pool
+        )
+        _mark_running(request)
+        rpc_stream_iter = pool.execute_chat_streaming(
+            messages=messages,
+            model=model,
+            reasoning_effort=request.get("reasoning_effort"),
+            tools=tools,
+            tool_choice=tool_choice,
+            explicit_conversation_id=explicit_conv_id,
+            force_new_chat=new_chat,
+            timeout=timeout,
+            client_ip=ctx["client_ip"],
+            state_out=rpc_state,
+        ).__aiter__()
+        try:
+            first_rpc_delta = await rpc_stream_iter.__anext__()
+        except StopAsyncIteration:
+            first_rpc_delta = None
+        except QuotaExhaustedError as q_err:
+            duration = (time.monotonic() - start) * 1000
+            request["operation_error"] = str(q_err)
+            request["quota_exhausted"] = True
+            record_api_audit_log(
+                req_id=req_id,
+                **ctx,
+                endpoint="/v1/chat/completions",
+                engine_mode="rpc",
+                model_requested=model or "antigravity",
+                model_actual=q_err.model,
+                stream=True,
+                status_code=429,
+                duration_ms=duration,
+                messages=messages,
+                system_prompt=system_instructions,
+                user_prompt_preview=user_message,
+                error_text=str(q_err),
+            )
+            return web.json_response(
+                {
+                    "error": {
+                        "message": str(q_err),
+                        "type": "insufficient_quota",
+                        "code": "model_quota_exhausted",
+                        "remaining_fraction": q_err.remaining_fraction,
+                    }
+                },
+                status=429,
+                headers={"X-Request-Id": req_id, "Retry-After": "60"},
+            )
+        except ConnectionError as conn_err:
+            duration = (time.monotonic() - start) * 1000
+            request["operation_error"] = str(conn_err)
+            record_api_audit_log(
+                req_id=req_id,
+                **ctx,
+                endpoint="/v1/chat/completions",
+                engine_mode="rpc",
+                model_requested=model or "antigravity",
+                stream=True,
+                status_code=503,
+                duration_ms=duration,
+                messages=messages,
+                system_prompt=system_instructions,
+                user_prompt_preview=user_message,
+                error_text=str(conn_err),
+            )
+            return web.json_response(
+                {"error": {"message": str(conn_err), "type": "connection_error"}},
+                status=503,
+                headers={"X-Request-Id": req_id},
+            )
+
     response = web.StreamResponse(
         status=200,
         headers={
@@ -664,7 +750,7 @@ async def _handle_streaming(
         "id": completion_id,
         "object": "chat.completion.chunk",
         "created": int(datetime.now(timezone.utc).timestamp()),
-        "model": model or "gemini-3.1-pro-high",
+        "model": rpc_state.get("model_actual") or model or "gemini-3.1-pro-high",
         "choices": [
             {
                 "index": 0,
@@ -675,31 +761,27 @@ async def _handle_streaming(
     }
     await response.write(f"data: {json.dumps(role_chunk)}\n\n".encode("utf-8"))
 
-    total_content = ""
-    error_occurred = False
-    conv_id = explicit_conv_id
-    rpc_state: Dict[str, Any] = {}
-
     try:
-        if engine_mode == "rpc":
-            pool = (
-                request.app.get("rpc_pool")
-                if hasattr(getattr(request, "app", None), "get") and request.app.get("rpc_pool")
-                else rpc_pool
-            )
-            _mark_running(request)
-            async for delta in pool.execute_chat_streaming(
-                messages=messages,
-                model=model,
-                reasoning_effort=request.get("reasoning_effort"),
-                tools=tools,
-                tool_choice=tool_choice,
-                explicit_conversation_id=explicit_conv_id,
-                force_new_chat=new_chat,
-                timeout=timeout,
-                client_ip=ctx["client_ip"],
-                state_out=rpc_state,
-            ):
+        if engine_mode == "rpc" and rpc_stream_iter is not None:
+            if first_rpc_delta:
+                total_content += first_rpc_delta
+                conv_id = rpc_state.get("conversation_id") or conv_id
+                first_chunk = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(datetime.now(timezone.utc).timestamp()),
+                    "model": rpc_state.get("model_actual") or model or "gemini-3.1-pro-high",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": first_rpc_delta},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+                await response.write(f"data: {json.dumps(first_chunk, ensure_ascii=False)}\n\n".encode("utf-8"))
+
+            async for delta in rpc_stream_iter:
                 if not delta:
                     continue
                 total_content += delta
@@ -785,20 +867,81 @@ async def _handle_streaming(
         if getattr(e, "requires_user_input", False):
             request["requires_user_input"] = True
 
-    if not total_content and not error_occurred:
+    stream_tool_calls = rpc_state.get("tool_calls") or []
+    if not stream_tool_calls and total_content and (tools or '"tool_call' in total_content):
+        cleaned_text, parsed_tc = DirectRPCPool._parse_possible_tool_calls(total_content)
+        if parsed_tc:
+            stream_tool_calls = parsed_tc
+            total_content = cleaned_text
+
+    if stream_tool_calls and not error_occurred:
+        if total_content:
+            lead_chunk = {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": int(datetime.now(timezone.utc).timestamp()),
+                "model": rpc_state.get("model_actual") or model or "gemini-3.1-pro-high",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": total_content},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+            await response.write(f"data: {json.dumps(lead_chunk, ensure_ascii=False)}\n\n".encode("utf-8"))
+        tc_deltas = []
+        for idx, tc in enumerate(stream_tool_calls):
+            fn = tc.get("function") or {}
+            tc_deltas.append(
+                {
+                    "index": idx,
+                    "id": tc.get("id") or f"call_{uuid.uuid4().hex[:12]}",
+                    "type": "function",
+                    "function": {
+                        "name": str(fn.get("name") or ""),
+                        "arguments": (
+                            fn.get("arguments")
+                            if isinstance(fn.get("arguments"), str)
+                            else json.dumps(fn.get("arguments") or {}, ensure_ascii=False)
+                        ),
+                    },
+                }
+            )
+        tc_chunk = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": int(datetime.now(timezone.utc).timestamp()),
+            "model": rpc_state.get("model_actual") or model or "gemini-3.1-pro-high",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"tool_calls": tc_deltas},
+                    "finish_reason": None,
+                }
+            ],
+        }
+        await response.write(f"data: {json.dumps(tc_chunk, ensure_ascii=False)}\n\n".encode("utf-8"))
+
+    if not total_content and not stream_tool_calls and not error_occurred:
         error_occurred = True
         request["operation_error"] = "Native API returned no response content."
-    request["stream_response_preview"] = total_content[:280]
+    request["stream_response_preview"] = (
+        total_content[:280]
+        if total_content
+        else (json.dumps(stream_tool_calls, ensure_ascii=False)[:280] if stream_tool_calls else "")
+    )
     request["stream_conversation_id"] = conv_id
 
     token_metrics = rpc_state.get("token_metrics") or parse_generator_metadata_tokens(
         None,
         prompt_text=user_message,
-        response_text=total_content,
+        response_text=total_content or json.dumps(stream_tool_calls, ensure_ascii=False),
         requested_model=model or "antigravity",
     )
     usage_dict = _build_usage_dict(token_metrics)
 
+    finish_reason = "error" if error_occurred else ("tool_calls" if stream_tool_calls else "stop")
     finish_chunk: Dict[str, Any] = {
         "id": completion_id,
         "object": "chat.completion.chunk",
@@ -808,7 +951,7 @@ async def _handle_streaming(
             {
                 "index": 0,
                 "delta": {},
-                "finish_reason": "stop" if not error_occurred else "error",
+                "finish_reason": finish_reason,
             }
         ],
         "conversation_id": conv_id,
@@ -851,7 +994,7 @@ async def _handle_streaming(
         messages=messages,
         system_prompt=system_instructions,
         user_prompt_preview=user_message,
-        response_text=total_content,
+        response_text=total_content or (json.dumps(stream_tool_calls, ensure_ascii=False) if stream_tool_calls else ""),
         shield_metadata=rpc_state.get("shield_metadata") or {},
         error_text=str(request.get("operation_error") or ""),
     )
@@ -1494,3 +1637,46 @@ async def send_parallel_handler(request: web.Request) -> web.Response:
         },
         headers={"X-Request-Id": req_id},
     )
+
+
+async def oauth_status_handler(request: web.Request) -> web.Response:
+    """GET `/v1/auth/status` or `/api/auth/status` — report headless Google OAuth status."""
+    from src.api_profile import api_profile_runtime
+
+    return web.json_response(
+        {
+            "status": "ok",
+            "oauth": api_profile_runtime.get_oauth_status(),
+            "pool": rpc_pool.status_snapshot(),
+        }
+    )
+
+
+async def oauth_token_import_handler(request: web.Request) -> web.Response:
+    """POST `/v1/auth/token` or `/api/auth/token` — import or refresh a Google OAuth token headlessly."""
+    from src.api_profile import api_profile_runtime
+
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response(
+            {"error": {"message": "Invalid JSON body", "type": "invalid_request_error"}},
+            status=400,
+        )
+    try:
+        saved = api_profile_runtime.import_oauth_token(body)
+        token_sub = saved.get("token") if isinstance(saved.get("token"), dict) else saved
+        return web.json_response(
+            {
+                "status": "imported",
+                "oauth": api_profile_runtime.get_oauth_status(),
+                "has_access_token": bool(token_sub.get("access_token")),
+                "has_refresh_token": bool(token_sub.get("refresh_token")),
+            }
+        )
+    except ValueError as err:
+        return web.json_response(
+            {"error": {"message": str(err), "type": "invalid_request_error"}},
+            status=400,
+        )
+

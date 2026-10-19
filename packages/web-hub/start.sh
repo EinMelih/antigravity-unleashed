@@ -383,6 +383,107 @@ start_agents() {
     echo ""
 }
 
+start_headless() {
+    print_banner
+
+    if [ -f "${PID_FILE}" ] && ! stop_services; then
+        echo -e "${RED}Vorhandene PID-Datei enthält fremde Prozesse; Start abgebrochen.${NC}"
+        return 1
+    fi
+    : > "${PID_FILE}"
+    SERVICE_PIDS=()
+    SERVICE_NAMES=()
+    SERVICE_HEALTH_URLS=()
+
+    # Bootstrap isolated /data/antigravity-api directory, API Key & OAuth Token
+    "${PYTHON}" - <<'PY'
+import json
+import os
+import secrets
+from pathlib import Path
+
+data_root = Path(os.environ.get("ANTIGRAVITY_DATA_ROOT", "/data/antigravity-api"))
+if os.environ.get("ANTIGRAVITY_DOCKER") == "1" or data_root.exists():
+    try:
+        home_dir = Path(os.environ.get("ANTIGRAVITY_API_HOME", str(data_root / "home")))
+        for sub in (
+            home_dir / ".gemini/config",
+            home_dir / ".gemini/antigravity-api/conversations",
+            home_dir / ".gemini/antigravity-api/scratch",
+            home_dir / ".config/Antigravity-api/User/globalStorage",
+            home_dir / "workspace",
+            data_root / "audit_logs",
+            data_root / "bin",
+        ):
+            sub.mkdir(parents=True, exist_ok=True)
+        for idx in range(10):
+            (home_dir / "workspaces" / f"ws-{idx:02d}" / "src").mkdir(parents=True, exist_ok=True)
+
+        # Ensure persistent config.json with a strong API key (auth_token)
+        runtime_cfg_path = data_root / "config.json"
+        base_cfg_path = Path(os.environ.get("ANTIGRAVITY_HUB_CONFIG", "/app/config.json"))
+        cfg = {}
+        for candidate in (runtime_cfg_path, base_cfg_path):
+            if candidate.is_file():
+                try:
+                    cfg = json.loads(candidate.read_text(encoding="utf-8"))
+                    break
+                except Exception:
+                    pass
+        env_key = os.environ.get("ANTIGRAVITY_API_KEY", "").strip()
+        api_key = env_key or str(cfg.get("auth_token") or "").strip()
+        if not api_key:
+            api_key = f"agk_{secrets.token_urlsafe(24)}"
+        cfg["auth_token"] = api_key
+        cfg["proxy_host"] = "0.0.0.0"
+        cfg["api_bridge_host"] = "0.0.0.0"
+        cfg.setdefault("api_engine", {})["mode"] = "rpc"
+        runtime_cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        (data_root / "api_key.txt").write_text(api_key + "\n", encoding="utf-8")
+
+        # Seed OAuth token if provided via environment variable
+        from src.api_profile import APIProfileRuntime
+        rt = APIProfileRuntime()
+        oauth_status = rt.get_oauth_status()
+        print("================================================")
+        print(f"  [API KEY]     {api_key}")
+        print(f"  [KEY FILE]    {data_root / 'api_key.txt'}")
+        print(f"  [GOOGLE AUTH] configured={oauth_status['configured']} auto_refresh={oauth_status['auto_refresh_enabled']}")
+        print("================================================")
+    except Exception as exc:
+        print(f"[Headless Bootstrap Warning] {exc}")
+PY
+
+    if [ -f "/data/antigravity-api/config.json" ]; then
+        export ANTIGRAVITY_HUB_CONFIG="/data/antigravity-api/config.json"
+    fi
+
+    echo -e "${BOLD}Starte Headless Linux Services (API-Logs UI :8000 + ConnectRPC API :8001)...${NC}"
+    echo ""
+
+    if ! start_service "proxy" "proxy_server.py" 8000 "/health" ||
+       ! start_service "api-bridge" "api_bridge.py" 8001 "/health"; then
+        echo -e "${RED}Mindestens ein Headless-Service wurde nicht gesund; räume gestartete Prozesse auf.${NC}"
+        stop_services || true
+        return 1
+    fi
+    if ! wait_for_managed_set_health; then
+        stop_services || true
+        return 1
+    fi
+
+    echo ""
+    echo -e "${BOLD}  ================================================${NC}"
+    echo -e "${GREEN}   Headless Linux API + API-Logs Server bereit!${NC}"
+    echo -e "${BOLD}  ================================================${NC}"
+    echo ""
+    echo -e "  API-Logs UI:     http://0.0.0.0:8000/dashboard/react/index.html#/api-logs"
+    echo -e "  OpenAI API:      http://0.0.0.0:8001/v1/chat/completions"
+    echo -e "  Models API:      http://0.0.0.0:8001/v1/models"
+    echo -e "  OAuth Token API: http://0.0.0.0:8001/v1/auth/token"
+    echo ""
+}
+
 start_proxy() {
     print_banner
     echo -e "${BOLD}Starte nur Proxy Server...${NC}"
@@ -428,6 +529,10 @@ supervise_services() {
 MODE="${1:-all}"
 
 case "${MODE}" in
+    headless)
+        start_headless
+        supervise_services
+        ;;
     all)
         start_all
         supervise_services
@@ -472,6 +577,7 @@ case "${MODE}" in
         echo "Verwendung: $0 [MODUS]"
         echo ""
         echo "Modi:"
+        echo "  headless - Headless Linux API (:8001) + API-Logs UI (:8000)"
         echo "  all      - Alle 5 Services starten (Standard)"
         echo "  agents   - Nur Agent-Services (Session, Healer, Watchdog)"
         echo "  proxy    - Nur Proxy Server (Vordergrund)"
@@ -482,3 +588,4 @@ case "${MODE}" in
         exit 1
         ;;
 esac
+

@@ -36,6 +36,8 @@ from src.api_handlers import (
     api_engine_mode_handler,
     chat_completions_handler,
     models_handler,
+    oauth_status_handler,
+    oauth_token_import_handler,
     openai_responses_handler,
     revert_chat_handler,
     send_parallel_handler,
@@ -383,6 +385,10 @@ def main() -> None:
     app.router.add_get('/api/logs/{req_id}', api_audit_log_detail_handler)
     app.router.add_get('/api/engine-mode', api_engine_mode_handler)
     app.router.add_post('/api/engine-mode', api_engine_mode_handler)
+    app.router.add_get('/v1/auth/status', oauth_status_handler)
+    app.router.add_post('/v1/auth/token', oauth_token_import_handler)
+    app.router.add_get('/api/auth/status', oauth_status_handler)
+    app.router.add_post('/api/auth/token', oauth_token_import_handler)
     app.router.add_get('/api/stats', stats_handler)
     app.router.add_post('/api/stats', stats_handler)
     app.router.add_get('/health', health_handler)

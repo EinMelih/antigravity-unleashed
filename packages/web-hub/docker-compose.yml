@@ -1,6 +1,5 @@
 # ============================================================
-#  Antigravity Web - Docker Compose
-#  All 5 loopback-coupled services in one host-networked container
+#  Antigravity Web - Docker Compose (Headless Linux API + API-Logs UI)
 # ============================================================
 
 services:
@@ -12,11 +11,10 @@ services:
         APP_VERSION: ${ANTIGRAVITY_HUB_VERSION:-0.1.0-dev}
         VCS_REF: ${ANTIGRAVITY_HUB_BUILD_SHA:-development}
     container_name: antigravity-hub
-    command: ["./start.sh", "all"]
-    # CDP discovery and service-to-service calls intentionally use loopback.
-    # Sharing the host network keeps those calls in the same namespace as the
-    # locally running Antigravity desktop application.
-    network_mode: host
+    command: ["./start.sh", "headless"]
+    ports:
+      - "${ANTIGRAVITY_UI_PORT:-8000}:8000"
+      - "${ANTIGRAVITY_API_PORT:-8001}:8001"
     init: true
     cap_drop:
       - ALL
@@ -24,6 +22,7 @@ services:
       - no-new-privileges:true
     stop_grace_period: 20s
     volumes:
+      - ./docker-data:/data/antigravity-api
       - type: bind
         source: ${ANTIGRAVITY_HUB_CONFIG_FILE:-./config.example.json}
         target: /app/config.json
@@ -33,6 +32,16 @@ services:
       - antigravity-projects:/home/antigravity/Projects
     environment:
       PYTHONUNBUFFERED: "1"
+      ANTIGRAVITY_DOCKER: "1"
+      ANTIGRAVITY_HEADLESS_UI: "1"
+      ANTIGRAVITY_API_MODE: "rpc"
+      ANTIGRAVITY_STANDALONE_RPC: "1"
+      ANTIGRAVITY_API_HOME: "/data/antigravity-api/home"
+      ANTIGRAVITY_AUDIT_LOG_DIR: "/data/antigravity-api/audit_logs"
+      ANTIGRAVITY_LANGUAGE_SERVER_BIN: "${ANTIGRAVITY_LANGUAGE_SERVER_BIN:-/opt/antigravity/bin/language_server_linux_x64}"
+      ANTIGRAVITY_API_KEY: "${ANTIGRAVITY_API_KEY:-}"
+      ANTIGRAVITY_REFRESH_TOKEN: "${ANTIGRAVITY_REFRESH_TOKEN:-}"
+      ANTIGRAVITY_OAUTH_TOKEN: "${ANTIGRAVITY_OAUTH_TOKEN:-}"
       ANTIGRAVITY_HUB_CONFIG: /app/config.json
       ANTIGRAVITY_HUB_DB: /app/data/dashboard.db
     restart: unless-stopped

@@ -415,23 +415,31 @@ class QuotaCircuitBreaker:
                 for b in grp.get("buckets") or []:
                     if isinstance(b, dict):
                         buckets.append(b)
+        for b in summary.get("buckets") or []:
+            if isinstance(b, dict):
+                buckets.append(b)
+        for m in summary.get("models") or []:
+            if isinstance(m, dict):
+                buckets.append(m)
 
         if not buckets:
             return None
 
         target_keywords = []
         if "opus" in norm:
-            target_keywords = ["opus", "claude"]
+            target_keywords = ["opus", "claude", "m37"]
         elif "sonnet" in norm or "claude" in norm:
-            target_keywords = ["sonnet", "claude"]
+            target_keywords = ["sonnet", "claude", "m35"]
         elif "gpt" in norm:
             target_keywords = ["gpt", "openai"]
         elif "gemini" in norm or "flash" in norm or "pro" in norm:
-            target_keywords = ["gemini-5hour", "gemini"]
+            target_keywords = ["gemini-5hour", "gemini", "m47", "m37"]
 
         for kw in target_keywords:
             for b in buckets:
-                b_name = str(b.get("name") or b.get("bucketId") or b.get("label") or "").lower()
+                b_name = str(
+                    b.get("name") or b.get("bucketId") or b.get("label") or b.get("model") or ""
+                ).lower()
                 if kw in b_name and "remainingFraction" in b:
                     return b
         return None

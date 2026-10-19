@@ -167,6 +167,39 @@ def export_linux_auth_seed(
     else:
         warnings.append("no_authenticated_source_profile_found")
 
+    # Export headless Google OAuth token (refresh_token + access_token) from Windows Credential Manager
+    has_oauth_token = False
+    try:
+        import sys
+        hub_root = Path(__file__).resolve().parents[1]
+        if str(hub_root) not in sys.path:
+            sys.path.insert(0, str(hub_root))
+        from src.api_profile import read_windows_keyring_token
+
+        keyring_token = read_windows_keyring_token()
+        if keyring_token and (keyring_token.get("refresh_token") or keyring_token.get("access_token")):
+            token_payload = json.dumps(
+                {
+                    **keyring_token,
+                    "token": {
+                        "access_token": keyring_token.get("access_token", ""),
+                        "token_type": keyring_token.get("token_type", "Bearer"),
+                        "refresh_token": keyring_token.get("refresh_token", ""),
+                        "expiry": keyring_token.get("expiry", ""),
+                    },
+                    "exported_at": time.time(),
+                },
+                indent=2,
+            )
+            for token_dest in (out_root / "oauth_token.json", app_data_dir / "oauth_token.json"):
+                token_dest.write_text(token_payload, encoding="utf-8")
+            copied.append("oauth_token_json")
+            has_oauth_token = True
+            if "no_authenticated_source_profile_found" in warnings:
+                warnings.remove("no_authenticated_source_profile_found")
+    except Exception as exc:
+        warnings.append(f"keyring_token_export_skipped:{exc}")
+
     seed_manifest = {
         "profile": "api",
         "profile_contract_version": 2,
@@ -174,6 +207,7 @@ def export_linux_auth_seed(
         "exported_at": time.time(),
         "source_user_data_dir": str(selected_source) if selected_source else None,
         "output_dir": str(out_root),
+        "oauth_token_file": str(out_root / "oauth_token.json") if has_oauth_token else None,
         "copied": copied,
         "warnings": warnings,
     }
@@ -206,3 +240,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

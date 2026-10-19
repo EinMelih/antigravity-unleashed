@@ -22,6 +22,7 @@ from src.antigravity_shields import (
     extract_and_sanitize_messages,
     pacing_guard,
     quota_breaker,
+    sanitize_prompt_text,
     write_workspace_agents_md,
 )
 from src.api_audit_logger import record_revert_event
@@ -84,7 +85,8 @@ class WorkspaceSlot:
 
 
 def _hash_turn(role: str, content: str) -> str:
-    norm = f"{role.strip().lower()}:{content.strip()}"
+    canonical_text, _ = sanitize_prompt_text(content or "", enabled=True)
+    norm = f"{role.strip().lower()}:{canonical_text.strip()}"
     return hashlib.sha256(norm.encode("utf-8", errors="ignore")).hexdigest()[:16]
 
 
@@ -245,42 +247,85 @@ class DirectRPCPool:
 
     @staticmethod
     def _parse_possible_tool_calls(response_text: str) -> Tuple[str, List[Dict[str, Any]]]:
-        """Detect if the model returned a structured `tool_calls` JSON block for Hermes/OpenClaw."""
-        stripped = (response_text or "").strip()
-        if '"tool_calls"' not in stripped:
+        """Detect if the model returned a structured `tool_calls` JSON block for Hermes/OpenClaw.
+
+        Handles raw JSON, Markdown code fences (```json ... ``` or ``` ... ```),
+        surrounding explanatory prose, and both standard `{"tool_calls": [...]}`
+        and single-call `{"tool_call": {...}}` payloads.
+        """
+        raw = response_text or ""
+        stripped = raw.strip()
+        if not stripped or ('"tool_calls"' not in stripped and '"tool_call"' not in stripped):
             return response_text, []
-        candidate = stripped
-        fence_match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", stripped)
-        if fence_match:
-            candidate = fence_match.group(1).strip()
-        elif stripped.startswith("{") and stripped.endswith("}"):
-            candidate = stripped
-        try:
-            parsed = json.loads(candidate)
-            if isinstance(parsed, dict) and isinstance(parsed.get("tool_calls"), list):
-                normalized_calls = []
-                for idx, tc in enumerate(parsed["tool_calls"]):
-                    if not isinstance(tc, dict):
-                        continue
-                    fn = tc.get("function") or {}
-                    args = fn.get("arguments", "{}")
-                    if not isinstance(args, str):
-                        args = json.dumps(args, ensure_ascii=False)
-                    normalized_calls.append(
-                        {
-                            "id": str(tc.get("id") or f"call_{idx + 1}"),
-                            "type": "function",
-                            "function": {
-                                "name": str(fn.get("name") or ""),
-                                "arguments": args,
-                            },
-                        }
-                    )
-                if normalized_calls:
-                    return "", normalized_calls
-        except Exception:
-            pass
+
+        candidates: List[Tuple[str, str]] = []
+        # 1. Check Markdown fenced blocks (```json ... ``` or ``` ... ```)
+        for match in re.finditer(r"```(?:json|JSON)?\s*([\s\S]*?)```", stripped):
+            inner = match.group(1).strip()
+            if inner.startswith("{"):
+                prefix = stripped[: match.start()].strip()
+                candidates.append((inner, prefix))
+
+        # 2. Full string if it is a JSON object
+        if stripped.startswith("{") and stripped.endswith("}"):
+            candidates.append((stripped, ""))
+
+        # 3. Embedded JSON object extracted via raw_decode starting at any '{' before "tool_call"
+        decoder = json.JSONDecoder()
+        for brace_match in re.finditer(r"\{", stripped):
+            start_idx = brace_match.start()
+            if '"tool_call' not in stripped[start_idx:]:
+                break
+            try:
+                obj, _ = decoder.raw_decode(stripped[start_idx:])
+                if isinstance(obj, dict) and ("tool_calls" in obj or "tool_call" in obj):
+                    prefix = stripped[:start_idx].strip()
+                    candidates.append((json.dumps(obj, ensure_ascii=False), prefix))
+                    break
+            except Exception:
+                continue
+
+        for candidate_json, prefix_text in candidates:
+            try:
+                parsed = json.loads(candidate_json)
+            except Exception:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            raw_list = parsed.get("tool_calls")
+            if isinstance(parsed.get("tool_call"), dict) and not isinstance(raw_list, list):
+                raw_list = [parsed["tool_call"]]
+            if not isinstance(raw_list, list):
+                continue
+
+            normalized_calls: List[Dict[str, Any]] = []
+            for idx, tc in enumerate(raw_list):
+                if not isinstance(tc, dict):
+                    continue
+                fn = tc.get("function") if isinstance(tc.get("function"), dict) else tc
+                fn_name = str(fn.get("name") or tc.get("name") or "").strip()
+                if not fn_name:
+                    continue
+                args = fn.get("arguments", tc.get("arguments", "{}"))
+                if args is None:
+                    args = "{}"
+                elif not isinstance(args, str):
+                    args = json.dumps(args, ensure_ascii=False)
+                normalized_calls.append(
+                    {
+                        "id": str(tc.get("id") or f"call_{idx + 1}"),
+                        "type": "function",
+                        "function": {
+                            "name": fn_name,
+                            "arguments": args,
+                        },
+                    }
+                )
+            if normalized_calls:
+                return prefix_text, normalized_calls
+
         return response_text, []
+
 
     async def execute_chat_completion(
         self,
@@ -527,17 +572,31 @@ class DirectRPCPool:
                 )
 
                 collected: List[str] = []
+                buffered_for_tools = bool(tools)
                 try:
                     async for delta in self.rpc_client.stream_response_deltas(
                         tracked.cascade_id, baseline_count, timeout=timeout
                     ):
                         collected.append(delta)
-                        yield delta
+                        if not buffered_for_tools:
+                            joined_so_far = "".join(collected).lstrip()
+                            if joined_so_far.startswith(("{", "```")) and '"tool_call' in joined_so_far:
+                                buffered_for_tools = True
+                            else:
+                                yield delta
                 except asyncio.CancelledError:
                     await self.rpc_client.cancel_cascade_invocation(tracked.cascade_id)
                     raise
 
                 full_text = "".join(collected).strip()
+                cleaned_text, parsed_tool_calls = self._parse_possible_tool_calls(full_text)
+                if parsed_tool_calls:
+                    out["tool_calls"] = parsed_tool_calls
+                    if buffered_for_tools and cleaned_text:
+                        yield cleaned_text
+                elif buffered_for_tools and full_text:
+                    yield full_text
+
                 after_steps = await self.rpc_client.get_trajectory_steps(
                     tracked.cascade_id, step_offset=0
                 )
@@ -576,6 +635,7 @@ class DirectRPCPool:
                 }
         finally:
             concurrency_limiter.release()
+
 
     async def revert_conversation(
         self,
