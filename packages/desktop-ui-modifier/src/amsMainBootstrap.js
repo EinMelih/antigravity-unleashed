@@ -76,11 +76,21 @@ function startHubServices() {
     }
     try {
         const runtimeConfigPath = path.join(os.homedir(), ".gemini", "config", "antigravity-hub", "config.json");
+        let runtimeConfig = {};
+        if (fs.existsSync(runtimeConfigPath)) {
+            runtimeConfig = JSON.parse(fs.readFileSync(runtimeConfigPath, "utf8")) || {};
+        }
+        const autostartEnabled =
+            process.env.ANTIGRAVITY_ENABLE_HUB_AUTOSTART === "1" ||
+            runtimeConfig.hub_autostart_enabled === true ||
+            runtimeConfig.web_hub_enabled === true;
+        if (!autostartEnabled) {
+            return;
+        }
         let hubRoot = typeof process.env.ANTIGRAVITY_HUB_ROOT === "string"
             ? process.env.ANTIGRAVITY_HUB_ROOT.trim()
             : "";
-        if (!hubRoot && fs.existsSync(runtimeConfigPath)) {
-            const runtimeConfig = JSON.parse(fs.readFileSync(runtimeConfigPath, "utf8"));
+        if (!hubRoot) {
             hubRoot = typeof runtimeConfig.hub_root === "string" ? runtimeConfig.hub_root.trim() : "";
         }
         if (!hubRoot || !fs.existsSync(hubRoot)) {

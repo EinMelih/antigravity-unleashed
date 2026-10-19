@@ -3,6 +3,8 @@ param(
     [switch]$Restart,
     [switch]$SkipDesktopStart,
     [switch]$SkipLocalApi,
+    [switch]$EnableLocalHub,
+    [switch]$EnableLocalApi,
     [ValidateRange(5, 300)][int]$HealthTimeoutSeconds = 30
 )
 
@@ -13,9 +15,48 @@ $logsDir = Join-Path $projectRoot 'logs'
 $stopScript = Join-Path $projectRoot 'stop_services.ps1'
 Set-Location -LiteralPath $projectRoot
 
+function Get-HubRuntimeConfig {
+    $configFile = if (-not [string]::IsNullOrWhiteSpace($env:ANTIGRAVITY_HUB_CONFIG)) {
+        [string]$env:ANTIGRAVITY_HUB_CONFIG
+    } else {
+        Join-Path $HOME '.gemini\config\antigravity-hub\config.json'
+    }
+    if (Test-Path -LiteralPath $configFile -PathType Leaf) {
+        try {
+            return (Get-Content -LiteralPath $configFile -Raw -Encoding UTF8 | ConvertFrom-Json)
+        } catch {
+            return $null
+        }
+    }
+    return $null
+}
+
+function Test-LocalWebHubEnabled {
+    if ($EnableLocalHub) {
+        return $true
+    }
+    $enableEnv = [string]$env:ANTIGRAVITY_ENABLE_LOCAL_HUB
+    if ($enableEnv.Trim().ToLowerInvariant() -in @('1', 'true', 'yes')) {
+        return $true
+    }
+    $cfg = Get-HubRuntimeConfig
+    if ($null -ne $cfg) {
+        if ($null -ne $cfg.PSObject.Properties['web_hub_enabled'] -and [bool]$cfg.web_hub_enabled) {
+            return $true
+        }
+        if ($null -ne $cfg.PSObject.Properties['hub_autostart_enabled'] -and [bool]$cfg.hub_autostart_enabled) {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Test-LocalApiBridgeEnabled {
     if ($SkipLocalApi) {
         return $false
+    }
+    if ($EnableLocalApi) {
+        return $true
     }
     $disableEnv = [string]$env:ANTIGRAVITY_DISABLE_LOCAL_API
     if ($disableEnv.Trim().ToLowerInvariant() -in @('1', 'true', 'yes')) {
@@ -25,25 +66,21 @@ function Test-LocalApiBridgeEnabled {
     if ($enableEnv.Trim().ToLowerInvariant() -in @('1', 'true', 'yes')) {
         return $true
     }
-    $configFile = if (-not [string]::IsNullOrWhiteSpace($env:ANTIGRAVITY_HUB_CONFIG)) {
-        [string]$env:ANTIGRAVITY_HUB_CONFIG
-    } else {
-        Join-Path $HOME '.gemini\config\antigravity-hub\config.json'
+    $cfg = Get-HubRuntimeConfig
+    if ($null -ne $cfg -and $null -ne $cfg.PSObject.Properties['api_bridge_enabled']) {
+        return [bool]$cfg.api_bridge_enabled
     }
-    if (Test-Path -LiteralPath $configFile -PathType Leaf) {
-        try {
-            $cfg = Get-Content -LiteralPath $configFile -Raw -Encoding UTF8 | ConvertFrom-Json
-            if ($null -ne $cfg.PSObject.Properties['api_bridge_enabled']) {
-                return [bool]$cfg.api_bridge_enabled
-            }
-        } catch {
-            # Ignore invalid JSON and fall back to default enabled
-        }
-    }
-    return $true
+    return $false
 }
 
+$webHubEnabled = Test-LocalWebHubEnabled
 $apiBridgeEnabled = Test-LocalApiBridgeEnabled
+
+if (-not $webHubEnabled -and -not $apiBridgeEnabled) {
+    Write-Host '[Antigravity] Localhost Web-Hub & API services are OFF by default (Headless API runs on Linux/Docker).' -ForegroundColor DarkGray
+    Write-Host '              To enable locally on Windows, pass -EnableLocalHub (and optional -EnableLocalApi) or set "web_hub_enabled": true in config.json.' -ForegroundColor DarkGray
+    exit 0
+}
 
 $services = @(
     [pscustomobject]@{ Name = 'Proxy Server'; Script = 'proxy_server.py'; Port = 8000; HealthUrl = 'http://127.0.0.1:8000/health'; StdoutLog = 'proxy.log'; StderrLog = 'proxy.err.log' },

@@ -165,8 +165,6 @@ export function LanguageSwitch() {
 
 const headlessPrimaryItems: ReadonlyArray<NavItem> = [
   { labelDe: "API-Logs", labelEn: "API-Logs", to: "/api-logs" },
-  { labelDe: "Chats", labelEn: "Chats", to: "/chats" },
-  { labelDe: "Einstellungen", labelEn: "Settings", to: "/settings" },
 ];
 
 export function PrimaryNavigation() {

@@ -18,40 +18,49 @@
 > I built this setup for my own daily workflow with Google Antigravity (`v2.24.0`), but I'm no longer actively developing it. Between newer models needing less custom scaffolding, Google shipping the headless ACP server (`agy_acp_server.exe`), and tools like T3 Code handling multi-agent worktrees natively, I moved on.  
 > Several parts of this repo were vibe-coded and some features are unfinished. Feel free to fork it, fix rough edges, or open Pull Requests.
 
+> [!CAUTION]
+> **⚠️ Disclaimer — Terms of Service & Account Ban Risk (Use at Your Own Risk):**  
+> Running the standalone Headless ConnectRPC / gRPC API Bridge (`packages/web-hub`) with an exported Google OAuth token (`JETSKI_OAUTH_TOKEN` / `oauth_token.json`) or using automated third-party agents (OpenClaw, Hermes, etc.) bypasses the official Antigravity IDE client and **violates Google's Terms of Service**.  
+> Although an 8-layer anti-detection shield (adaptive pacing, 10-slot workspace rotation, keyword firewall, heartbeat blocker, and 5% quota circuit-breaker) is included, **your Google account can be rate-limited, suspended, or permanently banned at any time**. The authors assume zero liability for account suspensions or data loss.
+
 ---
 
 ## Overview
 
-This monorepo packages the three components I used to extend the Google Antigravity desktop client on Windows:
+This monorepo is cleanly split into **two independent operating modes**:
+- **Windows Desktop (`packages/desktop-ui-modifier`)** — Pure Electron UI mod (`app.asar`). Localhost background servers (`:8000` / `:8001`) and the floating API badge are **OFF by default** so your desktop IDE stays 100% clean (with an optional switch if you ever want to turn them on).
+- **Linux / Docker Headless API (`packages/web-hub`)** — Standalone 24/7 Direct-ConnectRPC OpenAI-compatible API server (`:8001/v1`) + pure **API-Logs & Shield Monitor (`:8000/#/api-logs`)** without any Electron/GUI or legacy chat bloat.
 
 ```text
 antigravity-unleashed/
-├── install.bat / install.ps1       # 1-click setup: configures ~/.gemini/config & patches app.asar
+├── install.bat / install.ps1       # Windows setup: configures ~/.gemini/config & patches app.asar
 ├── packages/
-│   ├── desktop-ui-modifier/        # Electron v2.24.0 app.asar injector, HUD & auto-rollback repacker
-│   ├── web-hub/                    # FastAPI control plane (:8000), OpenAI proxy (:8001) & 36-tool MCP server
+│   ├── desktop-ui-modifier/        # Clean Electron v2.24.0 app.asar UI mod (localhost autostart OFF by default)
+│   ├── web-hub/                    # Headless Linux Docker API (:8001) + pure API-Logs Monitor (:8000)
 │   └── ams-framework/              # Global agent rules, memory compiler (USER/MEMORY) & helper skills
 └── tests/                          # Privacy & portability verification suite
 ```
 
-### 1. Desktop UI Modifier (`packages/desktop-ui-modifier`)
+### 1. Desktop UI Modifier (`packages/desktop-ui-modifier` — Windows)
 
-Patches Antigravity's local Electron bundle (`%LOCALAPPDATA%\Programs\Antigravity\resources\app.asar`) to inject custom UI controls directly into the IDE's composer bar:
+Patches Antigravity's local Electron bundle (`%LOCALAPPDATA%\Programs\Antigravity\resources\app.asar`) to inject custom UI controls directly into the IDE's composer bar **without starting any background localhost servers by default**:
 
-- **`Unleashed` Quick Menu (`Ctrl+Shift+B`)** — Adds an Orbital Prism **`Unleashed`** button to the bottom composer bar that opens a quick control menu for the Web Hub, API Bridge, Git sync, and patch logs.
+- **`Unleashed` Quick Menu (`Ctrl+Shift+B`)** — Adds an Orbital Prism **`Unleashed`** button to the bottom composer bar for quick access to Git sync and patch logs.
 - **Live Quota Watcher (`src/ui/quotaWatcher.js`)** — Intercepts `GetUserStatus` / `RetrieveUserQuotaSummary` responses in the renderer to show live 5-hour and weekly quota percentages (`G: 100% | C: 100%`) in the composer bar and falls back to Gemini when Claude quota hits `0%`.
 - **Task & Plan Side-Panel (`src/ui/taskTracker.js`)** — Toggleable slide-out panel (`Ctrl+Shift+P`) synced with the active session's `brain/<id>/task.md`, session notes (`notes.txt`), token/cache stats, and GitHub PR/Issue lists.
 - **Brain Folder & Conflict Indicator (`src/ui/reviewsDashboard.js`)** — One-click button in the composer bar to open the current conversation's local `brain/` folder in Explorer, pulsing orange when `.conflict` files are detected.
-- **API Bridge Monitor (`src/ui/apiMonitor.js`)** — Status indicator for the local OpenAI proxy and isolated `Antigravity-api` profile window.
-- **Transactional ASAR Repacker (`scripts/repack_and_restart.py`)** — Verifies upstream SHA-256 hashes (`UPSTREAM_COMPATIBILITY.json`), compiles `src/ui/*.js` into `src/preload.js`, backs up `app.asar` + `app.asar.unpacked`, extracts and repacks via `@electron/asar`, verifies the preload over Chrome DevTools Protocol (CDP), and rolls back automatically if anything fails.
+- **Transactional ASAR Repacker (`scripts/repack_and_restart.py`)** — Verifies upstream SHA-256 hashes (`UPSTREAM_COMPATIBILITY.json`), compiles `src/ui/*.js` into `src/preload.js`, backs up `app.asar` + `app.asar.unpacked`, extracts and repacks via `@electron/asar`, and rolls back automatically if anything fails.
+- **Optional Localhost Switch (Off by Default):**
+  - Localhost Web-Hub (`:8000`) and API Bridge (`:8001`) are **disabled by default** on Windows (`"web_hub_enabled": false`, `"hub_autostart_enabled": false`, `"api_bridge_enabled": false`).
+  - If you explicitly want to start them on Windows, run `powershell -ExecutionPolicy Bypass -File packages/web-hub/start_services.ps1 -EnableLocalHub -EnableLocalApi` or set `"web_hub_enabled": true` in `~/.gemini/config/antigravity-hub/config.json`.
 
-### 2. Web Hub, OpenAI Bridge & MCP Server (`packages/web-hub`)
+### 2. Headless Linux Docker API & API-Logs Server (`packages/web-hub`)
 
-A local FastAPI + React dashboard and API proxy that drives Antigravity via CDP and SQLite session state:
+Designed to run 24/7 in a lightweight Linux Docker container (`python:3.12-slim` + standalone `language_server_linux_x64`, zero Electron/Xvfb overhead):
 
-- **Web Control Plane (`127.0.0.1:8000`)** — Multi-pane ChatDesk, project onboarding, scheduled tasks, and overnight issue-to-PR runner (`nightly_runner.py`).
-- **OpenAI-Compatible API Proxy (`127.0.0.1:8001/v1/chat/completions`)** — Lets external tools (Cursor, Continue, Cline, custom scripts) send standard OpenAI SDK requests through an isolated Antigravity Electron profile (`--ams-profile=api`) with SSE streaming and tool-call forwarding.
-- **FastMCP Server (`mcp_server.py`)** — Exposes 36 MCP tools for session management, quota inspection, DOM inspection, and headless browser actions.
+- **Direct-ConnectRPC OpenAI API (`:8001/v1/chat/completions`, `/v1/models`)** — Full OpenAI SDK, **OpenClaw** (`/openclaw/v1`), and **Hermes Agent** (`/hermes/v1`) compatibility with SSE streaming, automatic Markdown-fenced `tool_calls` extraction, and headless Google OAuth `refresh_token` auto-renewal (`/v1/auth/status`, `/v1/auth/token`).
+- **8-Layer Anti-Detection Shields (`src/antigravity_shields.py`)** — 0ms Heartbeat Blocker (`HEARTBEAT_OK`), Keyword Firewall (scrubs `OpenClaw`, `Hermes`, `SOUL.md`, `HEARTBEAT.md`), `AGENTS.md` workspace rule injection, Smart Adaptive Pacing, 10-slot workspace pool (`ws-00`..`ws-09`) with multi-turn session affinity, and 5% Quota Circuit-Breaker (`HTTP 429` for automatic client model fallback).
+- **Pure API-Logs Monitor (`:8000/#/api-logs`)** — In `headless_linux` / Docker mode, the web interface strips out all legacy Studio/Chat views and renders **exclusively the API-Logs, Token/Quota Telemetry, and Shield Controls**.
 
 ### 3. AMS Memory Framework & Multi-PC Cloud Sync (`packages/ams-framework`)
 
@@ -64,60 +73,36 @@ A local FastAPI + React dashboard and API proxy that drives Antigravity via CDP 
 
 ---
 
-## How the `app.asar` Setup Works (Quick Start)
+## Quick Start
 
-### Prerequisites
+### A. Windows Desktop UI Modifier Only (`app.asar`)
 - **Windows 10/11** with **Google Antigravity IDE `v2.24.0`** installed in `%LOCALAPPDATA%\Programs\Antigravity`
 - **Python 3.11+** and **Node.js 20+** (`node` and `npx` on `PATH`)
-
-### Option A: 1-Click Install (`install.bat`)
-
-Clone the repository and run `install.bat` (or `.\install.ps1` in PowerShell):
 
 ```powershell
 git clone https://github.com/EinMelih/antigravity-unleashed.git
 cd antigravity-unleashed
-.\install.bat
-```
-
-What `install.bat` does automatically:
-1. Installs Python dependencies (`packages/web-hub/requirements.txt` + `aiohttp`).
-2. Creates `~/.gemini/config/antigravity-hub/config.json` (if not already present) pointing `hub_root` to `packages/web-hub` and generates a local API key (`sk-ag-...`).
-3. Compiles the modular UI scripts (`packages/desktop-ui-modifier/src/ui/*.js`) into `src/preload.js`.
-4. Runs `packages/desktop-ui-modifier/scripts/repack_and_restart.py`, which backs up your original `app.asar`, injects the modifier, restarts Antigravity, and verifies via CDP that the **`Unleashed`** button (`Ctrl+Shift+B`) is active.
-
-### Option B: Manual Step-by-Step Setup
-
-If you prefer to run the steps individually or only want either the UI mod or the Web Hub:
-
-**1. Patch `app.asar` (Desktop UI Modifier only):**
-```powershell
 python packages/desktop-ui-modifier/scripts/build_preload.py
 python packages/desktop-ui-modifier/scripts/repack_and_restart.py
 ```
-*(If your Antigravity installation is not `v2.24.0`, the preflight check in `UPSTREAM_COMPATIBILITY.json` will abort safely without touching your `app.asar`.)*
 
-**2. Start the Web Hub (`:8000`) & OpenAI API Bridge (`:8001`):**
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File packages/web-hub/start_services.ps1
-```
+### B. Headless Linux / Docker API Server (`packages/web-hub`)
 
-**3. Use the Local OpenAI Endpoint (`127.0.0.1:8001/v1`):**
-```python
-from openai import OpenAI
-
-# Read your generated key from ~/.gemini/config/antigravity-hub/config.json
-client = OpenAI(
-    base_url="http://127.0.0.1:8001/v1",
-    api_key="sk-ag-your-local-token",
-)
-
-response = client.chat.completions.create(
-    model="gemini-2.5-pro",
-    messages=[{"role": "user", "content": "Explain how the ASAR repacker works."}],
-)
-print(response.choices[0].message.content)
-```
+1. **Export your Google OAuth token on a logged-in machine (one-time):**
+   ```bash
+   python packages/web-hub/scripts/export_linux_auth_seed.py --output-dir ./docker-data
+   ```
+2. **Start the Docker container on your Linux server:**
+   ```bash
+   cd packages/web-hub
+   docker compose up -d --build
+   ```
+3. **Read your generated API key & connect OpenClaw / Hermes / OpenAI SDK:**
+   ```bash
+   docker compose logs | grep -E "API KEY|GOOGLE AUTH"
+   # API Endpoint:  http://<linux-server-ip>:8001/v1 (or /openclaw/v1, /hermes/v1)
+   # Pure API-Logs: http://<linux-server-ip>:8000/dashboard/react/index.html#/api-logs
+   ```
 
 ---
 

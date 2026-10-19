@@ -3,6 +3,7 @@ import { type ReactNode, useEffect } from "react";
 import { CommandPalette } from "@/components/shell/command-palette";
 import { PrimaryNavigation } from "@/components/shell/primary-navigation";
 import { SystemConnection } from "@/components/shell/system-connection";
+import { useIsHeadlessLinux } from "@/hooks/use-hub-health";
 import { applyHubI18nToDom, useHubLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useHubRoute } from "@/lib/routing";
@@ -14,7 +15,8 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const route = useHubRoute();
   const [lang] = useHubLanguage();
-  const immersive = route === "/chats";
+  const isHeadlessLinux = useIsHeadlessLinux();
+  const immersive = !isHeadlessLinux && route === "/chats";
 
   useEffect(() => {
     applyHubI18nToDom(document.body, lang);
@@ -38,7 +40,9 @@ export function AppShell({ children }: AppShellProps) {
               AG
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">Anti-Gravity Hub</p>
+              <p className="truncate text-sm font-semibold">
+                {isHeadlessLinux ? "Anti-Gravity API Monitor" : "Anti-Gravity Hub"}
+              </p>
               <div className="mt-0.5 hidden sm:block">
                 <SystemConnection />
               </div>
@@ -57,7 +61,7 @@ export function AppShell({ children }: AppShellProps) {
       >
         {children}
       </main>
-      <CommandPalette />
+      {!isHeadlessLinux ? <CommandPalette /> : null}
     </div>
   );
 }

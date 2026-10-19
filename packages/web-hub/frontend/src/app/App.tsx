@@ -26,7 +26,9 @@ function CurrentPage() {
 
   let content;
 
-  if (route === "/projects/new") {
+  if (isHeadlessLinux) {
+    content = <ApiLogsPage />;
+  } else if (route === "/projects/new") {
     content = <ProjectOnboardingPage />;
   } else if (route.startsWith("/projects/")) {
     content = <ProjectOverviewPage projectId={Number(route.split("/").at(-1))} />;
@@ -61,7 +63,7 @@ function CurrentPage() {
         break;
       case "/studio":
       default:
-        content = isHeadlessLinux ? <ApiLogsPage /> : <StudioPage />;
+        content = <StudioPage />;
     }
   }
   return (

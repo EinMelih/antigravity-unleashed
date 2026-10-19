@@ -6710,8 +6710,18 @@ async function showUpdateHistoryModal() {
     });
 
 
-    // Read-only API health and request details in the normal desktop profile.
+    // Read-only API health and request details in the normal desktop profile (opt-in only; off by default).
     (async () => {
+        try {
+            if (
+                window.__ANTIGRAVITY_ENABLE_API_MONITOR !== true &&
+                window.localStorage?.getItem?.('antigravity_enable_desktop_api_monitor') !== '1'
+            ) {
+                return;
+            }
+        } catch (_) {
+            return;
+        }
         let profile = null;
         try { profile = await window.electronNative?.getProfileInfo?.(); } catch (_) { /* Health still reports the verified server-side profile. */ }
         if (profile?.profile === 'api') return;

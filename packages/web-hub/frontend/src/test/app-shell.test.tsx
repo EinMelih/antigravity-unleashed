@@ -93,7 +93,7 @@ describe("AppShell", () => {
     expect(screen.queryByRole("dialog", { name: "Befehlspalette" })).not.toBeInTheDocument();
   });
 
-  it("focuses navigation on API-Logs, Chats, and Settings in headless_linux mode", async () => {
+  it("focuses navigation exclusively on API-Logs in headless_linux mode", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((input: RequestInfo | URL) => {
@@ -138,8 +138,8 @@ describe("AppShell", () => {
 
     expect(await screen.findByText("Headless Linux · Direct RPC")).toBeVisible();
     expect(screen.getAllByRole("link", { name: "API-Logs" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "Chats" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "Einstellungen" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "Chats" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Einstellungen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Studio" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mehr" })).not.toBeInTheDocument();
   });

@@ -1,6 +1,9 @@
 {
   "port": 8001,
   "auth_token": "YOUR_SECRET_AUTH_TOKEN_HERE",
+  "web_hub_enabled": false,
+  "hub_autostart_enabled": false,
+  "api_bridge_enabled": false,
   "telegram_token": "",
   "telegram_chat_id": "",
   "watchdog": {
