@@ -464,6 +464,11 @@ class DirectRPCPool:
                 if system_instructions.strip() and not tracked.turn_hashes:
                     effective_user_message = f"{system_instructions.strip()}\n\n{effective_user_message}"
 
+                user_media = list(sanitized.get("latest_user_media") or [])
+                if not user_media and unrecorded_prior:
+                    for pt in unrecorded_prior:
+                        if pt.get("media"):
+                            user_media.extend(pt["media"])
                 await self.rpc_client.send_user_cascade_message(
                     tracked.cascade_id,
                     effective_user_message,
@@ -471,6 +476,7 @@ class DirectRPCPool:
                     model=model,
                     reasoning_effort=reasoning_effort,
                     blocking=False,
+                    **({"media": user_media} if user_media else {}),
                 )
 
                 thinking_chunks: List[str] = []
@@ -686,6 +692,11 @@ class DirectRPCPool:
                 if system_instructions.strip() and not tracked.turn_hashes:
                     effective_user_message = f"{system_instructions.strip()}\n\n{effective_user_message}"
 
+                user_media = list(sanitized.get("latest_user_media") or [])
+                if not user_media and unrecorded_prior:
+                    for pt in unrecorded_prior:
+                        if pt.get("media"):
+                            user_media.extend(pt["media"])
                 await self.rpc_client.send_user_cascade_message(
                     tracked.cascade_id,
                     effective_user_message,
@@ -693,6 +704,7 @@ class DirectRPCPool:
                     model=model,
                     reasoning_effort=reasoning_effort,
                     blocking=False,
+                    **({"media": user_media} if user_media else {}),
                 )
 
                 collected_thinking: List[str] = []

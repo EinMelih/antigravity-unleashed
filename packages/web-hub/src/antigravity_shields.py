@@ -107,7 +107,13 @@ def verify_loopback_rpc_url(url: str) -> None:
 _SIGNATURE_REPLACEMENTS: Tuple[Tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bOpenClaw\b", re.IGNORECASE), "Workspace Assistant"),
     (re.compile(r"\b(?:Clawdbot|Moltbot|Clawd)\b", re.IGNORECASE), "Workspace Assistant"),
-    (re.compile(r"\bHermes(?:\s+Agent)?\b", re.IGNORECASE), "Project Assistant"),
+    (
+        re.compile(
+            r"(?<![/.\w-])Hermes(?:\s+Agent)?(?!\s+(?:login|logout|status|config|tools|setup|update|plugins|kanban|cron|doctor|version|help|pm)\b)(?![/.\w-])",
+            re.IGNORECASE,
+        ),
+        "Project Assistant",
+    ),
     (re.compile(r"\bcreated\s+by\s+Nous\s+Research\b", re.IGNORECASE), "configured for this workspace"),
     (re.compile(r"\bNous\s+Research\b", re.IGNORECASE), "Workspace Team"),
     (re.compile(r"\bRoo\s*Code\b", re.IGNORECASE), "IDE Assistant"),
@@ -184,6 +190,50 @@ def unmask_response_text(text: str, *, firewall_hits: Optional[List[str]] = None
     return result
 
 
+def _extract_media_from_content_list(raw_content: List[Any]) -> List[Dict[str, str]]:
+    """Extract ConnectRPC `Media` objects (`mimeType`, `inlineData`, `description`) from OpenAI/Anthropic content arrays."""
+    media_items: List[Dict[str, str]] = []
+    for item in raw_content:
+        if not isinstance(item, dict):
+            continue
+        itype = str(item.get("type") or "").strip().lower()
+        if itype in ("image_url", "input_image"):
+            img_val = item.get("image_url") or item.get("url") or ""
+            url_str = str(img_val.get("url") if isinstance(img_val, dict) else img_val or "").strip()
+            if url_str.startswith("data:") and ";base64," in url_str:
+                header, b64_data = url_str.split(";base64,", 1)
+                mime_type = header[5:].strip() or "image/png"
+                b64_clean = re.sub(r"\s+", "", b64_data)
+                if b64_clean:
+                    ext = mime_type.split("/")[-1].split("+")[0] or "png"
+                    media_items.append(
+                        {
+                            "mimeType": mime_type,
+                            "inlineData": b64_clean,
+                            "description": f"image.{ext}",
+                        }
+                    )
+        elif itype == "image":
+            src = item.get("source") if isinstance(item.get("source"), dict) else item
+            b64_data = str(
+                src.get("data") or src.get("inlineData") or src.get("base64_data") or ""
+            ).strip()
+            mime_type = str(
+                src.get("media_type") or src.get("mimeType") or src.get("mime_type") or "image/png"
+            ).strip()
+            b64_clean = re.sub(r"\s+", "", b64_data)
+            if b64_clean:
+                ext = mime_type.split("/")[-1].split("+")[0] or "png"
+                media_items.append(
+                    {
+                        "mimeType": mime_type,
+                        "inlineData": b64_clean,
+                        "description": f"image.{ext}",
+                    }
+                )
+    return media_items
+
+
 def extract_and_sanitize_messages(
     messages: List[Dict[str, Any]],
     *,
@@ -197,10 +247,11 @@ def extract_and_sanitize_messages(
       - ``system_instructions``: Combined sanitized system/developer rules
       - ``conversation_turns``: Ordered list of ``{"role": "user"|"assistant"|"tool", "content": str}``
       - ``latest_user_message``: The sanitized user message for the current turn
+      - ``latest_user_media``: List of ConnectRPC ``Media`` dicts attached to the latest user turn
       - ``firewall_hits``: List of matched signature patterns
     """
     system_parts: List[str] = []
-    conversation_turns: List[Dict[str, str]] = []
+    conversation_turns: List[Dict[str, Any]] = []
     firewall_hits: List[str] = []
 
     for msg in messages or []:
@@ -208,6 +259,7 @@ def extract_and_sanitize_messages(
             continue
         role = str(msg.get("role") or "user").strip().lower()
         raw_content = msg.get("content", "")
+        msg_media: List[Dict[str, str]] = []
         if isinstance(raw_content, list):
             text_chunks = []
             for item in raw_content:
@@ -217,8 +269,20 @@ def extract_and_sanitize_messages(
                 elif isinstance(item, str):
                     text_chunks.append(item)
             content_str = "\n".join(text_chunks)
+            msg_media = _extract_media_from_content_list(raw_content)
         else:
             content_str = str(raw_content or "")
+
+        if msg_media:
+            # Replace file-path attachment hints so the model inspects the inline vision image directly
+            content_str = re.sub(
+                r"\[(?:Attached files|Image attached at|Image attached):\s*[^\]]+\]",
+                "[Inline image attached directly to this message]",
+                content_str,
+                flags=re.IGNORECASE,
+            ).strip()
+            if not content_str:
+                content_str = "What do you see in this image?"
 
         # Strip any legacy "[System: ...]" prefix if a client already injected one
         legacy_sys_match = re.match(r"^\s*\[System:\s*([\s\S]*?)\]\s*(.*)$", content_str)
@@ -247,7 +311,10 @@ def extract_and_sanitize_messages(
         elif role in ("user", "assistant"):
             if role == "assistant" and msg.get("tool_calls") and not sanitized.strip():
                 sanitized = json.dumps({"tool_calls": msg["tool_calls"]}, ensure_ascii=False)
-            conversation_turns.append({"role": role, "content": sanitized})
+            turn_entry: Dict[str, Any] = {"role": role, "content": sanitized}
+            if msg_media and role == "user":
+                turn_entry["media"] = msg_media
+            conversation_turns.append(turn_entry)
 
     # If the caller supplied OpenAI-compatible tools/functions, format them as workspace output rules
     if tools and isinstance(tools, list):
@@ -277,13 +344,15 @@ def extract_and_sanitize_messages(
                 f"Functions:\n```json\n{json.dumps(tool_specs, ensure_ascii=False)}\n```"
             )
 
-    user_turns = [t["content"] for t in conversation_turns if t["role"] == "user" and t["content"].strip()]
-    latest_user_message = user_turns[-1] if user_turns else ""
+    user_turn_objs = [t for t in conversation_turns if t["role"] == "user" and (t["content"].strip() or t.get("media"))]
+    latest_user_message = user_turn_objs[-1]["content"] if user_turn_objs else ""
+    latest_user_media = user_turn_objs[-1].get("media", []) if user_turn_objs else []
 
     return {
         "system_instructions": "\n\n".join(system_parts).strip(),
         "conversation_turns": conversation_turns,
         "latest_user_message": latest_user_message,
+        "latest_user_media": latest_user_media,
         "firewall_hits": list(dict.fromkeys(firewall_hits)),
     }
 

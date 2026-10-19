@@ -709,6 +709,7 @@ foreach ($p in $procs) {{
         model: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
         blocking: bool = False,
+        media: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """Clone `M0` (`main_root.formatted.js:81556`) to send a user prompt with `messageOrigin: 1`."""
         cascade_config = await self.build_ui_cascade_config(
@@ -727,6 +728,8 @@ foreach ($p in $procs) {{
             },
             "blocking": bool(blocking),
         }
+        if media:
+            payload["media"] = media
         return await self.call_unary("SendUserCascadeMessage", payload, timeout=30.0)
 
     async def revert_to_cascade_step(
