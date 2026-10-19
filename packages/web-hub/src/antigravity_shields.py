@@ -29,8 +29,42 @@ from src.config import config
 MAX_AGENTS_MD_BYTES = 23_500  # Below language_server.exe's 24,000-byte per-file rule cap
 
 
+from datetime import datetime, timezone
+
+
+def _format_reset_time_info(reset_time: Optional[str]) -> Tuple[Optional[float], str, int]:
+    """Parse an ISO-8601 resetTime string into (epoch_seconds, human_summary, retry_after_seconds)."""
+    if not reset_time or not isinstance(reset_time, str):
+        return None, "", 300
+    raw = reset_time.strip()
+    if not raw:
+        return None, "", 300
+    try:
+        iso = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+        dt = datetime.fromisoformat(iso)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt_utc = dt.astimezone(timezone.utc)
+        epoch = dt_utc.timestamp()
+        rem_sec = max(0, int(round(epoch - time.time())))
+        if rem_sec >= 3600:
+            hours = rem_sec // 3600
+            mins = (rem_sec % 3600) // 60
+            countdown = f"in {hours}h {mins}m"
+        elif rem_sec >= 60:
+            mins = rem_sec // 60
+            secs = rem_sec % 60
+            countdown = f"in {mins}m {secs}s" if mins < 10 and secs > 0 else f"in {mins}m"
+        else:
+            countdown = f"in {rem_sec}s"
+        summary = f"{dt_utc.strftime('%Y-%m-%d %H:%M:%S UTC')} ({countdown})"
+        return epoch, summary, max(1, rem_sec)
+    except Exception:
+        return None, raw, 300
+
+
 class QuotaExhaustedError(Exception):
-    """Raised by Shield 6 before Google is contacted when a model's quota is < threshold."""
+    """Raised by Shield 6 when a model's quota is full (or latched until resetTime)."""
 
     def __init__(
         self,
@@ -38,17 +72,20 @@ class QuotaExhaustedError(Exception):
         remaining_fraction: float,
         threshold: float,
         reset_time: Optional[str] = None,
+        latched: bool = False,
     ) -> None:
         self.model = model
-        self.remaining_fraction = remaining_fraction
-        self.threshold = threshold
+        self.remaining_fraction = max(0.0, float(remaining_fraction))
+        self.threshold = float(threshold)
         self.reset_time = reset_time
-        pct = round(remaining_fraction * 100, 1)
-        min_pct = round(threshold * 100, 1)
+        self.latched = bool(latched)
+        self.reset_epoch, self.reset_summary, self.retry_after = _format_reset_time_info(reset_time)
+        pct = round(self.remaining_fraction * 100, 1)
+        reset_part = f" Reset at {self.reset_summary}." if self.reset_summary else ""
         super().__init__(
-            f"Pre-flight quota protection (Shield 6): Model '{model}' has {pct}% remaining quota "
-            f"(safety threshold: {min_pct}%). Returning local 429 so client fallback can switch models."
+            f"Quota full for model '{model}' ({pct}% remaining).{reset_part}"
         )
+
 
 
 # ---------------------------------------------------------------------------
@@ -335,14 +372,16 @@ class HeartbeatAndPacingGuard:
 
 
 # ---------------------------------------------------------------------------
-# Shield 6: Pre-Flight Quota Circuit Breaker (For Native Hermes Fallback)
+# Shield 6: Pre-Flight Quota Circuit Breaker + Local Latch Until Reset Time
 # ---------------------------------------------------------------------------
 class QuotaCircuitBreaker:
-    """Checks `RetrieveUserQuotaSummary` before sending prompts to Google.
+    """Checks `GetCascadeModelConfigData` / `RetrieveUserQuotaSummary` before sending prompts.
 
-    If the target model's remaining quota is below `quota_min_fraction` (default 5%),
-    raises `QuotaExhaustedError` locally so the API Bridge returns an OpenAI HTTP 429
-    (`model_quota_exhausted`), triggering Hermes/OpenClaw's built-in model fallback.
+    - Never performs any server-side model fallback (Hermes/OpenClaw handle their own fallback).
+    - If the requested model's remaining quota is full (`< quota_min_fraction`, default 5%, or `0%`),
+      latches that model locally until its `resetTime` timestamp so all subsequent requests for
+      that model are rejected in `0 ms` with `HTTP 429` (`Quota full for model ... Reset at ...`)
+      without contacting `language_server` or Google again until the reset hour has passed.
     """
 
     def __init__(self, cache_ttl_seconds: float = 30.0) -> None:
@@ -350,12 +389,36 @@ class QuotaCircuitBreaker:
         self._cached_summary: Optional[Dict[str, Any]] = None
         self._cached_at: float = 0.0
         self._cached_owner_id: Optional[int] = None
+        self._exhausted_until: Dict[str, Dict[str, Any]] = {}
         self._lock = asyncio.Lock()
 
     def reset_cache(self) -> None:
         self._cached_summary = None
         self._cached_at = 0.0
         self._cached_owner_id = None
+        self._exhausted_until.clear()
+
+    def latch_model_exhausted(
+        self,
+        model_requested: Optional[str],
+        *,
+        reset_time: Optional[str] = None,
+        remaining_fraction: float = 0.0,
+    ) -> None:
+        """Manually latch a model as exhausted until `reset_time` (or 5 minutes if unknown)."""
+        canonical_id, _, _ = self._canonicalize_model_key(model_requested)
+        reset_epoch, _, _ = _format_reset_time_info(reset_time)
+        now_epoch = time.time()
+        effective_epoch = (
+            reset_epoch if (reset_epoch is not None and reset_epoch > now_epoch) else (now_epoch + 300.0)
+        )
+        if not reset_time:
+            reset_time = datetime.fromtimestamp(effective_epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self._exhausted_until[canonical_id] = {
+            "reset_epoch": effective_epoch,
+            "reset_time": reset_time,
+            "remaining_fraction": max(0.0, float(remaining_fraction)),
+        }
 
     async def check_model_quota(
         self,
@@ -370,6 +433,25 @@ class QuotaCircuitBreaker:
         threshold = float(engine_cfg.get("quota_min_fraction", 0.05))
         if threshold <= 0.0:
             return {"checked": False, "remaining_fraction": 1.0}
+
+        canonical_id, _, _ = self._canonicalize_model_key(model_requested)
+        display_model = (model_requested or canonical_id or "default").strip()
+
+        # 1. Check 0ms local latch first — never resend if we already know the model is full!
+        latched = self._exhausted_until.get(canonical_id)
+        if latched is not None:
+            if time.time() < float(latched.get("reset_epoch", 0.0)):
+                raise QuotaExhaustedError(
+                    model=display_model,
+                    remaining_fraction=float(latched.get("remaining_fraction", 0.0)),
+                    threshold=threshold,
+                    reset_time=latched.get("reset_time"),
+                    latched=True,
+                )
+            else:
+                # Reset hour has passed -> clear latch and force fresh RPC quota check
+                self._exhausted_until.pop(canonical_id, None)
+                self._cached_summary = None
 
         now = time.monotonic()
         owner_id = id(getattr(fetch_quota_fn, "__self__", fetch_quota_fn))
@@ -395,11 +477,18 @@ class QuotaCircuitBreaker:
         remaining = float(bucket_info.get("remainingFraction", 1.0))
         reset_time = bucket_info.get("resetTime")
         if remaining < threshold:
+            self.latch_model_exhausted(
+                model_requested,
+                reset_time=reset_time,
+                remaining_fraction=remaining,
+            )
+            latched_entry = self._exhausted_until.get(canonical_id) or {}
             raise QuotaExhaustedError(
-                model=model_requested or "default",
+                model=display_model,
                 remaining_fraction=remaining,
                 threshold=threshold,
-                reset_time=reset_time,
+                reset_time=latched_entry.get("reset_time") or reset_time,
+                latched=False,
             )
         return {
             "checked": True,
@@ -409,43 +498,166 @@ class QuotaCircuitBreaker:
         }
 
     @staticmethod
-    def _match_bucket(model_name: str, summary: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        norm = model_name.strip().lower()
-        groups = summary.get("groups") or summary.get("quotaGroups") or []
+    def _canonicalize_model_key(model_name: Optional[str]) -> Tuple[str, str, List[str]]:
+        """Map any model ID or alias to `(canonical_id, model_enum_lower, match_keywords)`."""
+        norm = (model_name or "").strip().lower()
+        if "opus" in norm or "m26" in norm:
+            return (
+                "claude-opus-4-6-thinking",
+                "model_placeholder_m26",
+                ["model_placeholder_m26", "claude opus", "opus", "claude", "m37"],
+            )
+        if "sonnet" in norm or "claude" in norm or "m35" in norm:
+            return (
+                "claude-sonnet-4-6",
+                "model_placeholder_m35",
+                ["model_placeholder_m35", "claude sonnet", "sonnet", "claude"],
+            )
+        if "gpt" in norm or "120b" in norm or "openai" in norm:
+            return (
+                "gpt-oss-120b-medium",
+                "model_openai_gpt_oss_120b_medium",
+                ["model_openai_gpt_oss_120b_medium", "gpt-oss", "gpt", "openai"],
+            )
+        if "flash" in norm or "m318" in norm or "m319" in norm or "m320" in norm:
+            if "high" in norm or "m318" in norm:
+                return (
+                    "gemini-3.8-flash-high",
+                    "model_placeholder_m318",
+                    ["model_placeholder_m318", "gemini 3.8 flash (high)", "flash", "gemini"],
+                )
+            if "low" in norm or "m320" in norm:
+                return (
+                    "gemini-3.8-flash-low",
+                    "model_placeholder_m320",
+                    ["model_placeholder_m320", "gemini 3.8 flash (low)", "flash", "gemini"],
+                )
+            return (
+                "gemini-3.8-flash-medium",
+                "model_placeholder_m319",
+                ["model_placeholder_m319", "gemini 3.8 flash (medium)", "flash", "gemini"],
+            )
+        if "high" in norm or "m417" in norm:
+            return (
+                "gemini-4-argon-high",
+                "model_placeholder_m417",
+                ["model_placeholder_m417", "gemini 4 argon (high)", "argon", "gemini-5hour", "gemini"],
+            )
+        if "low" in norm or "m419" in norm:
+            return (
+                "gemini-4-argon-low",
+                "model_placeholder_m419",
+                ["model_placeholder_m419", "gemini 4 argon (low)", "argon", "gemini-5hour", "gemini"],
+            )
+        return (
+            "gemini-4-argon-medium",
+            "model_placeholder_m418",
+            ["model_placeholder_m418", "gemini 4 argon (medium)", "argon", "gemini-5hour", "gemini", "m47", "m37"],
+        )
+
+    @classmethod
+    def _extract_normalized_buckets(cls, summary: Dict[str, Any]) -> List[Dict[str, Any]]:
         buckets: List[Dict[str, Any]] = []
+
+        # 1. Primary v2.24.0 format: GetCascadeModelConfigData -> clientModelConfigs
+        for item in summary.get("clientModelConfigs") or []:
+            if not isinstance(item, dict):
+                continue
+            qinfo = item.get("quotaInfo")
+            label = str(item.get("label") or item.get("displayName") or item.get("name") or "")
+            model_enum = str(
+                item.get("model")
+                or (item.get("modelOrAlias") or {}).get("model")
+                or item.get("modelUid")
+                or ""
+            )
+            if isinstance(qinfo, dict):
+                if "remainingFraction" in qinfo:
+                    rem = float(qinfo["remainingFraction"])
+                elif "resetTime" in qinfo:
+                    # Protobuf3 JSON serialization omits float 0.0 when quota is 100% exhausted!
+                    rem = 0.0
+                else:
+                    rem = 1.0
+                reset_time = qinfo.get("resetTime")
+            elif "remainingFraction" in item:
+                rem = float(item["remainingFraction"])
+                reset_time = item.get("resetTime")
+            else:
+                continue
+
+            buckets.append(
+                {
+                    "name": label or model_enum,
+                    "label": label,
+                    "model": model_enum,
+                    "remainingFraction": rem,
+                    "resetTime": reset_time,
+                }
+            )
+
+        # 2. Legacy / RetrieveUserQuotaSummary format: groups / quotaGroups / buckets / models
+        groups = summary.get("groups") or summary.get("quotaGroups") or []
+        raw_legacy: List[Dict[str, Any]] = []
         for grp in groups:
             if isinstance(grp, dict):
                 for b in grp.get("buckets") or []:
                     if isinstance(b, dict):
-                        buckets.append(b)
+                        raw_legacy.append(b)
         for b in summary.get("buckets") or []:
             if isinstance(b, dict):
-                buckets.append(b)
+                raw_legacy.append(b)
         for m in summary.get("models") or []:
             if isinstance(m, dict):
-                buckets.append(m)
+                raw_legacy.append(m)
 
+        for b in raw_legacy:
+            qinfo = b.get("quotaInfo") if isinstance(b.get("quotaInfo"), dict) else None
+            if "remainingFraction" in b:
+                rem = float(b["remainingFraction"])
+                reset_time = b.get("resetTime") or (qinfo.get("resetTime") if qinfo else None)
+            elif qinfo is not None:
+                rem = float(qinfo["remainingFraction"]) if "remainingFraction" in qinfo else (0.0 if "resetTime" in qinfo else 1.0)
+                reset_time = qinfo.get("resetTime")
+            elif "resetTime" in b:
+                rem = 0.0
+                reset_time = b.get("resetTime")
+            else:
+                continue
+            buckets.append(
+                {
+                    **b,
+                    "remainingFraction": rem,
+                    "resetTime": reset_time,
+                }
+            )
+
+        return buckets
+
+    @classmethod
+    def _match_bucket(cls, model_name: str, summary: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        buckets = cls._extract_normalized_buckets(summary)
         if not buckets:
             return None
 
-        target_keywords = []
-        if "opus" in norm:
-            target_keywords = ["opus", "claude", "m37"]
-        elif "sonnet" in norm or "claude" in norm:
-            target_keywords = ["sonnet", "claude", "m35"]
-        elif "gpt" in norm:
-            target_keywords = ["gpt", "openai"]
-        elif "gemini" in norm or "flash" in norm or "pro" in norm:
-            target_keywords = ["gemini-5hour", "gemini", "m47", "m37"]
+        _, model_enum_lower, target_keywords = cls._canonicalize_model_key(model_name)
 
+        # 1. Exact match on model enum (e.g. MODEL_PLACEHOLDER_M26)
+        for b in buckets:
+            b_enum = str(b.get("model") or "").strip().lower()
+            if b_enum and b_enum == model_enum_lower:
+                return b
+
+        # 2. Keyword priority match against label / name / bucketId / model
         for kw in target_keywords:
             for b in buckets:
-                b_name = str(
-                    b.get("name") or b.get("bucketId") or b.get("label") or b.get("model") or ""
+                haystack = " ".join(
+                    str(b.get(k) or "") for k in ("name", "bucketId", "label", "model")
                 ).lower()
-                if kw in b_name and "remainingFraction" in b:
+                if kw in haystack:
                     return b
         return None
+
 
 
 # ---------------------------------------------------------------------------

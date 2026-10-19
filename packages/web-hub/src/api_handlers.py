@@ -286,12 +286,14 @@ async def chat_completions_handler(request: web.Request) -> web.Response:
             )
         except QuotaExhaustedError as q_err:
             duration = (time.monotonic() - start) * 1000
+            retry_after_sec = getattr(q_err, "retry_after", 300)
             record_api_audit_log(
                 req_id=req_id,
                 **req_ctx,
                 endpoint="/v1/chat/completions",
                 engine_mode="rpc",
                 model_requested=model or "antigravity",
+                model_actual=q_err.model,
                 reasoning_effort=effort or "",
                 stream=False,
                 status_code=429,
@@ -299,7 +301,12 @@ async def chat_completions_handler(request: web.Request) -> web.Response:
                 messages=messages,
                 system_prompt=system_instructions,
                 user_prompt_preview=user_message,
-                shield_metadata={"quota_breaker_tripped": True, "remaining_fraction": q_err.remaining_fraction},
+                shield_metadata={
+                    "quota_breaker_tripped": True,
+                    "remaining_fraction": q_err.remaining_fraction,
+                    "reset_time": q_err.reset_time,
+                    "latched": getattr(q_err, "latched", False),
+                },
                 error_text=str(q_err),
             )
             return web.json_response(
@@ -310,10 +317,14 @@ async def chat_completions_handler(request: web.Request) -> web.Response:
                         "code": "model_quota_exhausted",
                         "model": q_err.model,
                         "remaining_fraction": q_err.remaining_fraction,
+                        "reset_time": q_err.reset_time,
+                        "reset_summary": getattr(q_err, "reset_summary", ""),
+                        "retry_after_seconds": retry_after_sec,
+                        "latched": getattr(q_err, "latched", False),
                     }
                 },
                 status=429,
-                headers={"X-Request-Id": req_id},
+                headers={"X-Request-Id": req_id, "Retry-After": str(retry_after_sec)},
             )
         except ConnectionError as c_err:
             duration = (time.monotonic() - start) * 1000
@@ -681,6 +692,7 @@ async def _handle_streaming(
             first_rpc_delta = None
         except QuotaExhaustedError as q_err:
             duration = (time.monotonic() - start) * 1000
+            retry_after_sec = getattr(q_err, "retry_after", 300)
             request["operation_error"] = str(q_err)
             request["quota_exhausted"] = True
             record_api_audit_log(
@@ -696,6 +708,12 @@ async def _handle_streaming(
                 messages=messages,
                 system_prompt=system_instructions,
                 user_prompt_preview=user_message,
+                shield_metadata={
+                    "quota_breaker_tripped": True,
+                    "remaining_fraction": q_err.remaining_fraction,
+                    "reset_time": q_err.reset_time,
+                    "latched": getattr(q_err, "latched", False),
+                },
                 error_text=str(q_err),
             )
             return web.json_response(
@@ -704,11 +722,16 @@ async def _handle_streaming(
                         "message": str(q_err),
                         "type": "insufficient_quota",
                         "code": "model_quota_exhausted",
+                        "model": q_err.model,
                         "remaining_fraction": q_err.remaining_fraction,
+                        "reset_time": q_err.reset_time,
+                        "reset_summary": getattr(q_err, "reset_summary", ""),
+                        "retry_after_seconds": retry_after_sec,
+                        "latched": getattr(q_err, "latched", False),
                     }
                 },
                 status=429,
-                headers={"X-Request-Id": req_id, "Retry-After": "60"},
+                headers={"X-Request-Id": req_id, "Retry-After": str(retry_after_sec)},
             )
         except ConnectionError as conn_err:
             duration = (time.monotonic() - start) * 1000
