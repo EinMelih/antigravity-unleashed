@@ -89,22 +89,17 @@ async def auth_middleware(request: web.Request, handler) -> web.Response:
     auth_token = config.auth_token
     rate_limit = config.rate_limit
 
-    if api_keys:
-        key_info = api_keys.get(provided)
-        if key_info is None:
-            return web.json_response(
-                sanitize_error_response("Ungültiger API-Key", "authentication_error"),
-                status=401
-            )
-        key_name = key_info.get("name", "unknown")
-        key_rpm = key_info.get("rpm")
-    elif auth_token:
-        if provided != auth_token:
-            return web.json_response(
-                sanitize_error_response("Ungültiger Token", "authentication_error"),
-                status=401
-            )
+    if api_keys and provided in api_keys:
+        key_info = api_keys[provided]
+        key_name = key_info.get("name", "unknown") if isinstance(key_info, dict) else str(key_info)
+        key_rpm = key_info.get("rpm") if isinstance(key_info, dict) else None
+    elif auth_token and provided == auth_token:
         key_name = "default"
+    elif api_keys or auth_token:
+        return web.json_response(
+            sanitize_error_response("Ungültiger API-Key", "authentication_error"),
+            status=401
+        )
 
     request['api_key_name'] = key_name
 

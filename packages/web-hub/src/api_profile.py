@@ -878,8 +878,8 @@ $owned | ForEach-Object { $_ }
                 "--override_ide_name=antigravity",
                 "--override_ide_version=2.24.0",
                 "--override_user_agent_name=antigravity",
-                f"--gemini_dir={self.profile_home / '.gemini'}",
-                f"--app_data_dir={self.app_data_dir}",
+                "--gemini_dir=.gemini",
+                f"--app_data_dir={self.app_data_dir.name}",
                 f"--api_server_url={DEFAULT_API_SERVER_URL}",
                 f"--cloud_code_endpoint={DEFAULT_CLOUD_CODE_ENDPOINT}",
             ]
@@ -919,3 +919,4 @@ $owned | ForEach-Object { $_ }
             self._wait_for_rpc_ready(rpc_port, proc=proc, timeout=timeout)
 
 
+api_profile_runtime = APIProfileRuntime()

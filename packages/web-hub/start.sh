@@ -435,6 +435,7 @@ if os.environ.get("ANTIGRAVITY_DOCKER") == "1" or data_root.exists():
         if not api_key:
             api_key = f"agk_{secrets.token_urlsafe(24)}"
         cfg["auth_token"] = api_key
+        cfg["host"] = "0.0.0.0"
         cfg["proxy_host"] = "0.0.0.0"
         cfg["api_bridge_host"] = "0.0.0.0"
         cfg.setdefault("api_engine", {})["mode"] = "rpc"
@@ -457,6 +458,8 @@ PY
     if [ -f "/data/antigravity-api/config.json" ]; then
         export ANTIGRAVITY_HUB_CONFIG="/data/antigravity-api/config.json"
     fi
+    export ANTIGRAVITY_HUB_HOST="${ANTIGRAVITY_HUB_HOST:-0.0.0.0}"
+    export ANTIGRAVITY_API_HOST="${ANTIGRAVITY_API_HOST:-0.0.0.0}"
 
     echo -e "${BOLD}Starte Headless Linux Services (API-Logs UI :8000 + ConnectRPC API :8001)...${NC}"
     echo ""

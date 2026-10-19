@@ -42,16 +42,18 @@ COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY dashboard/ ./dashboard/
 COPY --from=frontend-build /build/dashboard/react/ ./dashboard/react/
-COPY docs/api.html docs/antigravity-control-plane.md ./docs/
+COPY docs/ ./docs/
 COPY config.example.json ./config.json
 COPY start.sh ./start.sh
 RUN mkdir -p /app/deployment
 COPY Dockerfile docker-compose.yml requirements.lock.txt ./deployment/
 COPY frontend/package-lock.json ./deployment/package-lock.json
-RUN chmod +x start.sh
+RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
 # Isolated Headless Linux / Docker defaults
 ENV ANTIGRAVITY_HUB_CONFIG=/app/config.json
+ENV ANTIGRAVITY_HUB_HOST=0.0.0.0
+ENV ANTIGRAVITY_API_HOST=0.0.0.0
 ENV ANTIGRAVITY_DOCKER=1
 ENV ANTIGRAVITY_HEADLESS_UI=1
 ENV ANTIGRAVITY_API_MODE=rpc
