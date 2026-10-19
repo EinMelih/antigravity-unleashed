@@ -40,6 +40,7 @@ class TrackedConversation:
     slot_id: str
     workspace_dir: Path
     model: str = "gemini-3.1-pro-high"
+    system_hash: str = ""
     turn_hashes: List[str] = field(default_factory=list)
     step_offsets: List[int] = field(default_factory=list)
     last_step_count: int = 0
@@ -69,7 +70,7 @@ class WorkspaceSlot:
                 f"# Workspace {self.slot_id}\n\nIsolated development workspace for automated tasks.\n",
                 encoding="utf-8",
             )
-        main_py = src_dir / "main.py"
+        main_py = src_dir / "src" / "main.py" if False else src_dir / "main.py"
         if not main_py.exists():
             main_py.write_text(
                 '"""Entry module for workspace tasks."""\n\n'
@@ -79,9 +80,7 @@ class WorkspaceSlot:
                 "    main()\n",
                 encoding="utf-8",
             )
-        agents_md = self.workspace_dir / "AGENTS.md"
-        if not agents_md.exists():
-            write_workspace_agents_md(self.workspace_dir, "")
+        write_workspace_agents_md(self.workspace_dir)
 
 
 def _hash_turn(role: str, content: str) -> str:
@@ -130,12 +129,14 @@ class DirectRPCPool:
         self,
         conversation_turns: List[Dict[str, str]],
         *,
+        system_instructions: str = "",
         explicit_conversation_id: Optional[str] = None,
         force_new_chat: bool = False,
         requested_model: Optional[str] = None,
         client_ip: str = "127.0.0.1",
     ) -> Tuple[WorkspaceSlot, TrackedConversation, Optional[Dict[str, Any]]]:
         """Find or allocate a workspace slot + `TrackedConversation`, performing auto-revert if needed."""
+        req_system_hash = _hash_turn("system", system_instructions)
         user_assistant_hashes = [
             _hash_turn(t["role"], t["content"]) for t in conversation_turns
         ]
@@ -149,29 +150,31 @@ class DirectRPCPool:
             if explicit_conversation_id and explicit_conversation_id in self._conversations:
                 matched = self._conversations[explicit_conversation_id]
 
-            # 2. Prefix hash affinity match (for Hermes / OpenClaw multi-turn arrays)
+            # 2. Prefix hash affinity match (strictly isolated by system_hash so different agents never mix!)
             if matched is None and not force_new_chat and len(user_assistant_hashes) > 1:
                 incoming_prefix = user_assistant_hashes[:-1]
                 best_match: Optional[TrackedConversation] = None
                 best_overlap = 0
                 for conv in self._conversations.values():
+                    if conv.system_hash and conv.system_hash != req_system_hash:
+                        continue
                     slot_obj = self._get_slot_by_id(conv.slot_id)
                     if slot_obj.lock.locked():
                         continue
                     if len(conv.turn_hashes) >= max_turns * 2:
                         continue
-                    # Exact prefix match (normal next turn)
+                    # Exact prefix match (normal next turn of the exact same chat)
                     if conv.turn_hashes == incoming_prefix:
                         best_match = conv
                         break
-                    # Truncated prefix match (User clicked Edit / Retry / Revert in Hermes!)
+                    # Truncated prefix match (User clicked Edit / Retry / Revert in Hermes — requires >= 2 turns!)
                     common = 0
                     for h_old, h_new in zip(conv.turn_hashes, incoming_prefix):
                         if h_old == h_new:
                             common += 1
                         else:
                             break
-                    if common > 0 and common == len(incoming_prefix) and common < len(conv.turn_hashes):
+                    if common >= 2 and common == len(incoming_prefix) and common < len(conv.turn_hashes):
                         if common > best_overlap:
                             best_overlap = common
                             best_match = conv
@@ -233,6 +236,7 @@ class DirectRPCPool:
             slot_id=slot.slot_id,
             workspace_dir=slot.workspace_dir,
             model=requested_model or "gemini-3.1-pro-high",
+            system_hash=req_system_hash,
         )
         evicted_ids: List[str] = []
         max_tracked = max(self.slot_count * 2, 20)
@@ -419,6 +423,7 @@ class DirectRPCPool:
         try:
             slot, tracked, revert_info = await self._resolve_slot_and_session(
                 turns,
+                system_instructions=system_instructions,
                 explicit_conversation_id=explicit_conversation_id,
                 force_new_chat=force_new_chat,
                 requested_model=model,
@@ -455,7 +460,7 @@ class DirectRPCPool:
                             + "\n\n[Current User Message]:\n"
                             + user_message
                         )
-                if system_instructions.strip() and (not tracked.turn_hashes or tools):
+                if system_instructions.strip() and not tracked.turn_hashes:
                     effective_user_message = f"{system_instructions.strip()}\n\n{effective_user_message}"
 
                 await self.rpc_client.send_user_cascade_message(
@@ -482,6 +487,13 @@ class DirectRPCPool:
                         after_steps[baseline_count:]
                     )
 
+                clean_content, tool_calls = self._parse_possible_tool_calls(response_text)
+                canonical_assistant_text = (
+                    json.dumps({"tool_calls": tool_calls}, ensure_ascii=False)
+                    if (tool_calls and not clean_content.strip())
+                    else (clean_content or response_text)
+                )
+
                 # Record turn hashes and step offsets for future multi-turn / auto-revert
                 for prior_turn in unrecorded_prior:
                     tracked.step_offsets.append(baseline_count)
@@ -491,7 +503,7 @@ class DirectRPCPool:
                 tracked.step_offsets.append(baseline_count)
                 tracked.turn_hashes.append(_hash_turn("user", user_message))
                 tracked.step_offsets.append(len(after_steps))
-                tracked.turn_hashes.append(_hash_turn("assistant", response_text))
+                tracked.turn_hashes.append(_hash_turn("assistant", canonical_assistant_text))
                 tracked.last_step_count = len(after_steps)
                 tracked.updated_at = time.monotonic()
                 slot.last_used_at = time.monotonic()
@@ -522,7 +534,6 @@ class DirectRPCPool:
                         requested_model=canonical_model_id,
                     )
 
-                clean_content, tool_calls = self._parse_possible_tool_calls(response_text)
                 return {
                     "response": clean_content,
                     "raw_response": response_text,
@@ -604,6 +615,7 @@ class DirectRPCPool:
         try:
             slot, tracked, revert_info = await self._resolve_slot_and_session(
                 turns,
+                system_instructions=system_instructions,
                 explicit_conversation_id=explicit_conversation_id,
                 force_new_chat=force_new_chat,
                 requested_model=model,
@@ -639,7 +651,7 @@ class DirectRPCPool:
                             + "\n\n[Current User Message]:\n"
                             + user_message
                         )
-                if system_instructions.strip() and (not tracked.turn_hashes or tools):
+                if system_instructions.strip() and not tracked.turn_hashes:
                     effective_user_message = f"{system_instructions.strip()}\n\n{effective_user_message}"
 
                 await self.rpc_client.send_user_cascade_message(
@@ -677,6 +689,12 @@ class DirectRPCPool:
                 elif buffered_for_tools and full_text:
                     yield full_text
 
+                canonical_assistant_text = (
+                    json.dumps({"tool_calls": parsed_tool_calls}, ensure_ascii=False)
+                    if (parsed_tool_calls and not cleaned_text.strip())
+                    else (cleaned_text or full_text)
+                )
+
                 after_steps = await self.rpc_client.get_trajectory_steps(
                     tracked.cascade_id, step_offset=0
                 )
@@ -688,7 +706,7 @@ class DirectRPCPool:
                 tracked.step_offsets.append(baseline_count)
                 tracked.turn_hashes.append(_hash_turn("user", user_message))
                 tracked.step_offsets.append(len(after_steps))
-                tracked.turn_hashes.append(_hash_turn("assistant", full_text))
+                tracked.turn_hashes.append(_hash_turn("assistant", canonical_assistant_text))
                 tracked.last_step_count = len(after_steps)
                 tracked.updated_at = time.monotonic()
                 slot.last_used_at = time.monotonic()
