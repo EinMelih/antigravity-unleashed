@@ -547,7 +547,16 @@ class APIProfileRuntime:
             (self.workspaces_pool_dir / f"ws-{slot_idx:02d}" / "src").mkdir(parents=True, exist_ok=True)
 
         initial_files = {
-            self.config_dir / "config.json": json.dumps({"plugins": {}, "sidecars": {}, "userSettings": {}}),
+            self.config_dir / "config.json": json.dumps({
+                "plugins": {},
+                "sidecars": {},
+                "userSettings": {},
+                "permissions": {
+                    "allow": ["read_url(*)", "command(*)", "write_file(*)", "read_file(*)"],
+                    "deny": [],
+                    "ask": [],
+                },
+            }),
             self.user_data_dir / "User/settings.json": json.dumps({
                 "telemetry.telemetryLevel": "off",
                 "telemetry.enableTelemetry": False,
