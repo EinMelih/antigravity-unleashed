@@ -29,7 +29,7 @@ from src.api_token_reader import parse_generator_metadata_tokens
 from src.cdp_lifecycle import cdp_operation as _DEFAULT_CDP_OPERATION
 from src.config import config
 from src.database import db
-from src.rpc_pool import rpc_pool
+from src.rpc_pool import DirectRPCPool, rpc_pool
 
 # Keep module-level reference so unit tests can patch `api_handlers.cdp_operation`
 cdp_operation = _DEFAULT_CDP_OPERATION
