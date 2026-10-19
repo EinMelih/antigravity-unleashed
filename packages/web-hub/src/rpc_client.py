@@ -740,6 +740,16 @@ foreach ($p in $procs) {{
             "CancelCascadeInvocation", {"cascadeId": cascade_id}, timeout=5.0
         )
 
+    async def delete_cascade_trajectory(self, cascade_id: str) -> Dict[str, Any]:
+        """Delete an old/finished cascade chat (`DeleteCascadeTrajectory`) so disk/memory stay clean."""
+        try:
+            return await self.call_unary(
+                "DeleteCascadeTrajectory", {"cascadeId": cascade_id}, timeout=5.0
+            )
+        except Exception:
+            return {}
+
+
     async def get_trajectory_steps(
         self, cascade_id: str, step_offset: int = 0
     ) -> List[Dict[str, Any]]:

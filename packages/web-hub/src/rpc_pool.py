@@ -234,10 +234,41 @@ class DirectRPCPool:
             workspace_dir=slot.workspace_dir,
             model=requested_model or "gemini-3.1-pro-high",
         )
+        evicted_ids: List[str] = []
+        max_tracked = max(self.slot_count * 2, 20)
         async with self._pool_lock:
             self._conversations[cascade_id] = tracked
             slot.active_cascade_id = cascade_id
+            if len(self._conversations) > max_tracked:
+                active_slot_ids = {s.active_cascade_id for s in self.slots if s.active_cascade_id}
+                candidates = sorted(
+                    (c for cid, c in self._conversations.items() if cid not in active_slot_ids and cid != cascade_id),
+                    key=lambda c: c.updated_at,
+                )
+                while len(self._conversations) > max_tracked and candidates:
+                    oldest = candidates.pop(0)
+                    self._conversations.pop(oldest.cascade_id, None)
+                    evicted_ids.append(oldest.cascade_id)
+
+        for old_id in evicted_ids:
+            asyncio.create_task(self._cleanup_evicted_cascade(old_id))
+
         return slot, tracked, None
+
+    async def _cleanup_evicted_cascade(self, cascade_id: str) -> None:
+        """Delete an evicted cascade via ConnectRPC and remove its local .pb trajectory file."""
+        try:
+            await self.rpc_client.delete_cascade_trajectory(cascade_id)
+        except Exception:
+            pass
+        for sub in (".gemini/antigravity/conversations", ".gemini/antigravity-api/conversations"):
+            pb_file = self.profile_home / sub / f"{cascade_id}.pb"
+            try:
+                if pb_file.exists():
+                    pb_file.unlink()
+            except OSError:
+                pass
+
 
     def _get_slot_by_id(self, slot_id: str) -> WorkspaceSlot:
         for s in self.slots:
