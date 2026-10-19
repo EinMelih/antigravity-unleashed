@@ -13,3 +13,8 @@ export function useHubHealth() {
     refetchInterval: 15_000,
   });
 }
+
+export function useIsHeadlessLinux(): boolean {
+  const health = useHubHealth();
+  return health.data?.runtime_mode === "headless_linux";
+}

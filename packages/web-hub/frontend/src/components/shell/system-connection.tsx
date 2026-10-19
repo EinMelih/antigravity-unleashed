@@ -21,10 +21,20 @@ function displayInstances(instances: readonly AntigravityInstance[]) {
 
 export function SystemConnection() {
   const health = useHubHealth();
-  const fleet = useAntigravityInstances();
+  const isHeadless = health.data?.runtime_mode === "headless_linux";
+  const fleet = useAntigravityInstances({ enabled: !isHeadless });
 
   if (health.isPending) return <Badge>Verbindung wird geprüft</Badge>;
   if (health.isError) return <Badge variant="blocked">Hub nicht erreichbar</Badge>;
+  if (health.data.runtime_mode === "headless_linux") {
+    return health.data.antigravity_backend.connected ? (
+      <Badge variant="healthy">
+        <CircleDot className="mr-1 size-3" />Headless Linux · Direct RPC
+      </Badge>
+    ) : (
+      <Badge variant="attention">Headless Linux · API startet</Badge>
+    );
+  }
   if (!health.data.antigravity_backend.connected) {
     return <Badge variant="attention">Hub online · Anti-Gravity wartet</Badge>;
   }

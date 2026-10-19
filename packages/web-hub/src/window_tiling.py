@@ -1,15 +1,24 @@
 import ctypes
-from ctypes import wintypes
+import os
 import asyncio
 from src.parallel_cdp import ParallelCDPManager
 
-user32 = ctypes.windll.user32
+if os.name == "nt":
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+else:
+    wintypes = None
+    user32 = None
+    WNDENUMPROC = None
+
 SPI_GETWORKAREA = 48
 SW_RESTORE = 9
-WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
 
 def get_antigravity_hwnds(allowed_process_ids=None) -> list:
     """Returns window handles (HWNDs) for visible Antigravity widget windows."""
+    if os.name != "nt" or user32 is None or WNDENUMPROC is None:
+        return []
     hwnds = []
 
     def callback(hwnd, lparam):
@@ -43,6 +52,8 @@ def get_antigravity_hwnds(allowed_process_ids=None) -> list:
 
 def tile_windows(hwnds: list, *, focus=True):
     """Tiles the given window handles based on count according to the layout contract."""
+    if os.name != "nt" or user32 is None:
+        return
     num_windows = len(hwnds)
     if num_windows == 0:
         return

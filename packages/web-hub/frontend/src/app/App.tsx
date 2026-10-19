@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
 import { LoadingState } from "@/components/states";
+import { useIsHeadlessLinux } from "@/hooks/use-hub-health";
 import { usePageEntrance } from "@/hooks/use-page-entrance";
 import { useHubRoute } from "@/lib/routing";
 
@@ -20,6 +21,7 @@ const SystemStatusPage = lazy(() => import("@/pages/system-status-page").then((m
 
 function CurrentPage() {
   const route = useHubRoute();
+  const isHeadlessLinux = useIsHeadlessLinux();
   const pageRef = usePageEntrance(route);
 
   let content;
@@ -59,7 +61,7 @@ function CurrentPage() {
         break;
       case "/studio":
       default:
-        content = <StudioPage />;
+        content = isHeadlessLinux ? <ApiLogsPage /> : <StudioPage />;
     }
   }
   return (

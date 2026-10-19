@@ -1301,6 +1301,8 @@ async def api_audit_logs_clear_handler(request: web.Request) -> web.Response:
 
 async def api_engine_mode_handler(request: web.Request) -> web.Response:
     """GET or POST `/api/engine-mode` to inspect or live-switch `rpc` vs `ui` and the 8 Shields."""
+    from src.config import get_runtime_mode
+
     if request.method == "POST":
         try:
             body = await request.json()
@@ -1312,12 +1314,14 @@ async def api_engine_mode_handler(request: web.Request) -> web.Response:
         return web.json_response(
             {
                 "status": "updated",
+                "runtime_mode": get_runtime_mode(),
                 "api_engine": updated,
                 "pool": rpc_pool.status_snapshot(),
             }
         )
     return web.json_response(
         {
+            "runtime_mode": get_runtime_mode(),
             "api_engine": config.api_engine,
             "pool": rpc_pool.status_snapshot(),
         }

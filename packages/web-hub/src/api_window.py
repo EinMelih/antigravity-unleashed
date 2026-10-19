@@ -13,8 +13,12 @@ import json
 import os
 import threading
 import time
-from ctypes import wintypes
 from pathlib import Path
+
+if os.name == "nt":
+    from ctypes import wintypes
+else:
+    wintypes = None
 
 STATE_PATH = Path.home() / ".gemini" / "antigravity" / "scratch" / "api_window_visibility.json"
 POLL_SECONDS = 1.0

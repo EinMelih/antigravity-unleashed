@@ -15,12 +15,29 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from src.config import config
+from src.config import config, is_windows_os
 
 
 API_PROFILE_NAME = "api"
 PROFILE_CONTRACT_VERSION = 2
 _START_LOCK = threading.Lock()
+
+
+def resolve_api_profile_home(explicit_home: Path | str | None = None) -> Path:
+    """Resolve the isolated API profile home directory across Windows, Linux, and Docker."""
+    if explicit_home is not None:
+        return Path(explicit_home).expanduser()
+    env_home = os.environ.get("ANTIGRAVITY_API_HOME", "").strip()
+    if env_home:
+        return Path(env_home).expanduser()
+    if not is_windows_os():
+        docker_root = Path("/data/antigravity-api")
+        if os.environ.get("ANTIGRAVITY_DOCKER") == "1" or docker_root.exists():
+            return docker_root / "home"
+        xdg_data = Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local/share"))
+        return xdg_data / "AntigravityApiProfile/home"
+    local_app_data = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData/Local"))
+    return local_app_data / "AntigravityApiProfile/home"
 
 
 class APIProfileRuntime:
@@ -35,15 +52,29 @@ class APIProfileRuntime:
         from src import api_window
         api_window.start_enforcer(self.devtools_port)
         self.private_home = Path.home()
-        local_app_data = Path(os.environ.get("LOCALAPPDATA") or self.private_home / "AppData/Local")
-        self.profile_home = local_app_data / "AntigravityApiProfile/home"
+        self.profile_home = resolve_api_profile_home()
         self.workspace_dir = self.profile_home / "workspace"
         self.config_dir = self.profile_home / ".gemini/config"
-        self.user_data_dir = self.profile_home / "AppData/Roaming/Antigravity-api"
         self.app_data_dir = self.profile_home / ".gemini/antigravity-api"
-        self.auth_source_user_data_dir = Path(os.environ.get("APPDATA") or self.private_home / "AppData/Roaming") / "Antigravity-api"
-        install_override = os.environ.get("ANTIGRAVITY_INSTALL_DIR") or os.environ.get("ANTIGRAVITY_DESKTOP_EXE")
-        self.executable = Path(install_override) if install_override and Path(install_override).suffix.lower() == ".exe" else Path(install_override or Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local") / "Programs/Antigravity") / "Antigravity.exe"
+        if is_windows_os():
+            self.user_data_dir = self.profile_home / "AppData/Roaming/Antigravity-api"
+            self.auth_source_user_data_dir = Path(os.environ.get("APPDATA") or self.private_home / "AppData/Roaming") / "Antigravity-api"
+            install_override = os.environ.get("ANTIGRAVITY_INSTALL_DIR") or os.environ.get("ANTIGRAVITY_DESKTOP_EXE")
+            self.executable = (
+                Path(install_override)
+                if install_override and Path(install_override).suffix.lower() == ".exe"
+                else Path(install_override or Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local") / "Programs/Antigravity") / "Antigravity.exe"
+            )
+        else:
+            self.user_data_dir = self.profile_home / ".config/Antigravity-api"
+            xdg_cfg = Path(os.environ.get("XDG_CONFIG_HOME") or (self.private_home / ".config"))
+            self.auth_source_user_data_dir = xdg_cfg / "Antigravity-api"
+            install_override = os.environ.get("ANTIGRAVITY_INSTALL_DIR") or os.environ.get("ANTIGRAVITY_DESKTOP_EXE")
+            if install_override:
+                override_path = Path(install_override)
+                self.executable = override_path if override_path.is_file() else override_path / "antigravity"
+            else:
+                self.executable = Path("/opt/antigravity/antigravity")
         self._last_launch = 0.0
 
     @staticmethod
@@ -84,7 +115,12 @@ class APIProfileRuntime:
             raise ConnectionError("Desktop profile isolation has not been verified for the installed archive. Run the updated injector.")
 
     def _seed_authentication_once(self) -> None:
-        for directory in (self.app_data_dir, self.user_data_dir, self.user_data_dir / "logs", self.user_data_dir / "User", self.config_dir, self.workspace_dir, self.profile_home / "AppData/Local/Temp"):
+        temp_dir = (
+            self.profile_home / "AppData/Local/Temp"
+            if is_windows_os()
+            else self.profile_home / ".cache/tmp"
+        )
+        for directory in (self.app_data_dir, self.user_data_dir, self.user_data_dir / "logs", self.user_data_dir / "User", self.config_dir, self.workspace_dir, temp_dir):
             directory.mkdir(parents=True, exist_ok=True)
         initial_files = {
             self.config_dir / "config.json": json.dumps({"plugins": {}, "sidecars": {}, "userSettings": {}}),
@@ -249,7 +285,7 @@ $owned | ForEach-Object { $_ }
             if not directory.resolve().is_relative_to(home):
                 raise ConnectionError('API profile directories must stay inside the API home.')
 
-    def _resolve_language_server_binary(self) -> Optional[Path]:
+    def _resolve_language_server_binary(self) -> Path | None:
         explicit = os.environ.get("ANTIGRAVITY_LANGUAGE_SERVER_BIN")
         if explicit and Path(explicit).is_file():
             return Path(explicit).resolve()
@@ -266,7 +302,30 @@ $owned | ForEach-Object { $_ }
                 return candidate.resolve()
         return None
 
-    def ensure_rpc_ready(self) -> None:
+    def _wait_for_rpc_ready(
+        self,
+        rpc_port: int,
+        proc: Any = None,
+        timeout: float = 10.0,
+    ) -> bool:
+        """Poll `127.0.0.1:<rpc_port>` until the headless `language_server` accepts connections."""
+        deadline = time.monotonic() + max(0.05, timeout)
+        while time.monotonic() < deadline:
+            if proc is not None and callable(getattr(proc, "poll", None)):
+                rc = proc.poll()
+                if isinstance(rc, int):
+                    return False
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                    probe.settimeout(0.25)
+                    if probe.connect_ex(("127.0.0.1", rpc_port)) == 0:
+                        return True
+            except OSError:
+                pass
+            time.sleep(0.1)
+        return False
+
+    def ensure_rpc_ready(self, *, wait_timeout: float | None = None) -> None:
         """Ensure the isolated API profile's `language_server` is running for `rpc` mode.
 
         Supports both Windows desktop profile launch and standalone headless execution
@@ -314,13 +373,16 @@ $owned | ForEach-Object { $_ }
             environment.update({
                 "HOME": home,
                 "USERPROFILE": home,
+                "XDG_CONFIG_HOME": str(self.profile_home / ".config"),
+                "XDG_DATA_HOME": str(self.profile_home / ".local/share"),
+                "XDG_CACHE_HOME": str(self.profile_home / ".cache"),
                 "ANTIGRAVITY_PROFILE": self.profile,
                 "ANTIGRAVITY_NO_HUB_AUTOSTART": "1",
                 "ANTIGRAVITY_DATA_DIR": str(self.app_data_dir),
             })
             log_file = self.app_data_dir / "scratch/language_server_rpc.log"
             with log_file.open("a", encoding="utf-8") as log_handle:
-                subprocess.Popen(
+                proc = subprocess.Popen(
                     [
                         str(ls_bin),
                         "--standalone",
@@ -343,4 +405,10 @@ $owned | ForEach-Object { $_ }
                 encoding="utf-8",
             )
             self._last_launch = time.monotonic()
+            timeout = (
+                wait_timeout
+                if wait_timeout is not None
+                else float(os.environ.get("ANTIGRAVITY_RPC_READY_TIMEOUT", "10.0"))
+            )
+            self._wait_for_rpc_ready(rpc_port, proc=proc, timeout=timeout)
 

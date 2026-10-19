@@ -76,6 +76,7 @@ DEFAULT_CONFIG = {
     "github_webhook_secret": "",
     "projects_base_dir": DEFAULT_PROJECTS_BASE_DIR,
     "default_repo_visibility": "private",
+    "api_bridge_enabled": True,
     "api_engine": {
         "mode": "rpc",
         "max_parallel_streams": 4,
@@ -92,6 +93,22 @@ DEFAULT_CONFIG = {
         "source_ip_map": {},
     },
 }
+
+
+def is_windows_os() -> bool:
+    """Return True when running on Windows ('nt')."""
+    return os.name == "nt"
+
+
+def get_runtime_mode() -> str:
+    """Return 'headless_linux' on non-Windows or when headless/Docker flags are set, else 'desktop_windows'."""
+    if (
+        not is_windows_os()
+        or os.environ.get("ANTIGRAVITY_HEADLESS_UI", "").strip().lower() in ("1", "true", "yes")
+        or os.environ.get("ANTIGRAVITY_DOCKER", "").strip().lower() in ("1", "true", "yes")
+    ):
+        return "headless_linux"
+    return "desktop_windows"
 
 
 def validate_positive_int(value: Any, name: str, default: int) -> int:
@@ -329,6 +346,20 @@ class ConfigurationManager:
     @property
     def api_mode(self) -> str:
         return str(self.api_engine["mode"])
+
+    @property
+    def runtime_mode(self) -> str:
+        return get_runtime_mode()
+
+    @property
+    def api_bridge_enabled(self) -> bool:
+        disable_env = os.environ.get("ANTIGRAVITY_DISABLE_LOCAL_API", "").strip().lower()
+        if disable_env in ("1", "true", "yes"):
+            return False
+        enable_env = os.environ.get("ANTIGRAVITY_ENABLE_LOCAL_API", "").strip().lower()
+        if enable_env in ("1", "true", "yes"):
+            return True
+        return bool(self.config_dict.get("api_bridge_enabled", True))
 
     def update_api_engine_settings(self, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update api_engine settings in memory and persist to CONFIG_PATH if possible."""

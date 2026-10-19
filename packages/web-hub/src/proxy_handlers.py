@@ -123,6 +123,11 @@ async def stats_proxy_handler(request: web.Request) -> web.Response:
 
 async def proxy_handler(request: web.Request) -> web.Response:
     """Main proxy handler routing requests to the Antigravity backend."""
+    from src.config import get_runtime_mode
+
+    if request.method == "GET" and request.path == "/" and get_runtime_mode() == "headless_linux":
+        return web.HTTPFound("/dashboard/react/index.html#/api-logs")
+
     backend_port = request.app.get(BACKEND_PORT_KEY)
     code_server_port = request.app.get(CODE_SERVER_PORT_KEY, 8080)
     body = await request.read()

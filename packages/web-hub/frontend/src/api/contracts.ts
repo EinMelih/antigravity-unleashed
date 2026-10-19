@@ -11,6 +11,7 @@ export interface ControlPlaneHealth {
 export interface HubHealthResponse {
   status: string;
   hub: string;
+  runtime_mode?: "desktop_windows" | "headless_linux" | string;
   antigravity_backend: AntiGravityBackendHealth;
   web_ide: Record<string, unknown>;
   control_plane: ControlPlaneHealth;

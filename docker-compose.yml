@@ -1,0 +1,29 @@
+# ============================================================
+#  Anti-Gravity Unleashed — Headless Linux API + API-Logs UI
+#  Exposes :8001 (OpenAI/ConnectRPC API) & :8000 (#/api-logs UI)
+# ============================================================
+
+services:
+  antigravity-headless-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: antigravity-headless-api
+    ports:
+      - "${ANTIGRAVITY_UI_PORT:-8000}:8000"
+      - "${ANTIGRAVITY_API_PORT:-8001}:8001"
+    volumes:
+      - ./docker-data:/data/antigravity-api
+    environment:
+      PYTHONUNBUFFERED: "1"
+      ANTIGRAVITY_DOCKER: "1"
+      ANTIGRAVITY_HEADLESS_UI: "1"
+      ANTIGRAVITY_API_MODE: "rpc"
+      ANTIGRAVITY_STANDALONE_RPC: "1"
+      ANTIGRAVITY_API_HOST: "0.0.0.0"
+      ANTIGRAVITY_HUB_HOST: "0.0.0.0"
+      ANTIGRAVITY_API_HOME: "/data/antigravity-api/home"
+      ANTIGRAVITY_HUB_DB: "/data/antigravity-api/dashboard.db"
+      ANTIGRAVITY_AUDIT_LOG_DIR: "/data/antigravity-api/audit_logs"
+      ANTIGRAVITY_LANGUAGE_SERVER_BIN: "${ANTIGRAVITY_LANGUAGE_SERVER_BIN:-/data/antigravity-api/bin/language_server_linux_x64}"
+    restart: unless-stopped

@@ -8,6 +8,7 @@ and append-only JSONL (`~/.antigravity-hub/api_audit_logs.jsonl`).
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -15,7 +16,14 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from src.config import config
 from src.database import db
 
-AUDIT_LOG_DIR = Path.home() / ".antigravity-hub"
+AUDIT_LOG_DIR = Path(
+    os.environ.get("ANTIGRAVITY_AUDIT_LOG_DIR")
+    or (
+        "/data/antigravity-api/audit_logs"
+        if os.name != "nt" and (os.environ.get("ANTIGRAVITY_DOCKER") == "1" or Path("/data/antigravity-api").exists())
+        else Path.home() / ".antigravity-hub"
+    )
+)
 AUDIT_LOG_JSONL = AUDIT_LOG_DIR / "api_audit_logs.jsonl"
 
 _OPENCLAW_SIGNATURE_TOOLS: Set[str] = {

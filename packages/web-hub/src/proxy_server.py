@@ -21,6 +21,10 @@ from src.desktop_ams import desktop_bundle_handler, native_rpc_handler
 
 async def redirect_dashboard(request):
     """Route every dashboard entry point to the built React application."""
+    from src.config import get_runtime_mode
+
+    if get_runtime_mode() == "headless_linux":
+        return web.HTTPFound('/dashboard/react/index.html#/api-logs')
     return web.HTTPFound('/dashboard/react/index.html#/studio')
 from src.project_handlers import (
     handle_get_projects,
@@ -224,7 +228,12 @@ _HASHED_REACT_ASSET_RE = re.compile(
 
 
 def validate_listen_host(host: str) -> None:
-    """Keep the privileged Hub UI on loopback; use authenticated Nginx remotely."""
+    """Keep the privileged Hub UI on loopback; use authenticated Nginx remotely or Docker headless flags."""
+    if (
+        os.environ.get("ANTIGRAVITY_DOCKER", "").strip().lower() in ("1", "true", "yes")
+        or os.environ.get("ANTIGRAVITY_HEADLESS_UI", "").strip().lower() in ("1", "true", "yes")
+    ):
+        return
     normalized = str(host or "").strip().lower()
     try:
         loopback = normalized == "localhost" or ip_address(normalized).is_loopback
@@ -750,20 +759,25 @@ def create_app(backend_port=None) -> web.Application:
     app.router.add_post('/v1/chat/revert', revert_chat_handler)
 
     async def hub_health_handler(request):
+        from src.config import config, get_runtime_mode
+
+        runtime_mode = get_runtime_mode()
         backend = request.app.get(BACKEND_PORT_KEY)
         connected = False
-        if backend:
+        probe_port = backend or (config.api_bridge_port if runtime_mode == "headless_linux" else None)
+        if probe_port:
             probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             probe.settimeout(0.2)
             try:
-                connected = probe.connect_ex((BACKEND_HOST, backend)) == 0
+                connected = probe.connect_ex((BACKEND_HOST, probe_port)) == 0
             finally:
                 probe.close()
         control_status = await request.app[CONTROL_COORDINATOR_KEY].status()
         return web.json_response({
             "status": "ok",
             "hub": "healthy",
-            "antigravity_backend": {"connected": connected, "port": backend},
+            "runtime_mode": runtime_mode,
+            "antigravity_backend": {"connected": connected, "port": probe_port},
             "web_ide": await asyncio.to_thread(code_server_status),
             "control_plane": {
                 "mode": control_status["policy"]["mode"],

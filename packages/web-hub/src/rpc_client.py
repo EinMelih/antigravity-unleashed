@@ -116,12 +116,9 @@ class DirectConnectRPCClient:
             else None
         )
         self.csrf_token = csrf_token or os.environ.get("ANTIGRAVITY_API_CSRF_TOKEN")
-        local_app_data = Path(
-            os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData/Local")
-        )
-        self.profile_home = profile_home or (
-            local_app_data / "AntigravityApiProfile/home"
-        )
+        from src.api_profile import resolve_api_profile_home
+
+        self.profile_home = resolve_api_profile_home(profile_home)
         self.ide_version = ide_version
         self._dynamic_model_map: Dict[str, Any] = {}
         self._available_models_cache: List[Dict[str, Any]] = []
@@ -197,7 +194,9 @@ class DirectConnectRPCClient:
             except Exception:
                 pass
 
-        if os.name == "nt":
+        from src.config import is_windows_os
+
+        if is_windows_os():
             profile_marker = str(self.profile_home).replace("\\", "\\\\")
             ps_script = rf"""
 $procs = @(Get-CimInstance Win32_Process | Where-Object {{ $_.Name -like 'language_server*' }})
@@ -246,7 +245,56 @@ foreach ($p in $procs) {{
             except Exception:
                 pass
         else:
-            # Linux / Container / Dokploy discovery via /proc or ps
+            # Linux / Container / Dokploy discovery via psutil + ps fallback
+            try:
+                import psutil
+
+                posix_candidates: List[Tuple[bool, str, List[int]]] = []
+                profile_str = str(self.profile_home).lower()
+                for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                    try:
+                        cmdline_list = proc.info.get("cmdline") or []
+                        name = str(proc.info.get("name") or "")
+                        cmdline = " ".join(str(part) for part in cmdline_list)
+                        if "language_server" not in name and "language_server" not in cmdline:
+                            continue
+                        m_tok = re.search(r"--csrf_token[=\s]+([A-Za-z0-9_-]+)", cmdline)
+                        if not m_tok:
+                            continue
+                        token = m_tok.group(1)
+                        ports: List[int] = []
+                        m_port = re.search(r"--https_server_port[=\s]+(\d+)", cmdline)
+                        if m_port:
+                            ports.append(int(m_port.group(1)))
+                        try:
+                            for conn in proc.net_connections(kind="tcp"):
+                                if conn.status == psutil.CONN_LISTEN and conn.laddr:
+                                    p_num = int(conn.laddr.port)
+                                    if p_num not in ports:
+                                        ports.append(p_num)
+                        except Exception:
+                            pass
+                        cmd_lower = cmdline.lower()
+                        is_api_profile = (
+                            profile_str in cmd_lower
+                            or "antigravityapiprofile" in cmd_lower
+                            or "antigravity-api" in cmd_lower
+                        )
+                        if ports:
+                            posix_candidates.append((is_api_profile, token, ports))
+                    except (psutil.Error, OSError, ValueError):
+                        continue
+
+                posix_candidates.sort(key=lambda item: (not item[0]))
+                for is_api, token, ports in posix_candidates:
+                    if not is_api and any(c[0] for c in posix_candidates):
+                        continue
+                    for p in ports:
+                        if self._probe_port_sync(p, token):
+                            return p, token
+            except Exception:
+                pass
+
             try:
                 out = subprocess.check_output(["ps", "-eo", "pid,args"], text=True)
                 for line in out.splitlines():

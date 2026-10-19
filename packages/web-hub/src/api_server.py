@@ -47,8 +47,16 @@ from src.api_monitor import APIRequestMonitor
 CDP_STARTUP_RETRY_SECONDS = 2.0
 
 
+import os
+
+
 def validate_bind_security(host: str) -> None:
-    """Refuse unauthenticated non-loopback API exposure."""
+    """Refuse unauthenticated non-loopback API exposure unless running inside Docker/headless container."""
+    if (
+        os.environ.get("ANTIGRAVITY_DOCKER", "").strip().lower() in ("1", "true", "yes")
+        or os.environ.get("ANTIGRAVITY_HEADLESS_UI", "").strip().lower() in ("1", "true", "yes")
+    ):
+        return
     normalized = str(host or "").strip().lower()
     try:
         loopback = normalized == "localhost" or ip_address(normalized).is_loopback
@@ -180,6 +188,9 @@ async def root_handler(request: web.Request) -> web.Response:
 
 
 async def health_handler(request: web.Request) -> web.Response:
+    from src.config import get_runtime_mode
+
+    runtime_mode = get_runtime_mode()
     cdp = request.app['cdp']
     connected = cdp_is_connected(cdp)
     ready = bridge_is_ready(cdp)
@@ -194,6 +205,7 @@ async def health_handler(request: web.Request) -> web.Response:
     return web.json_response({
         "status": "ok" if ready else "degraded",
         "ready": ready,
+        "runtime_mode": runtime_mode,
         "service": "Anti-Gravity API Bridge (Frontend-Mode)",
         "version": "2.1.0",
         "cdp": {
@@ -305,6 +317,8 @@ async def stats_handler(request: web.Request) -> web.Response:
 # Startup & Shutdown hooks
 # ============================================================
 async def on_startup(app: web.Application) -> None:
+    from src.config import get_runtime_mode
+
     app['start_time_mono'] = time.monotonic()
     app['api_request_monitor'] = APIRequestMonitor()
     cdp = AntigravityCDP(profile="api")
@@ -322,7 +336,8 @@ async def on_startup(app: web.Application) -> None:
         on_ready=notify_ready,
     )
     app['cdp_startup_supervisor'] = supervisor
-    supervisor.start()
+    if get_runtime_mode() != "headless_linux":
+        supervisor.start()
 
 
 async def on_shutdown(app: web.Application) -> None:

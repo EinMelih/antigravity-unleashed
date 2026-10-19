@@ -71,6 +71,7 @@ test_out*.txt
 # Ephemeral Runtime, Scratch Workspaces & Electron Backups
 # ==============================================================================
 .runtime/
+docker-data/
 backups/
 scratch/
 artifacts/

@@ -2,6 +2,7 @@
 param(
     [switch]$Restart,
     [switch]$SkipDesktopStart,
+    [switch]$SkipLocalApi,
     [ValidateRange(5, 300)][int]$HealthTimeoutSeconds = 30
 )
 
@@ -12,6 +13,38 @@ $logsDir = Join-Path $projectRoot 'logs'
 $stopScript = Join-Path $projectRoot 'stop_services.ps1'
 Set-Location -LiteralPath $projectRoot
 
+function Test-LocalApiBridgeEnabled {
+    if ($SkipLocalApi) {
+        return $false
+    }
+    $disableEnv = [string]$env:ANTIGRAVITY_DISABLE_LOCAL_API
+    if ($disableEnv.Trim().ToLowerInvariant() -in @('1', 'true', 'yes')) {
+        return $false
+    }
+    $enableEnv = [string]$env:ANTIGRAVITY_ENABLE_LOCAL_API
+    if ($enableEnv.Trim().ToLowerInvariant() -in @('1', 'true', 'yes')) {
+        return $true
+    }
+    $configFile = if (-not [string]::IsNullOrWhiteSpace($env:ANTIGRAVITY_HUB_CONFIG)) {
+        [string]$env:ANTIGRAVITY_HUB_CONFIG
+    } else {
+        Join-Path $HOME '.gemini\config\antigravity-hub\config.json'
+    }
+    if (Test-Path -LiteralPath $configFile -PathType Leaf) {
+        try {
+            $cfg = Get-Content -LiteralPath $configFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($null -ne $cfg.PSObject.Properties['api_bridge_enabled']) {
+                return [bool]$cfg.api_bridge_enabled
+            }
+        } catch {
+            # Ignore invalid JSON and fall back to default enabled
+        }
+    }
+    return $true
+}
+
+$apiBridgeEnabled = Test-LocalApiBridgeEnabled
+
 $services = @(
     [pscustomobject]@{ Name = 'Proxy Server'; Script = 'proxy_server.py'; Port = 8000; HealthUrl = 'http://127.0.0.1:8000/health'; StdoutLog = 'proxy.log'; StderrLog = 'proxy.err.log' },
     [pscustomobject]@{ Name = 'API Bridge'; Script = 'api_bridge.py'; Port = 8001; HealthUrl = 'http://127.0.0.1:8001/health'; StdoutLog = 'api_bridge.log'; StderrLog = 'api_bridge.err.log' },
@@ -19,6 +52,9 @@ $services = @(
     [pscustomobject]@{ Name = 'Auto-Healer'; Script = 'auto_healer.py'; Port = 8007; HealthUrl = 'http://127.0.0.1:8007/health'; StdoutLog = 'auto_healer.log'; StderrLog = 'auto_healer.err.log' },
     [pscustomobject]@{ Name = 'Watchdog'; Script = 'watchdog_monitor.py'; Port = 8010; HealthUrl = 'http://127.0.0.1:8010/health'; StdoutLog = 'watchdog.log'; StderrLog = 'watchdog.err.log' }
 )
+if (-not $apiBridgeEnabled) {
+    $services = @($services | Where-Object { $_.Name -ne 'API Bridge' })
+}
 
 function Resolve-AntigravityDesktopExecutable {
     $candidates = [System.Collections.Generic.List[string]]::new()

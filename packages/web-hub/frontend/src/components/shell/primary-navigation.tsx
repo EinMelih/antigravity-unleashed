@@ -2,6 +2,7 @@ import { ChevronDown, Lock, Menu, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useIsHeadlessLinux } from "@/hooks/use-hub-health";
 import { useHubLanguage } from "@/lib/i18n";
 import { routeHref, type AppRoute, type HubRoute, useHubRoute } from "@/lib/routing";
 import { cn } from "@/lib/utils";
@@ -162,12 +163,20 @@ export function LanguageSwitch() {
   );
 }
 
+const headlessPrimaryItems: ReadonlyArray<NavItem> = [
+  { labelDe: "API-Logs", labelEn: "API-Logs", to: "/api-logs" },
+  { labelDe: "Chats", labelEn: "Chats", to: "/chats" },
+  { labelDe: "Einstellungen", labelEn: "Settings", to: "/settings" },
+];
+
 export function PrimaryNavigation() {
   const currentRoute = useHubRoute();
   const [lang] = useHubLanguage();
+  const isHeadlessLinux = useIsHeadlessLinux();
   const menuRef = useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const visiblePrimaryItems = isHeadlessLinux ? headlessPrimaryItems : primaryItems;
 
   function closeNavigation() {
     setMobileOpen(false);
@@ -206,7 +215,7 @@ export function PrimaryNavigation() {
         aria-label={lang === "en" ? "Main navigation" : "Hauptnavigation"}
         className="hidden items-center gap-1 md:flex"
       >
-        {primaryItems.map((item) => (
+        {visiblePrimaryItems.map((item) => (
           <NavigationLink
             currentRoute={currentRoute}
             key={item.to}
@@ -218,34 +227,36 @@ export function PrimaryNavigation() {
             to={item.to}
           />
         ))}
-        <div className="relative" ref={menuRef}>
-          <Button
-            aria-controls="more-navigation"
-            aria-expanded={moreOpen}
-            onClick={() => setMoreOpen((open) => !open)}
-            size="sm"
-            variant="ghost"
-          >
-            {lang === "en" ? "More" : "Mehr"}
-            <ChevronDown className="size-4" />
-          </Button>
-          {moreOpen ? (
-            <div
-              className="absolute right-0 top-11 z-50 grid min-w-64 gap-1 rounded-xl border border-border bg-popover p-2 shadow-elevated"
-              id="more-navigation"
+        {!isHeadlessLinux ? (
+          <div className="relative" ref={menuRef}>
+            <Button
+              aria-controls="more-navigation"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((open) => !open)}
+              size="sm"
+              variant="ghost"
             >
-              {moreItems.map((item) => (
-                <NavigationLink
-                  currentRoute={currentRoute}
-                  key={item.to}
-                  label={lang === "en" ? item.labelEn : item.labelDe}
-                  onNavigate={closeNavigation}
-                  to={item.to}
-                />
-              ))}
-            </div>
-          ) : null}
-        </div>
+              {lang === "en" ? "More" : "Mehr"}
+              <ChevronDown className="size-4" />
+            </Button>
+            {moreOpen ? (
+              <div
+                className="absolute right-0 top-11 z-50 grid min-w-64 gap-1 rounded-xl border border-border bg-popover p-2 shadow-elevated"
+                id="more-navigation"
+              >
+                {moreItems.map((item) => (
+                  <NavigationLink
+                    currentRoute={currentRoute}
+                    key={item.to}
+                    label={lang === "en" ? item.labelEn : item.labelDe}
+                    onNavigate={closeNavigation}
+                    to={item.to}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="ml-2">
           <LanguageSwitch />
         </div>
@@ -279,7 +290,7 @@ export function PrimaryNavigation() {
           className="absolute inset-x-4 top-20 z-50 grid gap-1 rounded-xl border border-border bg-popover p-3 shadow-elevated md:hidden"
           id="mobile-navigation"
         >
-          {[...primaryItems, ...moreItems].map((item) => (
+          {(isHeadlessLinux ? visiblePrimaryItems : [...primaryItems, ...moreItems]).map((item) => (
             <NavigationLink
               currentRoute={currentRoute}
               key={item.to}

@@ -92,4 +92,55 @@ describe("AppShell", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Befehlspalette" })).not.toBeInTheDocument();
   });
+
+  it("focuses navigation on API-Logs, Chats, and Settings in headless_linux mode", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = String(input);
+        let payload: unknown = {};
+        if (url.endsWith("/health")) {
+          payload = {
+            status: "ok",
+            hub: "healthy",
+            runtime_mode: "headless_linux",
+            antigravity_backend: { connected: true, port: 8001 },
+            web_ide: {},
+            control_plane: { mode: "guided" },
+          };
+        } else if (url.includes("/api/logs/stats")) {
+          payload = { totals: {}, by_model: [], total_revert_events: 0 };
+        } else if (url.includes("/api/logs/reverts")) {
+          payload = { count: 0, reverts: [] };
+        } else if (url.includes("/api/logs")) {
+          payload = { count: 0, logs: [] };
+        } else if (url.includes("/api/engine-mode")) {
+          payload = { runtime_mode: "headless_linux", api_engine: { mode: "rpc" }, pool: {} };
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify(payload), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+        );
+      }),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    window.location.hash = "#/api-logs";
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("Headless Linux · Direct RPC")).toBeVisible();
+    expect(screen.getAllByRole("link", { name: "API-Logs" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Chats" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Einstellungen" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "Studio" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mehr" })).not.toBeInTheDocument();
+  });
 });

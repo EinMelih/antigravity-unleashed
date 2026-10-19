@@ -98,11 +98,10 @@ class DirectRPCPool:
         base_workspaces_dir: Optional[Path] = None,
         slot_count: int = 10,
     ) -> None:
+        from src.api_profile import resolve_api_profile_home
+
         self.rpc_client = rpc_client or DirectConnectRPCClient()
-        local_app_data = Path(
-            os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData/Local")
-        )
-        self.profile_home = local_app_data / "AntigravityApiProfile/home"
+        self.profile_home = resolve_api_profile_home()
         self.app_data_dir = self.profile_home / ".gemini/antigravity-api"
         self.base_workspaces_dir = base_workspaces_dir or (
             self.profile_home / "workspaces"
