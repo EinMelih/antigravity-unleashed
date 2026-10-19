@@ -397,8 +397,8 @@ class DirectRPCPool:
                 # Shield 3: Smart Adaptive Pacing
                 pacing_ms = await pacing_guard.apply_adaptive_pacing(slot.slot_id)
 
-                # Shield 2: Write sanitized system instructions to `<slot>/AGENTS.md`
-                write_workspace_agents_md(slot.workspace_dir, system_instructions)
+                # Ensure no AGENTS.md file exists in the workspace slot (zero per-request rule bloat)
+                write_workspace_agents_md(slot.workspace_dir)
 
                 baseline_steps = await self.rpc_client.get_trajectory_steps(
                     tracked.cascade_id, step_offset=0
@@ -424,6 +424,8 @@ class DirectRPCPool:
                             + "\n\n[Current User Message]:\n"
                             + user_message
                         )
+                if system_instructions.strip() and (not tracked.turn_hashes or tools):
+                    effective_user_message = f"{system_instructions.strip()}\n\n{effective_user_message}"
 
                 await self.rpc_client.send_user_cascade_message(
                     tracked.cascade_id,
@@ -580,7 +582,7 @@ class DirectRPCPool:
             out["workspace_slot"] = slot.slot_id
             async with slot.lock:
                 pacing_ms = await pacing_guard.apply_adaptive_pacing(slot.slot_id)
-                write_workspace_agents_md(slot.workspace_dir, system_instructions)
+                write_workspace_agents_md(slot.workspace_dir)
 
                 baseline_steps = await self.rpc_client.get_trajectory_steps(
                     tracked.cascade_id, step_offset=0
@@ -606,6 +608,8 @@ class DirectRPCPool:
                             + "\n\n[Current User Message]:\n"
                             + user_message
                         )
+                if system_instructions.strip() and (not tracked.turn_hashes or tools):
+                    effective_user_message = f"{system_instructions.strip()}\n\n{effective_user_message}"
 
                 await self.rpc_client.send_user_cascade_message(
                     tracked.cascade_id,
