@@ -240,7 +240,8 @@ def write_workspace_agents_md(workspace_dir: Path, system_instructions: str) -> 
 
     header = (
         "# Workspace Output & Response Guidelines\n\n"
-        "- Respond directly and concisely to the user's request.\n"
+        "- Respond directly and concisely in your very first response without calling internal workspace tools (`run_command`, `view_file`, `grep_search`, `find_by_name`, `list_dir`) unless the user explicitly asks to inspect files in the current workspace.\n"
+        "- When Client Function / Tool Definitions are provided below, never execute local commands yourself; instead output the requested `{\"tool_calls\": [...]}` JSON directly in your text response.\n"
         "- Do not request interactive confirmation dialogs; operate autonomously within this workspace.\n"
     )
     if system_instructions.strip():

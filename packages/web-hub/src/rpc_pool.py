@@ -405,9 +405,29 @@ class DirectRPCPool:
                 )
                 baseline_count = len(baseline_steps)
 
+                unrecorded_prior = (
+                    turns[len(tracked.turn_hashes) : -1]
+                    if len(turns) - 1 > len(tracked.turn_hashes)
+                    else []
+                )
+                effective_user_message = user_message
+                if unrecorded_prior:
+                    prior_lines = [
+                        f"{'User' if t.get('role') == 'user' else 'Assistant'}: {t.get('content', '').strip()}"
+                        for t in unrecorded_prior
+                        if str(t.get("content") or "").strip()
+                    ]
+                    if prior_lines:
+                        effective_user_message = (
+                            "[Prior Conversation Context]:\n"
+                            + "\n".join(prior_lines)
+                            + "\n\n[Current User Message]:\n"
+                            + user_message
+                        )
+
                 await self.rpc_client.send_user_cascade_message(
                     tracked.cascade_id,
-                    user_message,
+                    effective_user_message,
                     slot.workspace_dir,
                     model=model,
                     reasoning_effort=reasoning_effort,
@@ -430,6 +450,11 @@ class DirectRPCPool:
                     )
 
                 # Record turn hashes and step offsets for future multi-turn / auto-revert
+                for prior_turn in unrecorded_prior:
+                    tracked.step_offsets.append(baseline_count)
+                    tracked.turn_hashes.append(
+                        _hash_turn(prior_turn.get("role", "user"), prior_turn.get("content", ""))
+                    )
                 tracked.step_offsets.append(baseline_count)
                 tracked.turn_hashes.append(_hash_turn("user", user_message))
                 tracked.step_offsets.append(len(after_steps))
@@ -562,9 +587,29 @@ class DirectRPCPool:
                 )
                 baseline_count = len(baseline_steps)
 
+                unrecorded_prior = (
+                    turns[len(tracked.turn_hashes) : -1]
+                    if len(turns) - 1 > len(tracked.turn_hashes)
+                    else []
+                )
+                effective_user_message = user_message
+                if unrecorded_prior:
+                    prior_lines = [
+                        f"{'User' if t.get('role') == 'user' else 'Assistant'}: {t.get('content', '').strip()}"
+                        for t in unrecorded_prior
+                        if str(t.get("content") or "").strip()
+                    ]
+                    if prior_lines:
+                        effective_user_message = (
+                            "[Prior Conversation Context]:\n"
+                            + "\n".join(prior_lines)
+                            + "\n\n[Current User Message]:\n"
+                            + user_message
+                        )
+
                 await self.rpc_client.send_user_cascade_message(
                     tracked.cascade_id,
-                    user_message,
+                    effective_user_message,
                     slot.workspace_dir,
                     model=model,
                     reasoning_effort=reasoning_effort,
@@ -600,6 +645,11 @@ class DirectRPCPool:
                 after_steps = await self.rpc_client.get_trajectory_steps(
                     tracked.cascade_id, step_offset=0
                 )
+                for prior_turn in unrecorded_prior:
+                    tracked.step_offsets.append(baseline_count)
+                    tracked.turn_hashes.append(
+                        _hash_turn(prior_turn.get("role", "user"), prior_turn.get("content", ""))
+                    )
                 tracked.step_offsets.append(baseline_count)
                 tracked.turn_hashes.append(_hash_turn("user", user_message))
                 tracked.step_offsets.append(len(after_steps))
