@@ -446,6 +446,10 @@ class APIProfileRuntime:
 
     def get_oauth_status(self, *, saved_path: Path | None = None) -> dict[str, Any]:
         """Return non-sensitive metadata about the configured headless OAuth token."""
+        try:
+            self.resolve_headless_access_token()
+        except Exception:
+            pass
         info = self.load_oauth_token_info()
         access_token = str(info.get("access_token") or "")
         refresh_token = str(info.get("refresh_token") or "")

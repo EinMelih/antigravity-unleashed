@@ -153,9 +153,34 @@ class DirectConnectRPCClient:
             "locale": "en",
         }
 
+    def _is_rpc_token_expired(self) -> bool:
+        """Return True if `rpc_connection.json` indicates the current OAuth access token is expired."""
+        state_file = (
+            self.profile_home
+            / ".gemini/antigravity-api/scratch/rpc_connection.json"
+        )
+        if not state_file.is_file():
+            return False
+        try:
+            data = json.loads(state_file.read_text(encoding="utf-8"))
+            saved_exp = data.get("token_expires_at")
+            if isinstance(saved_exp, (int, float)) and time.time() >= float(saved_exp) - 120:
+                return True
+        except Exception:
+            pass
+        return False
+
     async def ensure_connected(self) -> Tuple[int, str]:
         """Discover or verify the running `language_server` of the isolated API profile."""
         async with self._discovery_lock:
+            if self._is_rpc_token_expired():
+                self.port = None
+                self.csrf_token = None
+                from src.api_profile import APIProfileRuntime
+
+                runtime = APIProfileRuntime(profile="api")
+                await asyncio.to_thread(runtime.ensure_rpc_ready)
+
             if self.port and self.csrf_token:
                 if await self._probe_port(self.port, self.csrf_token):
                     return self.port, self.csrf_token
@@ -187,6 +212,9 @@ class DirectConnectRPCClient:
         if state_file.is_file():
             try:
                 data = json.loads(state_file.read_text(encoding="utf-8"))
+                saved_exp = data.get("token_expires_at")
+                if isinstance(saved_exp, (int, float)) and time.time() >= float(saved_exp) - 120:
+                    return None
                 port = int(data.get("port") or 0)
                 token = str(data.get("csrf_token") or "")
                 if port > 0 and token and self._probe_port_sync(port, token):
