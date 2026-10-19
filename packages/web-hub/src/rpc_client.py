@@ -607,11 +607,23 @@ foreach ($p in $procs) {{
                 "supportsLatexRendering": True,
                 "requestedModel": requested_model,
                 "useAiCredits": False,
-                "plannerTypeConfig": {
-                    "conversational": {
-                        "agenticMode": True,
-                        "plannerMode": 1,
-                    }
+                "customAgent": {
+                    "toolNames": [],
+                    "excludeDefaultComponents": False,
+                    "systemPromptConfig": {
+                        "includeSections": [
+                            "identity",
+                            "artifacts",
+                            "conversation_transcript",
+                            "guidelines",
+                            "communication_style",
+                            "slash_commands",
+                            "messaging",
+                            "user_rules",
+                            "skills",
+                            "user_information",
+                        ]
+                    },
                 },
                 "knowledgeConfig": {
                     "enabled": False,
@@ -674,11 +686,13 @@ foreach ($p in $procs) {{
     ) -> str:
         """Clone `uRa` (`main_root.formatted.js:80423`) to create a new `cascadeId`."""
         ws_uri = workspace_dir.resolve().as_uri()
+        cascade_config = await self.build_ui_cascade_config(model)
         payload: Dict[str, Any] = {
             "metadata": self._metadata_payload(),
             "source": 1,  # CORTEX_TRAJECTORY_SOURCE_CASCADE_CLIENT
             "workspaceUris": [ws_uri],
             "overrideWorkspaceUris": [],
+            "customAgentSpec": {"cascadeConfig": cascade_config},
         }
         resp = await self.call_unary("StartCascade", payload, timeout=15.0)
         cascade_id = str(resp.get("cascadeId") or "").strip()
@@ -748,7 +762,6 @@ foreach ($p in $procs) {{
             )
         except Exception:
             return {}
-
 
     async def get_trajectory_steps(
         self, cascade_id: str, step_offset: int = 0
@@ -839,10 +852,12 @@ foreach ($p in $procs) {{
         return approved
 
     @staticmethod
-    def extract_planner_response_text(steps: List[Dict[str, Any]]) -> Tuple[str, bool]:
-        """Extract assistant response text and completion status from trajectory steps."""
-        collected: List[str] = []
+    def extract_planner_response_state(steps: List[Dict[str, Any]]) -> Tuple[str, str, bool]:
+        """Extract `(thinking_text, response_text, is_complete)` from trajectory steps."""
+        collected_thinking: List[str] = []
+        collected_text: List[str] = []
         any_running = False
+        has_planner_step = False
 
         for step in steps:
             if not isinstance(step, dict):
@@ -851,11 +866,16 @@ foreach ($p in $procs) {{
             if status in (
                 1,
                 2,
-                3,
+                8,
                 9,
+                11,
+                "CORTEX_STEP_STATUS_GENERATING",
+                "CORTEX_STEP_STATUS_QUEUED",
                 "CORTEX_STEP_STATUS_RUNNING",
                 "CORTEX_STEP_STATUS_PENDING",
                 "CORTEX_STEP_STATUS_WAITING",
+                "GENERATING",
+                "QUEUED",
                 "RUNNING",
                 "PENDING",
                 "WAITING",
@@ -868,6 +888,10 @@ foreach ($p in $procs) {{
                 or step.get("chatResponse")
             )
             if isinstance(planner_resp, dict):
+                has_planner_step = True
+                thinking = planner_resp.get("thinking") or ""
+                if thinking:
+                    collected_thinking.append(str(thinking))
                 text = (
                     planner_resp.get("response")
                     or planner_resp.get("modifiedResponse")
@@ -876,28 +900,37 @@ foreach ($p in $procs) {{
                     or ""
                 )
                 if text:
-                    collected.append(str(text))
+                    collected_text.append(str(text))
             elif isinstance(step.get("content"), str) and step.get("type") in (
                 "PLANNER_RESPONSE",
                 "ASSISTANT",
             ):
-                collected.append(step["content"])
+                has_planner_step = True
+                collected_text.append(step["content"])
 
-        full_text = "\n\n".join(part for part in collected if part.strip()).strip()
+        full_thinking = "\n\n".join(part for part in collected_thinking if part.strip()).strip()
+        full_text = "\n\n".join(part for part in collected_text if part.strip()).strip()
         is_complete = bool(full_text) and not any_running
-        return full_text, is_complete
+        return full_thinking, full_text, is_complete
 
-    async def stream_response_deltas(
+    @classmethod
+    def extract_planner_response_text(cls, steps: List[Dict[str, Any]]) -> Tuple[str, bool]:
+        """Extract assistant response text and completion status from trajectory steps."""
+        _, full_text, is_complete = cls.extract_planner_response_state(steps)
+        return full_text, bool(full_text) and is_complete
+
+    async def stream_response_events(
         self,
         cascade_id: str,
         baseline_step_count: int,
         *,
         timeout: float = 120.0,
-    ) -> AsyncGenerator[str, None]:
-        """Yield live text deltas as `language_server.exe` generates the response."""
+    ) -> AsyncGenerator[Tuple[str, str], None]:
+        """Yield live `("thinking" | "content", delta)` events as `language_server` generates."""
         deadline = time.monotonic() + timeout
-        emitted_len = 0
-        idle_ticks_with_text = 0
+        emitted_thinking_len = 0
+        emitted_text_len = 0
+        idle_ticks_done = 0
 
         while time.monotonic() < deadline:
             steps = await self.get_trajectory_steps(
@@ -907,14 +940,36 @@ foreach ($p in $procs) {{
                 await self.auto_approve_waiting_steps(
                     cascade_id, steps, step_offset=baseline_step_count
                 )
-                text, is_complete = self.extract_planner_response_text(steps)
-                if len(text) > emitted_len:
-                    delta = text[emitted_len:]
-                    emitted_len = len(text)
-                    idle_ticks_with_text = 0
-                    yield delta
-                elif is_complete and emitted_len > 0:
-                    idle_ticks_with_text += 1
-                    if idle_ticks_with_text >= 2:
+                thinking, text, is_complete = self.extract_planner_response_state(steps)
+                progressed = False
+                if len(thinking) > emitted_thinking_len:
+                    t_delta = thinking[emitted_thinking_len:]
+                    emitted_thinking_len = len(thinking)
+                    progressed = True
+                    yield ("thinking", t_delta)
+                if len(text) > emitted_text_len:
+                    c_delta = text[emitted_text_len:]
+                    emitted_text_len = len(text)
+                    progressed = True
+                    yield ("content", c_delta)
+                if progressed:
+                    idle_ticks_done = 0
+                elif is_complete and emitted_text_len > 0:
+                    idle_ticks_done += 1
+                    if idle_ticks_done >= 1:
                         break
-            await asyncio.sleep(0.12)
+            await asyncio.sleep(0.10)
+
+    async def stream_response_deltas(
+        self,
+        cascade_id: str,
+        baseline_step_count: int,
+        *,
+        timeout: float = 120.0,
+    ) -> AsyncGenerator[str, None]:
+        """Yield live text deltas as `language_server.exe` generates the response."""
+        async for kind, delta in self.stream_response_events(
+            cascade_id, baseline_step_count, timeout=timeout
+        ):
+            if kind == "content" and delta:
+                yield delta

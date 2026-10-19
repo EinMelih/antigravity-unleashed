@@ -393,10 +393,14 @@ async def chat_completions_handler(request: web.Request) -> web.Response:
             "workspace_slot": rpc_result.get("workspace_slot", ""),
         }
 
+        thinking_text = str(rpc_result.get("thinking") or "")
         message_obj: Dict[str, Any] = {
             "role": "assistant",
             "content": response_text if not tool_calls else (response_text or None),
         }
+        if thinking_text:
+            message_obj["reasoning_content"] = thinking_text
+            message_obj["reasoning"] = thinking_text
         if tool_calls:
             message_obj["tool_calls"] = tool_calls
 
@@ -784,31 +788,26 @@ async def _handle_streaming(
     }
     await response.write(f"data: {json.dumps(role_chunk)}\n\n".encode("utf-8"))
 
+    total_thinking = ""
     try:
         if engine_mode == "rpc" and rpc_stream_iter is not None:
-            if first_rpc_delta:
-                total_content += first_rpc_delta
+            async def _emit_rpc_item(item: Any) -> None:
+                nonlocal total_content, total_thinking, conv_id
+                if not item:
+                    return
                 conv_id = rpc_state.get("conversation_id") or conv_id
-                first_chunk = {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": int(datetime.now(timezone.utc).timestamp()),
-                    "model": rpc_state.get("model_actual") or model or "gemini-3.1-pro-high",
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {"content": first_rpc_delta},
-                            "finish_reason": None,
-                        }
-                    ],
-                }
-                await response.write(f"data: {json.dumps(first_chunk, ensure_ascii=False)}\n\n".encode("utf-8"))
-
-            async for delta in rpc_stream_iter:
-                if not delta:
-                    continue
-                total_content += delta
-                conv_id = rpc_state.get("conversation_id") or conv_id
+                if isinstance(item, dict) and item.get("type") == "thinking":
+                    t_delta = str(item.get("delta") or "")
+                    if not t_delta:
+                        return
+                    total_thinking += t_delta
+                    delta_payload = {"reasoning_content": t_delta, "reasoning": t_delta}
+                else:
+                    c_delta = str(item.get("delta") if isinstance(item, dict) else item or "")
+                    if not c_delta:
+                        return
+                    total_content += c_delta
+                    delta_payload = {"content": c_delta}
                 chunk = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -817,12 +816,18 @@ async def _handle_streaming(
                     "choices": [
                         {
                             "index": 0,
-                            "delta": {"content": delta},
+                            "delta": delta_payload,
                             "finish_reason": None,
                         }
                     ],
                 }
                 await response.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode("utf-8"))
+
+            if first_rpc_delta:
+                await _emit_rpc_item(first_rpc_delta)
+
+            async for delta in rpc_stream_iter:
+                await _emit_rpc_item(delta)
             conv_id = rpc_state.get("conversation_id") or conv_id
             actual_stream_model = rpc_state.get("model_actual") or model or "gemini-4-argon-medium"
             native_stream_label = rpc_state.get("native_model") or actual_stream_model
@@ -898,21 +903,6 @@ async def _handle_streaming(
             total_content = cleaned_text
 
     if stream_tool_calls and not error_occurred:
-        if total_content:
-            lead_chunk = {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": int(datetime.now(timezone.utc).timestamp()),
-                "model": rpc_state.get("model_actual") or model or "gemini-3.1-pro-high",
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"content": total_content},
-                        "finish_reason": None,
-                    }
-                ],
-            }
-            await response.write(f"data: {json.dumps(lead_chunk, ensure_ascii=False)}\n\n".encode("utf-8"))
         tc_deltas = []
         for idx, tc in enumerate(stream_tool_calls):
             fn = tc.get("function") or {}

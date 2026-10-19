@@ -23,6 +23,7 @@ from src.antigravity_shields import (
     pacing_guard,
     quota_breaker,
     sanitize_prompt_text,
+    unmask_response_text,
     write_workspace_agents_md,
 )
 from src.api_audit_logger import record_revert_event
@@ -472,22 +473,52 @@ class DirectRPCPool:
                     blocking=False,
                 )
 
+                thinking_chunks: List[str] = []
                 chunks: List[str] = []
-                async for delta in self.rpc_client.stream_response_deltas(
-                    tracked.cascade_id, baseline_count, timeout=timeout
-                ):
-                    chunks.append(delta)
+                if hasattr(self.rpc_client, "stream_response_events"):
+                    async for kind, delta in self.rpc_client.stream_response_events(
+                        tracked.cascade_id, baseline_count, timeout=timeout
+                    ):
+                        if kind == "thinking":
+                            thinking_chunks.append(delta)
+                        else:
+                            chunks.append(delta)
+                else:
+                    async for delta in self.rpc_client.stream_response_deltas(
+                        tracked.cascade_id, baseline_count, timeout=timeout
+                    ):
+                        chunks.append(delta)
 
+                thinking_text = "".join(thinking_chunks).strip()
                 response_text = "".join(chunks).strip()
                 after_steps = await self.rpc_client.get_trajectory_steps(
                     tracked.cascade_id, step_offset=0
                 )
-                if not response_text and after_steps:
-                    response_text, _ = self.rpc_client.extract_planner_response_text(
-                        after_steps[baseline_count:]
-                    )
+                if after_steps and (not response_text or not thinking_text):
+                    if hasattr(self.rpc_client, "extract_planner_response_state"):
+                        ext_thinking, ext_text, _ = self.rpc_client.extract_planner_response_state(
+                            after_steps[baseline_count:]
+                        )
+                        if not thinking_text and ext_thinking:
+                            thinking_text = ext_thinking
+                        if not response_text and ext_text:
+                            response_text = ext_text
+                    elif not response_text:
+                        response_text, _ = self.rpc_client.extract_planner_response_text(
+                            after_steps[baseline_count:]
+                        )
+
+                thinking_text = unmask_response_text(
+                    thinking_text, firewall_hits=sanitized["firewall_hits"]
+                )
+                response_text = unmask_response_text(
+                    response_text, firewall_hits=sanitized["firewall_hits"]
+                )
 
                 clean_content, tool_calls = self._parse_possible_tool_calls(response_text)
+                clean_content = unmask_response_text(
+                    clean_content, firewall_hits=sanitized["firewall_hits"]
+                )
                 canonical_assistant_text = (
                     json.dumps({"tool_calls": tool_calls}, ensure_ascii=False)
                     if (tool_calls and not clean_content.strip())
@@ -537,6 +568,7 @@ class DirectRPCPool:
                 return {
                     "response": clean_content,
                     "raw_response": response_text,
+                    "thinking": thinking_text,
                     "tool_calls": tool_calls,
                     "conversation_id": tracked.cascade_id,
                     "workspace_slot": slot.slot_id,
@@ -569,7 +601,7 @@ class DirectRPCPool:
         timeout: float = 120.0,
         client_ip: str = "127.0.0.1",
         state_out: Optional[Dict[str, Any]] = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Any, None]:
         """Stream live deltas via Direct ConnectRPC with all 8 Shields."""
         out = state_out if state_out is not None else {}
         firewall_enabled = bool(config.api_engine.get("keyword_firewall_enabled", True))
@@ -663,31 +695,79 @@ class DirectRPCPool:
                     blocking=False,
                 )
 
+                collected_thinking: List[str] = []
                 collected: List[str] = []
+                emitted_unmasked_len = 0
                 buffered_for_tools = bool(tools)
                 try:
-                    async for delta in self.rpc_client.stream_response_deltas(
-                        tracked.cascade_id, baseline_count, timeout=timeout
-                    ):
-                        collected.append(delta)
-                        if not buffered_for_tools:
-                            joined_so_far = "".join(collected).lstrip()
-                            if joined_so_far.startswith(("{", "```")) and '"tool_call' in joined_so_far:
-                                buffered_for_tools = True
+                    if hasattr(self.rpc_client, "stream_response_events"):
+                        async for kind, delta in self.rpc_client.stream_response_events(
+                            tracked.cascade_id, baseline_count, timeout=timeout
+                        ):
+                            if kind == "thinking":
+                                unmasked_t = unmask_response_text(
+                                    delta, firewall_hits=sanitized["firewall_hits"]
+                                )
+                                if unmasked_t:
+                                    collected_thinking.append(unmasked_t)
+                                    out["thinking"] = "".join(collected_thinking)
+                                    yield {"type": "thinking", "delta": unmasked_t}
                             else:
-                                yield delta
+                                collected.append(delta)
+                                if not buffered_for_tools:
+                                    joined_raw = "".join(collected)
+                                    if joined_raw.lstrip().startswith(("{", "```")) and '"tool_call' in joined_raw:
+                                        buffered_for_tools = True
+                                    else:
+                                        unmasked_so_far = unmask_response_text(
+                                            joined_raw, firewall_hits=sanitized["firewall_hits"]
+                                        )
+                                        # Hold back trailing partial prefix so 'Project Assistant' unmasks cleanly
+                                        safe_end = len(unmasked_so_far)
+                                        for suffix in ("der Project", "der Project ", "Project", "Project ", "der Workspace", "der Workspace ", "Workspace", "Workspace "):
+                                            if unmasked_so_far.endswith(suffix):
+                                                safe_end = len(unmasked_so_far) - len(suffix)
+                                                break
+                                        if safe_end > emitted_unmasked_len:
+                                            out_delta = unmasked_so_far[emitted_unmasked_len:safe_end]
+                                            emitted_unmasked_len = safe_end
+                                            yield out_delta
+                    else:
+                        async for delta in self.rpc_client.stream_response_deltas(
+                            tracked.cascade_id, baseline_count, timeout=timeout
+                        ):
+                            collected.append(delta)
+                            if not buffered_for_tools:
+                                joined_so_far = "".join(collected).lstrip()
+                                if joined_so_far.startswith(("{", "```")) and '"tool_call' in joined_so_far:
+                                    buffered_for_tools = True
+                                else:
+                                    yield unmask_response_text(
+                                        delta, firewall_hits=sanitized["firewall_hits"]
+                                    )
                 except asyncio.CancelledError:
                     await self.rpc_client.cancel_cascade_invocation(tracked.cascade_id)
                     raise
 
-                full_text = "".join(collected).strip()
+                full_text = unmask_response_text(
+                    "".join(collected).strip(), firewall_hits=sanitized["firewall_hits"]
+                )
                 cleaned_text, parsed_tool_calls = self._parse_possible_tool_calls(full_text)
+                cleaned_text = unmask_response_text(
+                    cleaned_text, firewall_hits=sanitized["firewall_hits"]
+                )
                 if parsed_tool_calls:
                     out["tool_calls"] = parsed_tool_calls
                     if buffered_for_tools and cleaned_text:
                         yield cleaned_text
                 elif buffered_for_tools and full_text:
                     yield full_text
+                elif not buffered_for_tools:
+                    full_unmasked_stream = unmask_response_text(
+                        "".join(collected), firewall_hits=sanitized["firewall_hits"]
+                    )
+                    if len(full_unmasked_stream) > emitted_unmasked_len:
+                        yield full_unmasked_stream[emitted_unmasked_len:]
 
                 canonical_assistant_text = (
                     json.dumps({"tool_calls": parsed_tool_calls}, ensure_ascii=False)

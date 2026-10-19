@@ -564,18 +564,14 @@ class APIProfileRuntime:
                 "antigravity.disableTelemetry": True,
             }),
             self.config_dir / "AGENTS.md": (
-                "# API profile rules\n\n"
-                "This environment has its own home, Gemini configuration, memory and workspace.\n"
-                "Private profile rules, memory, plugins and sidecars are not part of this environment.\n"
-                "Use the API workspace and profile directories for files created by API requests.\n"
-                "Do not load or modify another profile's rules, memory or configuration.\n"
-                "Do not start dashboard services or synchronize another profile's configuration.\n"
+                "# Workspace & Output Guidelines\n\n"
+                "- Adopt the persona, name, and instructions specified in the conversation context.\n"
+                "- When `Functions:` are provided in the conversation context and an action, command, file operation, or memory update is needed, respond ONLY with a raw JSON object matching `{\"tool_calls\": [{\"id\": \"call_1\", \"type\": \"function\", \"function\": {\"name\": \"<name>\", \"arguments\": \"<json_string>\"}}]}`.\n"
+                "- Never call built-in `send_message`, `schedule`, or `manage_task` tools.\n"
             ),
-            self.config_dir / "USER.md": "# API profile preferences\n\nThis profile serves API requests with its own rules and files.\n",
-            self.config_dir / "MEMORY.md": "# API profile memory\n\nNo private profile memory has been imported.\n",
         }
         for path, content in initial_files.items():
-            if not path.exists():
+            if path.name == "AGENTS.md" or not path.exists():
                 path.write_text(content, encoding="utf-8")
         marker = self.app_data_dir / "api_profile_seed.json"
         if marker.exists():

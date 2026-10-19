@@ -160,6 +160,30 @@ def sanitize_prompt_text(text: str, *, enabled: bool = True) -> Tuple[str, List[
     return cleaned, triggered
 
 
+_RESPONSE_UNMASK_REPLACEMENTS: Tuple[Tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bder\s+Project\s+Assistant\b", re.IGNORECASE), "Hermes"),
+    (re.compile(r"\bProject\s+Assistant\b", re.IGNORECASE), "Hermes"),
+    (re.compile(r"\bWorkspace\s+Team\b", re.IGNORECASE), "Nous Research"),
+    (re.compile(r"\bder\s+Workspace\s+Assistant\b", re.IGNORECASE), "OpenClaw"),
+    (re.compile(r"\bWorkspace\s+Assistant\b", re.IGNORECASE), "OpenClaw"),
+)
+
+
+def unmask_response_text(text: str, *, firewall_hits: Optional[List[str]] = None) -> str:
+    """Restore original client persona names ('Hermes', 'OpenClaw') in outgoing API responses.
+
+    While Shield 2 masks 'Hermes' -> 'Project Assistant' and 'OpenClaw' -> 'Workspace Assistant'
+    in prompts sent to `language_server` (so Google never sees third-party agent signatures),
+    this function restores the original names in the response returned to the caller.
+    """
+    if not text:
+        return ""
+    result = text
+    for pattern, replacement in _RESPONSE_UNMASK_REPLACEMENTS:
+        result = pattern.sub(replacement, result)
+    return result
+
+
 def extract_and_sanitize_messages(
     messages: List[Dict[str, Any]],
     *,
@@ -170,7 +194,7 @@ def extract_and_sanitize_messages(
     """Separate system/developer prompts from conversation turns without [System: ...] concatenation.
 
     Returns:
-      - ``system_instructions``: Combined sanitized system/developer rules for ``AGENTS.md``
+      - ``system_instructions``: Combined sanitized system/developer rules
       - ``conversation_turns``: Ordered list of ``{"role": "user"|"assistant"|"tool", "content": str}``
       - ``latest_user_message``: The sanitized user message for the current turn
       - ``firewall_hits``: List of matched signature patterns
@@ -247,7 +271,7 @@ def extract_and_sanitize_messages(
                 forced_name = tool_choice["function"]["name"]
                 choice_hint = f"You MUST invoke the tool '{forced_name}'."
             system_parts.append(
-                "When one of the following functions applies, respond ONLY with a JSON object matching:\n"
+                "When one of the following functions applies, do NOT invoke native tool calls; respond ONLY with plain-text JSON in your message text matching:\n"
                 '`{"tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "<name>", "arguments": "<json_string>"}}]}`\n'
                 f"{choice_hint}\n"
                 f"Functions:\n```json\n{json.dumps(tool_specs, ensure_ascii=False)}\n```"
@@ -265,11 +289,7 @@ def extract_and_sanitize_messages(
 
 
 def write_workspace_agents_md(workspace_dir: Path, system_instructions: str = "") -> Path:
-    """Ensure `<workspace_dir>/AGENTS.md` is removed so no `<RULE[AGENTS.md]>` overhead is sent per request.
-
-    All global permissions (`read_url(*)`, `command(*)`, `write_file(*)`, `read_file(*)`,
-    `autoExecutionPolicy: 3`) are already natively active via `cascadeConfig` and `config.json`.
-    """
+    """Ensure `<workspace_dir>/AGENTS.md` is removed so no `<RULE[AGENTS.md]>` overhead is sent per request."""
     workspace_dir.mkdir(parents=True, exist_ok=True)
     agents_md_path = workspace_dir / "AGENTS.md"
     try:

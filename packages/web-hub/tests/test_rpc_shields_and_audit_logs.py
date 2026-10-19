@@ -205,10 +205,7 @@ class RpcShieldsAndAuditLogsTests(unittest.IsolatedAsyncioTestCase):
 
         ws_dir = self.base_path / "ws-test"
         agents_file = write_workspace_agents_md(ws_dir, res["system_instructions"])
-        self.assertTrue(agents_file.is_file())
-        content = agents_file.read_text(encoding="utf-8")
-        self.assertIn("Workspace Output & Response Guidelines", content)
-        self.assertNotIn("OpenClaw", content)
+        self.assertFalse(agents_file.exists())
 
     def test_shield_3_intercepts_heartbeats_locally_in_zero_ms(self) -> None:
         guard = HeartbeatAndPacingGuard()
@@ -254,8 +251,8 @@ class RpcShieldsAndAuditLogsTests(unittest.IsolatedAsyncioTestCase):
             3,
             sent["cascadeConfig"]["plannerConfig"]["toolConfig"]["runCommand"]["autoCommandConfig"]["autoExecutionPolicy"],
         )
-        # Verify user prompt has NO [System: ...] prefix and sanitized 'Hermes' -> 'Project Assistant'
-        self.assertEqual("Hello from Project Assistant", sent["items"][0]["text"])
+        # Verify user prompt has NO [System: ...] prefix, includes Turn 1 system instructions, and sanitized 'Hermes' -> 'Project Assistant'
+        self.assertEqual("Always answer in JSON.\n\nHello from Project Assistant", sent["items"][0]["text"])
 
         # Verify exact token & context window metadata
         self.assertFalse(body["usage"]["estimated"])

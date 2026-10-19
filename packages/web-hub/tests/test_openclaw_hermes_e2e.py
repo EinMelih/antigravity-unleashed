@@ -142,6 +142,16 @@ def _build_test_app(pool: DirectRPCPool) -> web.Application:
 
 
 class OpenClawHermesE2ETests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        from src.antigravity_shields import quota_breaker
+        quota_breaker._exhausted_until.clear()
+        quota_breaker._cached_at = 0.0
+
+    def tearDown(self) -> None:
+        from src.antigravity_shields import quota_breaker
+        quota_breaker._exhausted_until.clear()
+        quota_breaker._cached_at = 0.0
+
     def test_headless_oauth_token_persistence_and_isolation(self) -> None:
         """Verify headless Linux OAuth token import, auto-refresh, and strict /data/antigravity-api isolation."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,7 +191,7 @@ class OpenClawHermesE2ETests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(status["has_refresh_token"])
 
     async def test_openclaw_e2e_tool_calls_markdown_fenced_sync_and_stream(self) -> None:
-        """Verify OpenClaw payloads with SOUL.md/HEARTBEAT.md, AGENTS.md writing, and Markdown-fenced tool_calls."""
+        """Verify OpenClaw payloads with SOUL.md/HEARTBEAT.md sanitization and Markdown-fenced tool_calls."""
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             with patch.dict(os.environ, {"ANTIGRAVITY_API_HOME": str(tmp_path / "home")}, clear=False):
@@ -245,13 +255,15 @@ class OpenClawHermesE2ETests(unittest.IsolatedAsyncioTestCase):
                     )
 
                     # Verify Shield 2 + 4: Forbidden keywords ("OpenClaw", "SOUL.md", "HEARTBEAT.md") were sanitized
+                    # and no redundant workspace AGENTS.md file is left behind
                     slot_name = data["workspace_slot"]
-                    agents_md = (pool.base_workspaces_dir / slot_name / "AGENTS.md").read_text(encoding="utf-8")
-                    self.assertNotIn("OpenClaw", agents_md)
-                    self.assertNotIn("SOUL.md", agents_md)
-                    self.assertNotIn("HEARTBEAT.md", agents_md)
-                    self.assertIn("PROJECT_CONTEXT.md", agents_md)
-                    self.assertIn("STATUS_CHECK.md", agents_md)
+                    self.assertFalse((pool.base_workspaces_dir / slot_name / "AGENTS.md").exists())
+                    sent_prompt = fake_client.sent_messages[-1]["prompt"]
+                    self.assertNotIn("OpenClaw", sent_prompt)
+                    self.assertNotIn("SOUL.md", sent_prompt)
+                    self.assertNotIn("HEARTBEAT.md", sent_prompt)
+                    self.assertIn("PROJECT_CONTEXT.md", sent_prompt)
+                    self.assertIn("STATUS_CHECK.md", sent_prompt)
 
                     # 2. Streaming (stream: true) OpenClaw request with Markdown-fenced tool_calls
                     stream_payload = dict(openclaw_payload, stream=True)
