@@ -1020,8 +1020,9 @@ foreach ($p in $procs) {{
                 collected_text.append(step["content"])
 
         full_thinking = "\n\n".join(part for part in collected_thinking if part.strip()).strip()
-        full_text = "\n\n".join(part for part in collected_text if part.strip()).strip()
-        is_complete = bool(full_text) and not any_running
+        raw_text = "\n\n".join(part for part in collected_text if part.strip())
+        full_text = raw_text.lstrip() if any_running else raw_text.strip()
+        is_complete = bool(full_text.strip()) and not any_running
         return full_thinking, full_text, is_complete
 
     @classmethod
@@ -1063,7 +1064,7 @@ foreach ($p in $procs) {{
                     yield ("content", c_delta)
                 if is_complete and emitted_text_len > 0:
                     break
-            await asyncio.sleep(0.10)
+            await asyncio.sleep(0.04)
 
     async def stream_response_deltas(
         self,

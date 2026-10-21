@@ -886,6 +886,17 @@ class DirectRPCPool:
                                             if unmasked_so_far.endswith(suffix):
                                                 safe_end = len(unmasked_so_far) - len(suffix)
                                                 break
+                                        # Avoid mid-word cuts during bursty poll ticks ("Funktions" | "weise")
+                                        if (
+                                            safe_end - emitted_unmasked_len > 12
+                                            and unmasked_so_far[safe_end - 1] not in " \t\n.!?,;:-)]}\"'»"
+                                        ):
+                                            last_ws = max(
+                                                unmasked_so_far.rfind(" ", emitted_unmasked_len, safe_end),
+                                                unmasked_so_far.rfind("\n", emitted_unmasked_len, safe_end),
+                                            )
+                                            if last_ws > emitted_unmasked_len and (safe_end - (last_ws + 1)) <= 16:
+                                                safe_end = last_ws + 1
                                         if safe_end > emitted_unmasked_len:
                                             out_delta = unmasked_so_far[emitted_unmasked_len:safe_end]
                                             emitted_unmasked_len = safe_end

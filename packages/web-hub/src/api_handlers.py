@@ -1,4 +1,6 @@
+import asyncio
 import json
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -864,23 +866,7 @@ async def _handle_streaming(
     total_thinking = ""
     try:
         if engine_mode == "rpc" and rpc_stream_iter is not None:
-            async def _emit_rpc_item(item: Any) -> None:
-                nonlocal total_content, total_thinking, conv_id
-                if not item:
-                    return
-                conv_id = rpc_state.get("conversation_id") or conv_id
-                if isinstance(item, dict) and item.get("type") == "thinking":
-                    t_delta = str(item.get("delta") or "")
-                    if not t_delta:
-                        return
-                    total_thinking += t_delta
-                    delta_payload = {"reasoning_content": t_delta, "reasoning": t_delta}
-                else:
-                    c_delta = str(item.get("delta") if isinstance(item, dict) else item or "")
-                    if not c_delta:
-                        return
-                    total_content += c_delta
-                    delta_payload = {"content": c_delta}
+            async def _write_sse_delta(delta_payload: Dict[str, Any]) -> None:
                 chunk = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -895,6 +881,51 @@ async def _handle_streaming(
                     ],
                 }
                 await response.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode("utf-8"))
+
+            def _split_smooth_subchunks(text_block: str, max_subchunks: int = 8, min_slice: int = 12) -> List[str]:
+                if len(text_block) <= min_slice:
+                    return [text_block]
+                tokens = re.findall(r"\S+\s*|\s+", text_block)
+                if len(tokens) <= 1:
+                    return [text_block]
+                target_len = max(min_slice, (len(text_block) + max_subchunks - 1) // max_subchunks)
+                subchunks: List[str] = []
+                buf = ""
+                for tok in tokens:
+                    if buf and len(buf) + len(tok) > target_len and len(subchunks) < max_subchunks - 1:
+                        subchunks.append(buf)
+                        buf = tok
+                    else:
+                        buf += tok
+                if buf:
+                    subchunks.append(buf)
+                return subchunks or [text_block]
+
+            async def _emit_rpc_item(item: Any) -> None:
+                nonlocal total_content, total_thinking, conv_id
+                if not item:
+                    return
+                conv_id = rpc_state.get("conversation_id") or conv_id
+                if isinstance(item, dict) and item.get("type") == "thinking":
+                    t_delta = str(item.get("delta") or "")
+                    if not t_delta:
+                        return
+                    total_thinking += t_delta
+                    subchunks = _split_smooth_subchunks(t_delta, max_subchunks=5, min_slice=24)
+                    for idx, sub in enumerate(subchunks):
+                        if idx > 0:
+                            await asyncio.sleep(0.003)
+                        await _write_sse_delta({"reasoning_content": sub, "reasoning": sub})
+                else:
+                    c_delta = str(item.get("delta") if isinstance(item, dict) else item or "")
+                    if not c_delta:
+                        return
+                    total_content += c_delta
+                    subchunks = _split_smooth_subchunks(c_delta, max_subchunks=8, min_slice=12)
+                    for idx, sub in enumerate(subchunks):
+                        if idx > 0:
+                            await asyncio.sleep(0.004)
+                        await _write_sse_delta({"content": sub})
 
             if first_rpc_delta:
                 await _emit_rpc_item(first_rpc_delta)
