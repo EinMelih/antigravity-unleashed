@@ -45,6 +45,7 @@ class TrackedConversation:
     turn_hashes: List[str] = field(default_factory=list)
     step_offsets: List[int] = field(default_factory=list)
     last_step_count: int = 0
+    native_turns: int = 0
     created_at: float = field(default_factory=time.monotonic)
     updated_at: float = field(default_factory=time.monotonic)
 
@@ -162,12 +163,22 @@ class DirectRPCPool:
                     slot_obj = self._get_slot_by_id(conv.slot_id)
                     if slot_obj.lock.locked():
                         continue
-                    if len(conv.turn_hashes) >= max_turns * 2:
+                    if conv.native_turns >= max_turns:
                         continue
                     # Exact prefix match (normal next turn of the exact same chat)
                     if conv.turn_hashes == incoming_prefix:
                         best_match = conv
                         break
+                    # Extended prefix match (e.g. user switched to Codex for 1-2 turns in Hermes and switched back)
+                    if (
+                        len(conv.turn_hashes) >= 2
+                        and len(incoming_prefix) > len(conv.turn_hashes)
+                        and incoming_prefix[: len(conv.turn_hashes)] == conv.turn_hashes
+                    ):
+                        if len(conv.turn_hashes) > best_overlap:
+                            best_overlap = len(conv.turn_hashes)
+                            best_match = conv
+                        continue
                     # Truncated prefix match (User clicked Edit / Retry / Revert in Hermes — requires >= 2 turns!)
                     common = 0
                     for h_old, h_new in zip(conv.turn_hashes, incoming_prefix):
@@ -437,10 +448,13 @@ class DirectRPCPool:
                 # Ensure no AGENTS.md file exists in the workspace slot (zero per-request rule bloat)
                 write_workspace_agents_md(slot.workspace_dir)
 
-                baseline_steps = await self.rpc_client.get_trajectory_steps(
-                    tracked.cascade_id, step_offset=0
-                )
-                baseline_count = len(baseline_steps)
+                if tracked.last_step_count == 0 and not tracked.turn_hashes:
+                    baseline_count = 0
+                else:
+                    baseline_steps = await self.rpc_client.get_trajectory_steps(
+                        tracked.cascade_id, step_offset=0
+                    )
+                    baseline_count = len(baseline_steps)
 
                 unrecorded_prior = (
                     turns[len(tracked.turn_hashes) : -1]
@@ -542,6 +556,7 @@ class DirectRPCPool:
                 tracked.step_offsets.append(len(after_steps))
                 tracked.turn_hashes.append(_hash_turn("assistant", canonical_assistant_text))
                 tracked.last_step_count = len(after_steps)
+                tracked.native_turns += 1
                 tracked.updated_at = time.monotonic()
                 slot.last_used_at = time.monotonic()
                 pacing_guard.mark_slot_completed(slot.slot_id)
@@ -665,10 +680,13 @@ class DirectRPCPool:
                 pacing_ms = await pacing_guard.apply_adaptive_pacing(slot.slot_id)
                 write_workspace_agents_md(slot.workspace_dir)
 
-                baseline_steps = await self.rpc_client.get_trajectory_steps(
-                    tracked.cascade_id, step_offset=0
-                )
-                baseline_count = len(baseline_steps)
+                if tracked.last_step_count == 0 and not tracked.turn_hashes:
+                    baseline_count = 0
+                else:
+                    baseline_steps = await self.rpc_client.get_trajectory_steps(
+                        tracked.cascade_id, step_offset=0
+                    )
+                    baseline_count = len(baseline_steps)
 
                 unrecorded_prior = (
                     turns[len(tracked.turn_hashes) : -1]
@@ -710,7 +728,7 @@ class DirectRPCPool:
                 collected_thinking: List[str] = []
                 collected: List[str] = []
                 emitted_unmasked_len = 0
-                buffered_for_tools = bool(tools)
+                buffered_for_tools = False
                 try:
                     if hasattr(self.rpc_client, "stream_response_events"):
                         async for kind, delta in self.rpc_client.stream_response_events(
@@ -728,8 +746,12 @@ class DirectRPCPool:
                                 collected.append(delta)
                                 if not buffered_for_tools:
                                     joined_raw = "".join(collected)
-                                    if joined_raw.lstrip().startswith(("{", "```")) and '"tool_call' in joined_raw:
-                                        buffered_for_tools = True
+                                    stripped_raw = joined_raw.lstrip()
+                                    if stripped_raw.startswith(("{", "```")) and (
+                                        len(stripped_raw) < 48 or '"tool_call' in stripped_raw
+                                    ):
+                                        if '"tool_call' in stripped_raw:
+                                            buffered_for_tools = True
                                     else:
                                         unmasked_so_far = unmask_response_text(
                                             joined_raw, firewall_hits=sanitized["firewall_hits"]
@@ -800,6 +822,7 @@ class DirectRPCPool:
                 tracked.step_offsets.append(len(after_steps))
                 tracked.turn_hashes.append(_hash_turn("assistant", canonical_assistant_text))
                 tracked.last_step_count = len(after_steps)
+                tracked.native_turns += 1
                 tracked.updated_at = time.monotonic()
                 slot.last_used_at = time.monotonic()
                 pacing_guard.mark_slot_completed(slot.slot_id)

@@ -300,15 +300,19 @@ def extract_and_sanitize_messages(
             if not content_str:
                 content_str = "Describe this image."
 
-        # Strip any legacy "[System: ...]" prefix if a client already injected one
+        # Handle "[System: ...]" prefixes injected inside user messages by clients (e.g. Hermes model-switch notices)
         legacy_sys_match = re.match(r"^\s*\[System:\s*([\s\S]*?)\]\s*(.*)$", content_str)
         if legacy_sys_match and role == "user":
             extracted_sys, remainder = legacy_sys_match.group(1), legacy_sys_match.group(2)
             san_sys, hits_sys = sanitize_prompt_text(extracted_sys, enabled=firewall_enabled)
             firewall_hits.extend(hits_sys)
-            if san_sys.strip():
+            # Only treat as global system prompt if it occurs before any conversation turns;
+            # mid-conversation runtime notices (like Hermes model switches) stay in-place or are skipped if empty
+            if not conversation_turns and san_sys.strip():
                 system_parts.append(san_sys.strip())
             content_str = remainder
+            if not content_str.strip() and not msg_media:
+                continue
 
         sanitized, hits = sanitize_prompt_text(content_str, enabled=firewall_enabled)
         firewall_hits.extend(hits)
@@ -451,7 +455,8 @@ class HeartbeatAndPacingGuard:
         elif rpm_count >= 18:
             delay_s = random.uniform(0.8, 2.0)
         else:
-            delay_s = random.uniform(0.08, 0.30)
+            # Normal human interactive turn (> 2.0s since last reply): human typing time already elapsed
+            return 0.0
 
         await asyncio.sleep(delay_s)
         return round(delay_s * 1000, 1)

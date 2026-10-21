@@ -124,6 +124,10 @@ class DirectConnectRPCClient:
         self._available_models_cache: List[Dict[str, Any]] = []
         self._experiments_cache: Optional[Dict[str, Any]] = None
         self._discovery_lock = asyncio.Lock()
+        self._last_verified_at: float = 0.0
+        self._ssl_ctx = ssl.create_default_context()
+        self._ssl_ctx.check_hostname = False
+        self._ssl_ctx.verify_mode = ssl.CERT_NONE
 
     @property
     def base_url(self) -> str:
@@ -182,12 +186,17 @@ class DirectConnectRPCClient:
                 await asyncio.to_thread(runtime.ensure_rpc_ready)
 
             if self.port and self.csrf_token:
+                now = time.monotonic()
+                if now - self._last_verified_at < 30.0:
+                    return self.port, self.csrf_token
                 if await self._probe_port(self.port, self.csrf_token):
+                    self._last_verified_at = now
                     return self.port, self.csrf_token
 
             discovered = await asyncio.to_thread(self._discover_api_language_server)
             if discovered:
                 self.port, self.csrf_token = discovered
+                self._last_verified_at = time.monotonic()
                 return self.port, self.csrf_token
 
             # If the API profile isn't started yet, start it via APIProfileRuntime
@@ -201,6 +210,7 @@ class DirectConnectRPCClient:
                     "Could not discover ConnectRPC port/CSRF token for the isolated API profile language_server."
                 )
             self.port, self.csrf_token = discovered
+            self._last_verified_at = time.monotonic()
             return self.port, self.csrf_token
 
     def _discover_api_language_server(self) -> Optional[Tuple[int, str]]:
@@ -369,14 +379,11 @@ foreach ($p in $procs) {{
     ) -> Dict[str, Any]:
         url = f"{self.base_url}{SERVICE_PREFIX}/{method}"
         verify_loopback_rpc_url(url)
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(
             url, data=body, headers=self._headers(streaming=False), method="POST"
         )
-        with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, context=self._ssl_ctx, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
             return json.loads(raw) if raw.strip() else {}
 
@@ -507,7 +514,12 @@ foreach ($p in $procs) {{
             return cid, STATIC_MODEL_LABELS.get(cid, cid)
 
         if raw in STATIC_MODEL_ENUMS:
-            return raw, STATIC_MODEL_LABELS.get(raw, raw)
+            cid = raw
+            if effort in {"high", "medium", "low"} and cid.startswith("gemini-4-argon-"):
+                cid = f"gemini-4-argon-{effort}"
+            elif effort in {"high", "medium", "low"} and cid.startswith("gemini-3.8-flash-"):
+                cid = f"gemini-3.8-flash-{effort}"
+            return cid, STATIC_MODEL_LABELS.get(cid, cid)
 
         # Match by UI label (e.g. "Gemini 4 Argon (High)")
         for row in STATIC_MODEL_CATALOG:
@@ -621,24 +633,14 @@ foreach ($p in $procs) {{
                 "useAiCredits": False,
                 # Native Protobuf `CustomAgentConfig` (`proto/codeium_common.proto`):
                 # Evaluated locally inside `language_server` on 127.0.0.1. Disables internal IDE
-                # tools (`toolNames: []`) so client tools (Hermes/OpenClaw) work cleanly without
-                # conflict, and omits IDE identity boilerplate without prompt-injection text.
+                # tools (`toolNames: []`, `excludeDefaultComponents: True`) so client tools
+                # (Hermes/OpenClaw) work cleanly without conflict, and omits IDE identity/artifact
+                # boilerplate (`includeSections: []` -> saves ~6,300 input tokens per turn!).
                 "customAgent": {
                     "toolNames": [],
-                    "excludeDefaultComponents": False,
+                    "excludeDefaultComponents": True,
                     "systemPromptConfig": {
-                        "includeSections": [
-                            "identity",
-                            "artifacts",
-                            "conversation_transcript",
-                            "guidelines",
-                            "communication_style",
-                            "slash_commands",
-                            "messaging",
-                            "user_rules",
-                            "skills",
-                            "user_information",
-                        ]
+                        "includeSections": [],
                     },
                 },
                 "knowledgeConfig": {
@@ -797,9 +799,9 @@ foreach ($p in $procs) {{
                 {"cascadeId": cascade_id, "stepOffset": max(0, int(step_offset))},
                 timeout=10.0,
             )
-            steps = resp.get("steps")
-            if isinstance(steps, list):
-                return steps
+            if isinstance(resp, dict):
+                steps = resp.get("steps")
+                return steps if isinstance(steps, list) else []
         except Exception:
             pass
         try:
@@ -954,7 +956,6 @@ foreach ($p in $procs) {{
         deadline = time.monotonic() + timeout
         emitted_thinking_len = 0
         emitted_text_len = 0
-        idle_ticks_done = 0
 
         while time.monotonic() < deadline:
             steps = await self.get_trajectory_steps(
@@ -965,24 +966,17 @@ foreach ($p in $procs) {{
                     cascade_id, steps, step_offset=baseline_step_count
                 )
                 thinking, text, is_complete = self.extract_planner_response_state(steps)
-                progressed = False
                 if len(thinking) > emitted_thinking_len:
                     t_delta = thinking[emitted_thinking_len:]
                     emitted_thinking_len = len(thinking)
-                    progressed = True
                     yield ("thinking", t_delta)
                 if len(text) > emitted_text_len:
                     c_delta = text[emitted_text_len:]
                     emitted_text_len = len(text)
-                    progressed = True
                     yield ("content", c_delta)
-                if progressed:
-                    idle_ticks_done = 0
-                elif is_complete and emitted_text_len > 0:
-                    idle_ticks_done += 1
-                    if idle_ticks_done >= 1:
-                        break
-            await asyncio.sleep(0.10)
+                if is_complete and emitted_text_len > 0:
+                    break
+            await asyncio.sleep(0.04)
 
     async def stream_response_deltas(
         self,
