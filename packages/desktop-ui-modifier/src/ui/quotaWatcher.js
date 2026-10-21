@@ -51,6 +51,38 @@
     window.amsTelemetryState = amsTelemetryState;
 
     // ----------------------------------------------------------------------------
+    // 0. Crisp Lucide SVG Icon Helper (Replaces Unicode Emojis)
+    // ----------------------------------------------------------------------------
+    const AMS_LUCIDE_PATHS = {
+        sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/>',
+        flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+        snowflake: '<line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/><path d="m20 16-4-4 4-4"/><path d="m4 8 4 4-4 4"/><path d="m16 4-4 4-4-4"/><path d="m8 20 4-4 4 4"/>',
+        zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+        coins: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
+        alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+        lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+        plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+        undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+        enter: '<polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>',
+        volumeOn: '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/>',
+        volumeOff: '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/>',
+        check: '<path d="M20 6 9 17l-5-5"/>',
+        chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+        database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/>',
+        message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+        wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+        rocket: '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>',
+        cpu: '<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>',
+        info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+        close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    };
+
+    function amsIcon(name, size = 11, color = 'currentColor') {
+        const p = AMS_LUCIDE_PATHS[name] || AMS_LUCIDE_PATHS.zap;
+        return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1.5px;flex-shrink:0;">${p}</svg>`;
+    }
+
+    // ----------------------------------------------------------------------------
     // 1. Synthesized Web Audio API "Cha-Ching / Coin" Cache-Hit Sound
     // ----------------------------------------------------------------------------
     let amsAudioCtx = null;
@@ -138,7 +170,9 @@
 
         const savedTokens = Math.round(cachedTokens * 0.9);
         const savedWeeklyPct = (savedTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
+        const saved5hPct = (savedTokens * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
         const ctx = cachedTokens + uncachedTokens;
+        const hitRatioPct = ctx > 0 ? Math.round((cachedTokens / ctx) * 100) : 90;
         const inRate = ctx > 200000 ? 4.0 : 2.0;
         const savedEur = ((savedTokens / 1e6) * inRate * 0.92).toFixed(2);
         const cacheTokStr = cachedTokens >= 1000000
@@ -153,17 +187,17 @@
             pill.className = 'antigravity-cache-hit-toast';
             pill.style.cssText =
                 'position:fixed;z-index:999999;pointer-events:none;display:inline-flex;align-items:center;gap:6px;' +
-                'padding:5px 11px;border-radius:999px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;font-weight:700;' +
-                'font-variant-numeric:tabular-nums;color:#ecfdf5;background:linear-gradient(135deg,rgba(5,150,105,0.95),rgba(16,185,129,0.92));' +
+                'padding:5px 12px;border-radius:999px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;' +
+                'font-variant-numeric:tabular-nums;color:#ecfdf5;background:linear-gradient(135deg,rgba(5,150,105,0.96),rgba(16,185,129,0.92));' +
                 'border:1px solid rgba(110,231,183,0.65);box-shadow:0 8px 24px rgba(16,185,129,0.35),0 0 0 1px rgba(16,185,129,0.2);' +
                 'transition:transform 0.65s cubic-bezier(0.16,1,0.3,1),opacity 0.65s ease;opacity:0;transform:translateY(8px) scale(0.94);';
-            pill.style.left = Math.max(16, Math.min(window.innerWidth - 360, rect.left)) + 'px';
+            pill.style.left = Math.max(16, Math.min(window.innerWidth - 520, rect.left)) + 'px';
             pill.style.top = Math.max(16, rect.top - 36) + 'px';
 
             const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
             pill.innerHTML =
-                '<span style="font-size:13px;">⚡💰</span>' +
-                '<span>CACHE HIT! ' + cacheTokStr + ' (-90%) · +' + savedWeeklyPct + '% W / +' + savedEur + ' € ' + (isDe ? 'gespart' : 'saved') + '</span>';
+                `<span style="display:inline-flex;align-items:center;gap:3px;color:#fde68a;">${amsIcon('zap', 12, '#fde68a')}${amsIcon('coins', 12, '#fde68a')}</span>` +
+                `<span>CACHE HIT! ${cacheTokStr} Tokens (${hitRatioPct}% ${isDe ? 'Rabatt' : 'Cache'}) · +${savedWeeklyPct}% W (+${saved5hPct}% 5h) · +${savedEur} € ${isDe ? 'gespart' : 'saved'}</span>`;
 
             document.body.appendChild(pill);
             requestAnimationFrame(() => {
@@ -174,7 +208,7 @@
                 pill.style.opacity = '0';
                 pill.style.transform = 'translateY(-18px) scale(0.96)';
                 setTimeout(() => pill.remove(), 680);
-            }, 2600);
+            }, 3100);
         }
 
         // 2. Pulse the active sidebar row badge
@@ -782,7 +816,7 @@
             'font-size:9px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;' +
             'background:linear-gradient(135deg,rgba(245,158,11,0.16),rgba(139,92,246,0.22));' +
             'border:1px solid rgba(251,191,36,0.42);color:#fde68a;box-shadow:0 0 10px rgba(245,158,11,0.12);';
-        ultraBadge.textContent = '✦ ULTRA';
+        ultraBadge.innerHTML = `${amsIcon('sparkles', 10, '#fde68a')}<span>ULTRA</span>`;
 
         // 2. 5h Limit Pill
         const fiveHPill = document.createElement('span');
@@ -851,19 +885,19 @@
         if (cacheInfo.isRunning) {
             chatTokenEl.style.background = 'rgba(16, 185, 129, 0.09)';
             chatTokenEl.style.border = '1px solid rgba(16, 185, 129, 0.32)';
-            stateBadgeHtml = `<span style="color:#34d399;font-weight:700;">⚡ LIVE</span>`;
+            stateBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:3px;color:#34d399;font-weight:700;">${amsIcon('zap', 10, '#34d399')}<span>LIVE</span></span>`;
         } else if (cacheInfo.state === 'warm') {
             chatTokenEl.style.background = 'rgba(16, 185, 129, 0.07)';
             chatTokenEl.style.border = '1px solid rgba(16, 185, 129, 0.25)';
-            stateBadgeHtml = `<span style="color:#34d399;font-weight:700;">🔥 ${formatDurationShort(cacheInfo.remainingGuaranteedSec)}</span>`;
+            stateBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:3px;color:#34d399;font-weight:700;">${amsIcon('flame', 10, '#34d399')}<span>${formatDurationShort(cacheInfo.remainingGuaranteedSec)}</span></span>`;
         } else if (cacheInfo.state === 'lukewarm') {
             chatTokenEl.style.background = 'rgba(245, 158, 11, 0.10)';
             chatTokenEl.style.border = '1px solid rgba(245, 158, 11, 0.35)';
-            stateBadgeHtml = `<span style="color:#fbbf24;font-weight:700;">⚠️ ${formatDurationShort(cacheInfo.idleSec)}</span>`;
+            stateBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:3px;color:#fbbf24;font-weight:700;">${amsIcon('alert', 10, '#fbbf24')}<span>${formatDurationShort(cacheInfo.idleSec)}</span></span>`;
         } else {
             chatTokenEl.style.background = 'rgba(239, 68, 68, 0.10)';
             chatTokenEl.style.border = '1px solid rgba(239, 68, 68, 0.35)';
-            stateBadgeHtml = `<span style="color:#f87171;font-weight:700;">❄️ ${isDe ? 'Kalt' : 'Cold'} (${formatDurationShort(cacheInfo.idleSec)})</span>`;
+            stateBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:3px;color:#f87171;font-weight:700;">${amsIcon('snowflake', 10, '#f87171')}<span>${isDe ? 'Kalt' : 'Cold'} (${formatDurationShort(cacheInfo.idleSec)})</span></span>`;
         }
 
         const wUsedStr = cacheInfo.weeklyPctUsed.toFixed(4);
@@ -957,8 +991,8 @@
             estimatorEl.style.border = '1px solid rgba(56, 189, 248, 0.28)';
             estimatorEl.style.color = '#bae6fd';
             estimatorEl.innerHTML =
-                `<span style="color:#38bdf8;font-weight:700;">⏎ Send ≈ -${estWeeklyPct}% W</span>` +
-                `<span style="opacity:0.75;">(-${est5hPct}% 5h · +${typedTokens} Tok · 🔥 0.1x)</span>`;
+                `<span style="display:inline-flex;align-items:center;gap:3px;color:#38bdf8;font-weight:700;">${amsIcon('enter', 10, '#38bdf8')}<span>Send ≈ -${estWeeklyPct}% W</span></span>` +
+                `<span style="display:inline-flex;align-items:center;gap:3px;opacity:0.8;">(-${est5hPct}% 5h · +${typedTokens} Tok · ${amsIcon('flame', 10, '#34d399')} 0.1x)</span>`;
             estimatorEl.title = isDe
                 ? `Live-Vorschau beim Drücken von Enter (Cache WARM · 90% Rabatt):\n` +
                   `• Geschätzter Abzug pro Step: -${estWeeklyPct}% Weekly / -${est5hPct}% 5h\n` +
@@ -971,9 +1005,9 @@
             estimatorEl.style.border = '1px solid rgba(245, 158, 11, 0.45)';
             estimatorEl.style.color = '#fde68a';
             estimatorEl.innerHTML =
-                `<span style="color:#fbbf24;font-weight:700;">⚠️ ⏎ ${isDe ? 'Kalt-Send' : 'Cold Send'} ≈ -${estWeeklyPct}% W</span>` +
+                `<span style="display:inline-flex;align-items:center;gap:3px;color:#fbbf24;font-weight:700;">${amsIcon('alert', 10, '#fbbf24')}${amsIcon('enter', 10, '#fbbf24')}<span>${isDe ? 'Kalt-Send' : 'Cold Send'} ≈ -${estWeeklyPct}% W</span></span>` +
                 `<span style="opacity:0.85;">(${isDe ? 'Warm wäre' : 'Warm:'} -${warmWeeklyPct}% W · -${extraLossWeeklyPct}% W ${isDe ? 'Verlust' : 'loss'})</span>` +
-                `<button type="button" class="antigravity-inline-newchat-btn" style="margin-left:4px;padding:1px 5px;border-radius:3px;border:1px solid rgba(52,211,153,0.5);background:rgba(16,185,129,0.2);color:#6ee7b7;font-size:9px;font-weight:700;cursor:pointer;">＋ ${isDe ? 'Neuer Chat' : 'New Chat'}</button>`;
+                `<button type="button" class="antigravity-inline-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;margin-left:4px;padding:1px 5px;border-radius:3px;border:1px solid rgba(52,211,153,0.5);background:rgba(16,185,129,0.2);color:#6ee7b7;font-size:9px;font-weight:700;cursor:pointer;">${amsIcon('plus', 9, '#6ee7b7')}<span>${isDe ? 'Neuer Chat' : 'New Chat'}</span></button>`;
             const btn = estimatorEl.querySelector('.antigravity-inline-newchat-btn');
             if (btn) {
                 btn.addEventListener('click', (e) => {
@@ -1026,20 +1060,23 @@
             const hPct = Number(turn.fiveHourPct || 0).toFixed(4);
             const eurStr = Number(turn.apiCostEur || 0).toFixed(2);
             const savedEurStr = Number(turn.apiSavedEur || 0).toFixed(2);
+            const savedTurnTokens = Math.round(Number(turn.cached || 0) * 0.9);
+            const savedTurnW = (savedTurnTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
+            const savedTurn5h = (savedTurnTokens * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
 
             const missPill = turn.cacheMiss
-                ? `<span style="color:#fbbf24;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);padding:0 5px;border-radius:4px;font-weight:700;">❄️ Cache-Miss (${formatDurationShort(turn.maxPauseSec)} ${isDe ? 'Pause' : 'idle'} · -${Number(turn.wastedWeeklyPct || 0).toFixed(4)}% W)</span>`
-                : `<span style="color:#34d399;font-weight:700;">🔥 ${cachePct}% Cache</span>`;
+                ? `<span style="display:inline-flex;align-items:center;gap:3px;color:#fbbf24;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);padding:0 5px;border-radius:4px;font-weight:700;">${amsIcon('snowflake', 10, '#fbbf24')}<span>Cache-Miss (${formatDurationShort(turn.maxPauseSec)} ${isDe ? 'Pause' : 'idle'} · -${Number(turn.wastedWeeklyPct || 0).toFixed(4)}% W / -${(Number(turn.wastedWeeklyPct || 0) * 4).toFixed(4)}% 5h)</span></span>`
+                : `<span style="display:inline-flex;align-items:center;gap:3px;color:#34d399;font-weight:700;">${amsIcon('flame', 10, '#34d399')}<span>${cachePct}% Cache (+${savedTurnW}% W / +${savedTurn5h}% 5h ${isDe ? 'gespart' : 'saved'})</span></span>`;
 
             badge.innerHTML =
-                `<span style="color:#38bdf8;font-weight:700;">⚡ -${wPct}% W</span>` +
+                `<span style="display:inline-flex;align-items:center;gap:3px;color:#38bdf8;font-weight:700;">${amsIcon('zap', 10, '#38bdf8')}<span>-${wPct}% W</span></span>` +
                 `<span style="opacity:0.75;">(-${hPct}% 5h)</span>` +
                 `<span style="opacity:0.35;">|</span>` +
                 missPill +
                 `<span style="opacity:0.35;">|</span>` +
                 `<span>${turn.steps} ${turn.steps === 1 ? 'Step' : 'Steps'} · ${formatTokensCompact(turn.cached)} Cache · ${formatTokensCompact(turn.uncached)} In · ${formatTokensCompact(turn.out)} Out</span>` +
                 `<span style="opacity:0.35;">|</span>` +
-                `<span style="color:#fcd34d;">~${eurStr} € <span style="opacity:0.65;">(+${savedEurStr} € ${isDe ? 'gespart' : 'saved'})</span></span>`;
+                `<span style="display:inline-flex;align-items:center;gap:3px;color:#fcd34d;">${amsIcon('coins', 10, '#fcd34d')}<span>~${eurStr} €</span><span style="opacity:0.65;">(+${savedEurStr} € ${isDe ? 'gespart' : 'saved'})</span></span>`;
         });
     }
 
@@ -1083,15 +1120,15 @@
 
         const isWarm = cacheInfo.state === 'warm' || cacheInfo.isRunning;
         const statusHeader = isWarm
-            ? (isDe ? `🔥 Prompt-Cache ist WARM (${formatDurationShort(cacheInfo.remainingGuaranteedSec)} garantiert)` : `🔥 Prompt Cache is WARM (${formatDurationShort(cacheInfo.remainingGuaranteedSec)} guaranteed)`)
+            ? `${amsIcon('flame', 12, '#34d399')} <span>${isDe ? `Prompt-Cache ist WARM (${formatDurationShort(cacheInfo.remainingGuaranteedSec)} garantiert)` : `Prompt Cache is WARM (${formatDurationShort(cacheInfo.remainingGuaranteedSec)} guaranteed)`}</span>`
             : cacheInfo.state === 'lukewarm'
-                ? (isDe ? `⚠️ 5-Minuten-Garantie abgelaufen (Pause: ${formatDurationShort(cacheInfo.idleSec)})` : `⚠️ 5-Minute Guarantee Expired (Idle: ${formatDurationShort(cacheInfo.idleSec)})`)
-                : (isDe ? `❄️ Chat ist KALT (Pause: ${formatDurationShort(cacheInfo.idleSec)})` : `❄️ Chat is COLD (Idle: ${formatDurationShort(cacheInfo.idleSec)})`);
+                ? `${amsIcon('alert', 12, '#fbbf24')} <span>${isDe ? `5-Minuten-Garantie abgelaufen (Pause: ${formatDurationShort(cacheInfo.idleSec)})` : `5-Minute Guarantee Expired (Idle: ${formatDurationShort(cacheInfo.idleSec)})`}</span>`
+                : `${amsIcon('snowflake', 12, '#f87171')} <span>${isDe ? `Chat ist KALT (Pause: ${formatDurationShort(cacheInfo.idleSec)})` : `Chat is COLD (Idle: ${formatDurationShort(cacheInfo.idleSec)})`}</span>`;
 
         pop.innerHTML =
             `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.08);">` +
-                `<strong style="color:${isWarm ? '#34d399' : '#fbbf24'};font-size:12px;">${statusHeader}</strong>` +
-                `<button type="button" class="ams-cold-pop-close" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;font-size:12px;padding:0 4px;">✕</button>` +
+                `<strong style="display:inline-flex;align-items:center;gap:5px;color:${isWarm ? '#34d399' : '#fbbf24'};font-size:12px;">${statusHeader}</strong>` +
+                `<button type="button" class="ams-cold-pop-close" style="display:inline-flex;align-items:center;background:transparent;border:none;color:#94a3b8;cursor:pointer;padding:2px;">${amsIcon('close', 12, '#94a3b8')}</button>` +
             `</div>` +
             `<div style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:#cbd5e1;">` +
                 `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Bisheriger Chat-Verbrauch:' : 'Chat Quota Used:'}</span><strong style="color:#f8fafc;">-${cacheInfo.weeklyPctUsed.toFixed(4)}% W (-${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)</strong></div>` +
@@ -1100,13 +1137,13 @@
                 `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Schreiben in KALTEN Chat (1.0x):' : 'Sending in COLD Chat (1.0x):'}</span><strong style="color:#f87171;">-${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.coldSend5hPct.toFixed(4)}% 5h)</strong></div>` +
                 `<div style="margin-top:3px;padding:6px 8px;border-radius:6px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#fecaca;font-size:10.5px;">` +
                     (isDe
-                        ? `💡 <strong>Aufpreis bei kaltem Chat:</strong> Du verlierst <strong>+${cacheInfo.extraColdLossWeeklyPct.toFixed(4)}% Weekly</strong> (<strong>+${cacheInfo.extraColdLoss5hPct.toFixed(4)}% 5h</strong>) extra durch das uncached Nachladen des gesamten Verlaufs!`
-                        : `💡 <strong>Cold Reload Penalty:</strong> You lose an extra <strong>+${cacheInfo.extraColdLossWeeklyPct.toFixed(4)}% Weekly</strong> (<strong>+${cacheInfo.extraColdLoss5hPct.toFixed(4)}% 5h</strong>) reloading the full context uncached!`) +
+                        ? `${amsIcon('info', 11, '#fca5a5')} <strong>Aufpreis bei kaltem Chat:</strong> Du verlierst <strong>+${cacheInfo.extraColdLossWeeklyPct.toFixed(4)}% Weekly</strong> (<strong>+${cacheInfo.extraColdLoss5hPct.toFixed(4)}% 5h</strong>) extra durch das uncached Nachladen des gesamten Verlaufs!`
+                        : `${amsIcon('info', 11, '#fca5a5')} <strong>Cold Reload Penalty:</strong> You lose an extra <strong>+${cacheInfo.extraColdLossWeeklyPct.toFixed(4)}% Weekly</strong> (<strong>+${cacheInfo.extraColdLoss5hPct.toFixed(4)}% 5h</strong>) reloading the full context uncached!`) +
                 `</div>` +
             `</div>` +
             `<div style="display:flex;gap:8px;margin-top:10px;">` +
-                `<button type="button" class="ams-cold-pop-newchat" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(52,211,153,0.45);background:linear-gradient(135deg,rgba(5,150,105,0.35),rgba(16,185,129,0.22));color:#6ee7b7;font-size:11px;font-weight:700;cursor:pointer;">` +
-                    `＋ ${isDe ? 'Direkt in neuen Chat springen' : 'Jump to New Chat (Save Quota)'}` +
+                `<button type="button" class="ams-cold-pop-newchat" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 10px;border-radius:6px;border:1px solid rgba(52,211,153,0.45);background:linear-gradient(135deg,rgba(5,150,105,0.35),rgba(16,185,129,0.22));color:#6ee7b7;font-size:11px;font-weight:700;cursor:pointer;">` +
+                    `${amsIcon('plus', 11, '#6ee7b7')}<span>${isDe ? 'Direkt in neuen Chat springen' : 'Jump to New Chat (Save Quota)'}</span>` +
                 `</button>` +
             `</div>`;
 
@@ -1128,6 +1165,9 @@
     document.addEventListener('click', (e) => {
         if (activeColdPopover && !activeColdPopover.contains(e.target) && !e.target.closest('.antigravity-sidebar-chat-meta')) {
             closeColdChatPopover();
+        }
+        if (activeModelSwitchPopover && !activeModelSwitchPopover.contains(e.target) && !e.target.closest('[data-testid="model-selector-trigger"]') && !e.target.closest('[data-testid="model-selector-panel"]')) {
+            closeModelSwitchPopover();
         }
     });
 
@@ -1175,26 +1215,26 @@
                 badge.style.background = 'rgba(16, 185, 129, 0.14)';
                 badge.style.border = '1px solid rgba(16, 185, 129, 0.42)';
                 badge.style.color = '#6ee7b7';
-                badge.innerHTML = `<span>🔥</span><span>-${wPctStr}%W</span>`;
+                badge.innerHTML = `${amsIcon('flame', 10, '#6ee7b7')}<span>-${wPctStr}%W</span>`;
             } else if (cacheInfo.state === 'warm') {
                 badge.style.background = 'rgba(16, 185, 129, 0.10)';
                 badge.style.border = '1px solid rgba(16, 185, 129, 0.28)';
                 badge.style.color = '#34d399';
                 const remM = Math.ceil(cacheInfo.remainingGuaranteedSec / 60);
-                badge.innerHTML = `<span>🔥${remM}m</span><span style="opacity:0.85;">-${wPctStr}%</span>`;
+                badge.innerHTML = `${amsIcon('flame', 10, '#34d399')}<span>${remM}m</span><span style="opacity:0.85;">-${wPctStr}%</span>`;
             } else if (cacheInfo.state === 'lukewarm') {
                 // Freshly expired 5m guarantee (5m - 17m): warn clearly!
                 badge.style.background = 'rgba(245, 158, 11, 0.15)';
                 badge.style.border = '1px solid rgba(245, 158, 11, 0.45)';
                 badge.style.color = '#fbbf24';
-                badge.innerHTML = `<span>⚠️${ isDe ? 'Kalt?' : 'Cold?' }</span><span style="opacity:0.9;">-${wPctStr}%</span>`;
+                badge.innerHTML = `${amsIcon('alert', 10, '#fbbf24')}<span>${ isDe ? 'Kalt?' : 'Cold?' }</span><span style="opacity:0.9;">-${wPctStr}%</span>`;
             } else {
                 // Cold (> 17m)
                 const isFreshlyCold = cacheInfo.idleSec < 3600 && cacheInfo.contextTokens > 35000;
                 badge.style.background = isFreshlyCold ? 'rgba(239, 68, 68, 0.12)' : 'rgba(148, 163, 184, 0.08)';
                 badge.style.border = isFreshlyCold ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(148, 163, 184, 0.18)';
                 badge.style.color = isFreshlyCold ? '#fca5a5' : '#94a3b8';
-                badge.innerHTML = `<span>❄️</span><span>-${wPctStr}%</span>`;
+                badge.innerHTML = `${amsIcon('snowflake', 10, isFreshlyCold ? '#fca5a5' : '#94a3b8')}<span>-${wPctStr}%</span>`;
             }
 
             badge.title = isDe
@@ -1234,7 +1274,7 @@
                 'font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;' +
                 'background:linear-gradient(135deg,rgba(245,158,11,0.2),rgba(139,92,246,0.25));' +
                 'border:1px solid rgba(251,191,36,0.5);color:#fde68a;box-shadow:0 0 14px rgba(245,158,11,0.18);';
-            pill.textContent = '✦ ULTRA MAX TIER · 20,000 STEPS/WK';
+            pill.innerHTML = `${amsIcon('sparkles', 11, '#fde68a')}<span>ULTRA MAX TIER · 20,000 STEPS/WK</span>`;
             planLabel.appendChild(pill);
         }
 
@@ -1338,8 +1378,10 @@
         const effortRows = [
             {
                 code: 'Step',
-                nameDe: '⚡ 1 Einzelner KI-Step (Argon High Ø)',
-                nameEn: '⚡ 1 Single AI Step (Argon High avg)',
+                icon: 'zap',
+                iconColor: '#38bdf8',
+                nameDe: '1 Einzelner KI-Step (Argon High Ø)',
+                nameEn: '1 Single AI Step (Argon High avg)',
                 steps: '1 Step',
                 wPct: 0.0050,
                 hPct: 0.0200,
@@ -1347,8 +1389,10 @@
             },
             {
                 code: 'Typ S',
-                nameDe: '💬 Kurze Frage / Chat-Antwort',
-                nameEn: '💬 Short Question / Quick Reply',
+                icon: 'message',
+                iconColor: '#34d399',
+                nameDe: 'Kurze Frage / Chat-Antwort',
+                nameEn: 'Short Question / Quick Reply',
                 steps: '1–2 Steps',
                 wPct: 0.0075,
                 hPct: 0.0300,
@@ -1356,8 +1400,10 @@
             },
             {
                 code: 'Typ M',
-                nameDe: '🛠️ Kleiner Fix / Feature-Anpassung',
-                nameEn: '🛠️ Small Fix / Feature Tweak',
+                icon: 'wrench',
+                iconColor: '#fbbf24',
+                nameDe: 'Kleiner Fix / Feature-Anpassung',
+                nameEn: 'Small Fix / Feature Tweak',
                 steps: '~8 Steps',
                 wPct: 0.0400,
                 hPct: 0.1600,
@@ -1365,8 +1411,10 @@
             },
             {
                 code: 'Typ L',
-                nameDe: '🚀 Komplexer Coding- / Debug-Task (Dein Schnitt)',
-                nameEn: '🚀 Complex Coding / Debug Task (Your Avg)',
+                icon: 'rocket',
+                iconColor: '#a78bfa',
+                nameDe: 'Komplexer Coding- / Debug-Task (Dein Schnitt)',
+                nameEn: 'Complex Coding / Debug Task (Your Avg)',
                 steps: '~25 Steps',
                 wPct: 0.1250,
                 hPct: 0.5000,
@@ -1374,8 +1422,10 @@
             },
             {
                 code: 'Typ XL',
-                nameDe: '🧠 Großer Autonomer Deep-Dive / Refactoring',
-                nameEn: '🧠 Large Autonomous Deep-Dive / Refactor',
+                icon: 'cpu',
+                iconColor: '#f472b6',
+                nameDe: 'Großer Autonomer Deep-Dive / Refactoring',
+                nameEn: 'Large Autonomous Deep-Dive / Refactor',
                 steps: '~80 Steps',
                 wPct: 0.4000,
                 hPct: 1.6000,
@@ -1389,7 +1439,7 @@
             const left5h = Math.round(g5hExact / r.hPct);
             const total100W = Math.round(100 / r.wPct);
             return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">` +
-                `<td style="padding:7px 8px;font-weight:600;color:#f8fafc;">${isDe ? r.nameDe : r.nameEn} <span style="opacity:0.55;font-weight:400;font-size:10px;">(${r.steps})</span></td>` +
+                `<td style="padding:7px 8px;font-weight:600;color:#f8fafc;"><span style="display:inline-flex;align-items:center;gap:6px;">${amsIcon(r.icon, 12, r.iconColor)}<span>${isDe ? r.nameDe : r.nameEn}</span></span> <span style="opacity:0.55;font-weight:400;font-size:10px;">(${r.steps})</span></td>` +
                 `<td style="padding:7px 8px;text-align:right;font-family:monospace;color:#38bdf8;font-weight:700;">-${r.wPct.toFixed(4)}% W</td>` +
                 `<td style="padding:7px 8px;text-align:right;font-family:monospace;color:#a78bfa;">-${r.hPct.toFixed(4)}% 5h</td>` +
                 `<td style="padding:7px 8px;text-align:right;font-family:monospace;color:#cbd5e1;">${writtenThisWeek.toLocaleString(isDe ? 'de-DE' : 'en-US')}</td>` +
@@ -1408,12 +1458,12 @@
             const title = (liveMeta && liveMeta.summary) || c.title || ('Chat ' + c.cascadeId.slice(0, 8));
             const cState = getChatCacheState(c.cascadeId);
             const stateBadge = cState.isRunning
-                ? `<span style="color:#34d399;font-weight:700;">⚡ LIVE</span>`
+                ? `<span style="display:inline-flex;align-items:center;gap:3px;color:#34d399;font-weight:700;">${amsIcon('zap', 10, '#34d399')}<span>LIVE</span></span>`
                 : cState.state === 'warm'
-                    ? `<span style="color:#34d399;font-weight:700;">🔥 ${formatDurationShort(cState.remainingGuaranteedSec)}</span>`
+                    ? `<span style="display:inline-flex;align-items:center;gap:3px;color:#34d399;font-weight:700;">${amsIcon('flame', 10, '#34d399')}<span>${formatDurationShort(cState.remainingGuaranteedSec)}</span></span>`
                     : cState.state === 'lukewarm'
-                        ? `<span style="color:#fbbf24;font-weight:700;">⚠️ ${formatDurationShort(cState.idleSec)}</span>`
-                        : `<span style="color:#94a3b8;">❄️ ${formatDurationShort(cState.idleSec)}</span>`;
+                        ? `<span style="display:inline-flex;align-items:center;gap:3px;color:#fbbf24;font-weight:700;">${amsIcon('alert', 10, '#fbbf24')}<span>${formatDurationShort(cState.idleSec)}</span></span>`
+                        : `<span style="display:inline-flex;align-items:center;gap:3px;color:#94a3b8;">${amsIcon('snowflake', 10, '#94a3b8')}<span>${formatDurationShort(cState.idleSec)}</span></span>`;
 
             return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;">` +
                 `<td style="padding:6px 8px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title.replace(/"/g, '&quot;')}">${title.replace(/</g, '&lt;')}</td>` +
@@ -1435,7 +1485,7 @@
             `<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:10px;background:linear-gradient(135deg,rgba(245,158,11,0.10),rgba(56,189,248,0.08),rgba(139,92,246,0.12));border:1px solid rgba(251,191,36,0.32);">` +
                 `<div style="display:flex;flex-direction:column;gap:2px;">` +
                     `<div style="display:flex;align-items:center;gap:8px;">` +
-                        `<span style="padding:2px 7px;border-radius:4px;font-size:10px;font-weight:800;letter-spacing:0.06em;background:rgba(245,158,11,0.22);border:1px solid rgba(251,191,36,0.5);color:#fde68a;">✦ GOOGLE AI ULTRA</span>` +
+                        `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:800;letter-spacing:0.06em;background:rgba(245,158,11,0.22);border:1px solid rgba(251,191,36,0.5);color:#fde68a;">${amsIcon('sparkles', 11, '#fde68a')}<span>GOOGLE AI ULTRA</span></span>` +
                         `<strong style="font-size:14px;color:#f8fafc;">${isDe ? 'Argon High Quota-, Token- & Prompt-Cache Dossier' : 'Argon High Quota, Token & Prompt-Cache Dossier'}</strong>` +
                     `</div>` +
                     `<span style="font-size:11.5px;color:var(--muted-foreground,#94a3b8);">` +
@@ -1445,10 +1495,10 @@
                     `</span>` +
                 `</div>` +
                 `<div style="display:flex;align-items:center;gap:8px;">` +
-                    `<button type="button" id="ams-dossier-sound-btn" style="padding:5px 10px;border-radius:6px;border:1px solid ${amsTelemetryState.soundEnabled ? 'rgba(52,211,153,0.45)' : 'rgba(148,163,184,0.25)'};background:${amsTelemetryState.soundEnabled ? 'rgba(16,185,129,0.16)' : 'rgba(255,255,255,0.04)'};color:${amsTelemetryState.soundEnabled ? '#6ee7b7' : '#94a3b8'};font-size:11px;font-weight:600;cursor:pointer;">` +
+                    `<button type="button" id="ams-dossier-sound-btn" style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;border:1px solid ${amsTelemetryState.soundEnabled ? 'rgba(52,211,153,0.45)' : 'rgba(148,163,184,0.25)'};background:${amsTelemetryState.soundEnabled ? 'rgba(16,185,129,0.16)' : 'rgba(255,255,255,0.04)'};color:${amsTelemetryState.soundEnabled ? '#6ee7b7' : '#94a3b8'};font-size:11px;font-weight:600;cursor:pointer;">` +
                         (amsTelemetryState.soundEnabled
-                            ? (isDe ? '🔊 Cache-Hit Sound: AN (Testen)' : '🔊 Cache-Hit Sound: ON (Test)')
-                            : (isDe ? '🔇 Cache-Hit Sound: AUS' : '🔇 Cache-Hit Sound: OFF')) +
+                            ? `${amsIcon('volumeOn', 12, '#6ee7b7')}<span>${isDe ? 'Cache-Hit Sound: AN (Testen)' : 'Cache-Hit Sound: ON (Test)'}</span>`
+                            : `${amsIcon('volumeOff', 12, '#94a3b8')}<span>${isDe ? 'Cache-Hit Sound: AUS' : 'Cache-Hit Sound: OFF'}</span>`) +
                     `</button>` +
                 `</div>` +
             `</div>` +
@@ -1480,7 +1530,7 @@
             // Effort Conversion Table ("Dossier-Umrechnungstabelle")
             `<div style="border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);overflow:hidden;">` +
                 `<div style="padding:10px 12px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.07);display:flex;justify-content:space-between;align-items:center;">` +
-                    `<strong style="font-size:12.5px;">📊 ${isDe ? 'Dossier-Umrechnungstabelle: Nachrichten & Tasks nach Aufwand (Argon High auf Ultra)' : 'Effort Conversion Table: Messages & Tasks by Complexity (Argon High on Ultra)'}</strong>` +
+                    `<strong style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;">${amsIcon('chart', 13, '#38bdf8')}<span>${isDe ? 'Dossier-Umrechnungstabelle: Nachrichten & Tasks nach Aufwand (Argon High auf Ultra)' : 'Effort Conversion Table: Messages & Tasks by Complexity (Argon High on Ultra)'}</span></strong>` +
                     `<span style="font-size:10.5px;color:#94a3b8;">1% Weekly = 4.0% 5h ≈ 200 Steps</span>` +
                 `</div>` +
                 `<div style="overflow-x:auto;">` +
@@ -1503,7 +1553,7 @@
             // Cache & Technical Mechanics Info Cards
             `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;">` +
                 `<div style="padding:11px 13px;border-radius:8px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.22);font-size:11px;line-height:1.45;">` +
-                    `<strong style="color:#34d399;display:block;margin-bottom:4px;">🔥 ${isDe ? 'Prompt-Cache Haltedauer & Provider-Vergleich' : 'Prompt-Cache TTL & Provider Comparison'}</strong>` +
+                    `<strong style="color:#34d399;display:inline-flex;align-items:center;gap:5px;margin-bottom:4px;">${amsIcon('flame', 12, '#34d399')}<span>${isDe ? 'Prompt-Cache Haltedauer & Provider-Vergleich' : 'Prompt-Cache TTL & Provider Comparison'}</span></strong><br>` +
                     (isDe
                         ? `• <strong>Google Gemini (Antigravity):</strong> <strong>5 Min. (300s) garantiert</strong> im TPU-HBM-RAM, real <strong>5 bis 17,3 Min.</strong> je nach Serverlast. <strong>90% Rabatt (0.1×)</strong>, 0% Schreib-Aufpreis.<br>` +
                           `• <strong>Anthropic Claude:</strong> 5 Min. RAM-TTL (90% Rabatt, aber +25% Cache-Write-Strafe).<br>` +
@@ -1513,7 +1563,7 @@
                           `• <strong>OpenAI Codex / GPT-5:</strong> 5–60 min in RAM + up to <strong>24 hours</strong> via <em>Extended NVMe SSD Cache Offloading</em>.`) +
                 `</div>` +
                 `<div style="padding:11px 13px;border-radius:8px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.22);font-size:11px;line-height:1.45;">` +
-                    `<strong style="color:#fbbf24;display:block;margin-bottom:4px;">⚠️ ${isDe ? 'Cache-Miss Bilanz & Auto-Checkpointer' : 'Cache-Miss Diagnostics & Auto-Checkpointer'}</strong>` +
+                    `<strong style="color:#fbbf24;display:inline-flex;align-items:center;gap:5px;margin-bottom:4px;">${amsIcon('alert', 12, '#fbbf24')}<span>${isDe ? 'Cache-Miss Bilanz & Auto-Checkpointer' : 'Cache-Miss Diagnostics & Auto-Checkpointer'}</span></strong><br>` +
                     (isDe
                         ? `• <strong>Pausen > 5 Min. (diese Woche):</strong> ${wSum.cacheMissCount} Cache-Misses verursachten <strong>${formatTokensCompact(wSum.wastedReloadTokens)}</strong> uncached Reload-Tokens (<strong>-${wSum.wastedWeeklyPct.toFixed(4)}% Weekly</strong> unnötiger Verlust).<br>` +
                           `• <strong>Auto-Checkpointer:</strong> Kompaktierung greift automatisch ab <strong>256k Tokens</strong> und schrumpft den Chat auf <strong>~31.5k Tokens</strong>.<br>` +
@@ -1527,8 +1577,8 @@
             // Persistent Per-Chat Usage Log Table
             `<div style="border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);overflow:hidden;">` +
                 `<div style="padding:10px 12px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.07);display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;">` +
-                    `<strong style="font-size:12.5px;">🗂️ ${isDe ? 'Persistentes Chat-Verbrauchs-Logbuch (Top 25 aktuelle Konversationen)' : 'Persistent Per-Chat Usage Ledger (Top 25 Recent Conversations)'}</strong>` +
-                    `<span style="font-size:10px;font-family:monospace;color:#94a3b8;">💾 ${amsTelemetryState.logFilePath}</span>` +
+                    `<strong style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;">${amsIcon('database', 13, '#a78bfa')}<span>${isDe ? 'Persistentes Chat-Verbrauchs-Logbuch (Top 25 aktuelle Konversationen)' : 'Persistent Per-Chat Usage Ledger (Top 25 Recent Conversations)'}</span></strong>` +
+                    `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:monospace;color:#94a3b8;">${amsIcon('database', 10, '#94a3b8')}<span>${amsTelemetryState.logFilePath}</span></span>` +
                 `</div>` +
                 `<div style="max-height:280px;overflow-y:auto;">` +
                     `<table style="width:100%;border-collapse:collapse;">` +
@@ -1561,6 +1611,348 @@
     }
 
     // ----------------------------------------------------------------------------
+    // 9b. Model Picker Inline Cache-Loss Badges & Post-Switch Warning Popover
+    // ----------------------------------------------------------------------------
+    let lastKnownActiveModelLabel = null;
+    let activeModelSwitchPopover = null;
+    let suppressNextModelSwitchPopup = false;
+
+    function getCurrentModelLabelFromTrigger() {
+        const btn = document.querySelector('[data-testid="model-selector-trigger"], button[aria-label^="Select model, current:"]');
+        if (!btn) return '';
+        const aria = btn.getAttribute('aria-label') || '';
+        const m = aria.match(/current:\s*(.+)$/i);
+        if (m && m[1]) return m[1].trim();
+        return (btn.textContent || '').trim();
+    }
+
+    function getModelWeightMultiplier(modelLabel) {
+        const lower = String(modelLabel || '').toLowerCase();
+        if (lower.includes('flash')) return 0.40;
+        if (lower.includes('opus')) return 1.35;
+        if (lower.includes('sonnet')) return 1.10;
+        if (lower.includes('gpt-oss')) return 0.65;
+        return 1.00; // Gemini 4 Argon / Pro default
+    }
+
+    function closeModelSwitchPopover() {
+        if (activeModelSwitchPopover) {
+            activeModelSwitchPopover.remove();
+            activeModelSwitchPopover = null;
+        }
+    }
+
+    function showModelSwitchWarningPopover(oldModelLabel, newModelLabel, cacheInfo) {
+        closeModelSwitchPopover();
+        if (!cacheInfo || cacheInfo.stepCount === 0) return;
+
+        const btn = document.querySelector('[data-testid="model-selector-trigger"], button[aria-label^="Select model, current:"]');
+        if (!btn) return;
+
+        const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
+        const rect = btn.getBoundingClientRect();
+
+        const mult = getModelWeightMultiplier(newModelLabel);
+        const newColdWeeklyPct = Number((cacheInfo.coldSendWeeklyPct * mult).toFixed(4));
+        const newCold5hPct = Number((cacheInfo.coldSend5hPct * mult).toFixed(4));
+        const stayWarmWeeklyPct = cacheInfo.warmSendWeeklyPct;
+        const stayWarm5hPct = cacheInfo.warmSend5hPct;
+        const lossWeeklyPct = Number(Math.max(0.0001, newColdWeeklyPct - stayWarmWeeklyPct).toFixed(4));
+        const loss5hPct = Number(Math.max(0.0004, newCold5hPct - stayWarm5hPct).toFixed(4));
+
+        const pop = document.createElement('div');
+        pop.id = 'antigravity-model-switch-popover';
+        pop.style.cssText =
+            'position:fixed;z-index:999999;width:365px;padding:12px 14px;border-radius:11px;' +
+            'background:rgba(18,18,24,0.98);backdrop-filter:blur(16px);border:1px solid rgba(245,158,11,0.55);' +
+            'box-shadow:0 18px 42px rgba(0,0,0,0.72),0 0 18px rgba(245,158,11,0.14);color:#f8fafc;' +
+            'font-family:ui-sans-serif,system-ui,sans-serif;font-size:11.5px;line-height:1.45;font-variant-numeric:tabular-nums;';
+
+        const top = Math.max(12, rect.top - 235);
+        const left = Math.min(window.innerWidth - 380, Math.max(12, rect.left - 40));
+        pop.style.top = top + 'px';
+        pop.style.left = left + 'px';
+
+        pop.innerHTML =
+            `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.08);">` +
+                `<strong style="display:inline-flex;align-items:center;gap:5px;color:#fbbf24;font-size:12px;">${amsIcon('alert', 13, '#fbbf24')}<span>${isDe ? 'Modellwechsel im laufenden Chat (KV-Cache Verlust!)' : 'Mid-Chat Model Switch (KV-Cache Loss!)'}</span></strong>` +
+                `<button type="button" class="ams-ms-close" style="display:inline-flex;align-items:center;background:transparent;border:none;color:#94a3b8;cursor:pointer;padding:2px;">${amsIcon('close', 12, '#94a3b8')}</button>` +
+            `</div>` +
+            `<div style="font-size:11px;color:#cbd5e1;margin-bottom:7px;">` +
+                (isDe
+                    ? `Wechsel von <strong style="color:#38bdf8;">${oldModelLabel}</strong> zu <strong style="color:#fde68a;">${newModelLabel}</strong>:<br>Der bisherige Kontext (<strong>${cacheInfo.contextTokens.toLocaleString('de-DE')} Tokens</strong> · ${cacheInfo.stepCount} Steps) liegt nur im VRAM-Cache von <em>${oldModelLabel}</em> und muss beim nächsten Senden zu <strong>100% uncached (1.0x)</strong> neu eingelesen werden!`
+                    : `Switched from <strong style="color:#38bdf8;">${oldModelLabel}</strong> to <strong style="color:#fde68a;">${newModelLabel}</strong>:<br>Existing context (<strong>${cacheInfo.contextTokens.toLocaleString('en-US')} tokens</strong> · ${cacheInfo.stepCount} steps) must be reloaded <strong>100% uncached (1.0x)</strong> on the next message!`) +
+            `</div>` +
+            `<div style="display:flex;flex-direction:column;gap:4px;padding:7px 9px;border-radius:7px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);font-size:11px;">` +
+                `<div style="display:flex;justify-content:space-between;"><span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('flame', 11, '#34d399')}<span>${isDe ? `Auf ${oldModelLabel} bleiben (0.1x Cache):` : `Stay on ${oldModelLabel} (0.1x Cache):`}</span></span><strong style="color:#34d399;">-${stayWarmWeeklyPct.toFixed(4)}% W (-${stayWarm5hPct.toFixed(4)}% 5h)</strong></div>` +
+                `<div style="display:flex;justify-content:space-between;"><span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('snowflake', 11, '#f87171')}<span>${isDe ? `Hier mit ${newModelLabel} senden (1.0x):` : `Send here with ${newModelLabel} (1.0x):`}</span></span><strong style="color:#f87171;">-${newColdWeeklyPct.toFixed(4)}% W (-${newCold5hPct.toFixed(4)}% 5h)</strong></div>` +
+                `<div style="display:flex;justify-content:space-between;padding-top:3px;border-top:1px dashed rgba(255,255,255,0.1);color:#fde68a;"><span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('coins', 11, '#fbbf24')}<strong>${isDe ? 'Direkter Wechsel-Verlust:' : 'Direct Switch Penalty:'}</strong></span><strong style="color:#fbbf24;">-${lossWeeklyPct.toFixed(4)}% W (-${loss5hPct.toFixed(4)}% 5h)</strong></div>` +
+            `</div>` +
+            `<div style="display:flex;gap:6px;margin-top:9px;">` +
+                `<button type="button" class="ams-ms-newchat" style="flex:1.25;display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:6px 8px;border-radius:6px;border:1px solid rgba(52,211,153,0.5);background:linear-gradient(135deg,rgba(5,150,105,0.38),rgba(16,185,129,0.22));color:#6ee7b7;font-size:10.5px;font-weight:700;cursor:pointer;">` +
+                    `${amsIcon('plus', 11, '#6ee7b7')}<span>${isDe ? `Neuer Chat mit ${newModelLabel} (0% Verlust)` : `New Chat with ${newModelLabel} (0% Loss)`}</span>` +
+                `</button>` +
+                `<button type="button" class="ams-ms-revert" style="flex:0.85;display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:6px 8px;border-radius:6px;border:1px solid rgba(56,189,248,0.45);background:rgba(56,189,248,0.12);color:#7dd3fc;font-size:10.5px;font-weight:700;cursor:pointer;">` +
+                    `${amsIcon('undo', 11, '#7dd3fc')}<span>${isDe ? `Zurück (${oldModelLabel.split(' ').slice(0, 3).join(' ')})` : `Revert`}</span>` +
+                `</button>` +
+            `</div>`;
+
+        document.body.appendChild(pop);
+        activeModelSwitchPopover = pop;
+
+        pop.querySelector('.ams-ms-close').addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeModelSwitchPopover();
+        });
+        pop.querySelector('.ams-ms-newchat').addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeModelSwitchPopover();
+            triggerNewConversation();
+        });
+        pop.querySelector('.ams-ms-revert').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            closeModelSwitchPopover();
+            suppressNextModelSwitchPopup = true;
+            await switchModel(oldModelLabel);
+            setTimeout(() => { suppressNextModelSwitchPopup = false; }, 800);
+        });
+    }
+
+    function updateModelSelectorTriggerBadge() {
+        const btn = document.querySelector('[data-testid="model-selector-trigger"], button[aria-label^="Select model, current:"]');
+        if (!btn) return;
+
+        const currentLabel = getCurrentModelLabelFromTrigger();
+        const activeId = getActiveCascadeId();
+        const cacheInfo = activeId ? getChatCacheState(activeId) : null;
+
+        // Detect model change mid-chat and show interactive warning popover
+        if (currentLabel && lastKnownActiveModelLabel && currentLabel !== lastKnownActiveModelLabel) {
+            if (!suppressNextModelSwitchPopup && cacheInfo && cacheInfo.stepCount > 0) {
+                showModelSwitchWarningPopover(lastKnownActiveModelLabel, currentLabel, cacheInfo);
+            }
+        }
+        if (currentLabel) {
+            lastKnownActiveModelLabel = currentLabel;
+        }
+
+        // Attach subtle pre-click badge next to the Model Selector Trigger button when chat has context
+        let triggerPill = document.getElementById('antigravity-model-trigger-loss-pill');
+        if (!cacheInfo || cacheInfo.stepCount === 0) {
+            if (triggerPill) triggerPill.style.display = 'none';
+            return;
+        }
+
+        if (!triggerPill) {
+            triggerPill = document.createElement('span');
+            triggerPill.id = 'antigravity-model-trigger-loss-pill';
+            triggerPill.style.cssText =
+                'display:inline-flex;align-items:center;gap:3px;padding:1px 6px;margin-left:3px;border-radius:999px;' +
+                'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9.5px;font-weight:600;' +
+                'font-variant-numeric:tabular-nums;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.32);' +
+                'color:#fcd34d;cursor:pointer;white-space:nowrap;user-select:none;';
+            triggerPill.addEventListener('click', (e) => {
+                // Clicking the pill opens the model selector menu so the user sees all inline model costs
+                e.stopPropagation();
+                btn.click();
+            });
+        }
+
+        if (btn.parentElement && triggerPill.parentElement !== btn.parentElement) {
+            btn.parentElement.style.display = 'inline-flex';
+            btn.parentElement.style.alignItems = 'center';
+            btn.insertAdjacentElement('afterend', triggerPill);
+        }
+
+        const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
+        const lossW = cacheInfo.extraColdLossWeeklyPct.toFixed(4);
+        const loss5h = cacheInfo.extraColdLoss5hPct.toFixed(4);
+        triggerPill.style.display = 'inline-flex';
+        triggerPill.innerHTML = `${amsIcon('lock', 9, '#fbbf24')}<span style="opacity:0.85;">${ isDe ? 'Wechsel' : 'Switch' }:</span> <strong style="color:#fbbf24;">-${lossW}% W</strong>`;
+        triggerPill.title = isDe
+            ? `Aktiver Chat-Kontext (${formatTokensCompact(cacheInfo.contextTokens)} Tokens · ${cacheInfo.stepCount} Steps) ist an "${currentLabel}" gebunden.\n` +
+              `• Modellwechsel im selben Chat verwirft den KV-Cache!\n` +
+              `• Direktverlust beim nächsten Senden nach Modellwechsel: -${lossW}% Weekly (-${loss5h}% 5h)\n` +
+              `• Klicke auf den Modell-Picker für den exakten Modell-Vergleich vor dem Wechsel.`
+            : `Active chat context (${formatTokensCompact(cacheInfo.contextTokens)} tokens · ${cacheInfo.stepCount} steps) is bound to "${currentLabel}".\n` +
+              `• Switching models mid-chat discards the KV-Cache!\n` +
+              `• Direct penalty on next send after switching: -${lossW}% Weekly (-${loss5h}% 5h)`;
+    }
+
+    function decorateOpenModelPickerMenu() {
+        const panel = document.querySelector('[data-testid="model-selector-panel"]');
+        if (!panel) return;
+
+        const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
+        const currentLabel = getCurrentModelLabelFromTrigger();
+        const activeId = getActiveCascadeId();
+        const cacheInfo = activeId ? getChatCacheState(activeId) : null;
+        const hasContext = !!(cacheInfo && cacheInfo.stepCount > 0);
+
+        // Ensure menu container is wide and tall enough to show inline badges cleanly without clipping
+        const menuEl = panel.closest('[role="menu"]');
+        if (menuEl) {
+            menuEl.style.maxWidth = '460px';
+            menuEl.style.minWidth = '360px';
+        }
+        panel.style.maxHeight = '460px';
+
+        // 1. Inject or update the top Context & Cache-Loss Banner inside the Model Picker
+        const headerEl = panel.querySelector('[data-testid="model-selector-header"]');
+        let bannerEl = panel.querySelector('#antigravity-model-picker-banner');
+        if (!bannerEl && headerEl && headerEl.parentElement) {
+            bannerEl = document.createElement('div');
+            bannerEl.id = 'antigravity-model-picker-banner';
+            bannerEl.style.cssText =
+                'margin:2px 6px 6px 6px;padding:7px 9px;border-radius:8px;font-size:10.5px;line-height:1.4;' +
+                'font-variant-numeric:tabular-nums;user-select:none;';
+            headerEl.insertAdjacentElement('afterend', bannerEl);
+        }
+
+        if (bannerEl) {
+            const sig = `${hasContext ? cacheInfo.stepCount : 0}-${hasContext ? cacheInfo.state : 'new'}-${currentLabel}-${isDe}`;
+            if (bannerEl.getAttribute('data-sig') !== sig) {
+                bannerEl.setAttribute('data-sig', sig);
+                if (!hasContext) {
+                    bannerEl.style.background = 'rgba(16,185,129,0.10)';
+                    bannerEl.style.border = '1px solid rgba(52,211,153,0.30)';
+                    bannerEl.style.color = '#a7f3d0';
+                    bannerEl.innerHTML =
+                        `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
+                            `<span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('check', 11, '#34d399')}<strong>${isDe ? 'Neuer Chat (0 Kontext)' : 'New Chat (0 Context)'}</strong> — ${isDe ? 'Modellwechsel kostet' : 'Model switch penalty:'} <strong>0.0000% W</strong></span>` +
+                        `</div>`;
+                } else {
+                    const lossW = cacheInfo.extraColdLossWeeklyPct.toFixed(4);
+                    const loss5h = cacheInfo.extraColdLoss5hPct.toFixed(4);
+                    const warmW = cacheInfo.warmSendWeeklyPct.toFixed(4);
+                    const coldW = cacheInfo.coldSendWeeklyPct.toFixed(4);
+                    bannerEl.style.background = 'rgba(245,158,11,0.11)';
+                    bannerEl.style.border = '1px solid rgba(245,158,11,0.38)';
+                    bannerEl.style.color = '#fde68a';
+                    bannerEl.innerHTML =
+                        `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:3px;">` +
+                            `<strong style="display:inline-flex;align-items:center;gap:4px;color:#fbbf24;font-size:11px;">${amsIcon('alert', 11, '#fbbf24')}<span>${isDe ? `Aktiver Kontext: ${formatTokensCompact(cacheInfo.contextTokens)} Tok (${cacheInfo.stepCount} Steps)` : `Active Context: ${formatTokensCompact(cacheInfo.contextTokens)} Tok (${cacheInfo.stepCount} Steps)`}</span></strong>` +
+                            `<button type="button" class="ams-mp-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:5px;border:1px solid rgba(52,211,153,0.5);background:rgba(16,185,129,0.22);color:#6ee7b7;font-size:9.5px;font-weight:700;cursor:pointer;">${amsIcon('plus', 10, '#6ee7b7')}<span>${isDe ? 'Neuer Chat (0% Verlust)' : 'New Chat (0% Loss)'}</span></button>` +
+                        `</div>` +
+                        `<div style="color:#e2e8f0;font-size:10px;">` +
+                            (isDe
+                                ? `Andere Modelle besitzen deinen KV-Cache nicht! Wechsel im selben Chat kostet beim nächsten Senden <strong style="color:#f87171;">-${coldW}% W</strong> statt <strong style="color:#34d399;">-${warmW}% W</strong> (<strong style="color:#fbbf24;">Verlust: -${lossW}% W / -${loss5h}% 5h</strong>).`
+                                : `Other models don't share your KV-Cache! Switching mid-chat costs <strong style="color:#f87171;">-${coldW}% W</strong> instead of <strong style="color:#34d399;">-${warmW}% W</strong> (<strong style="color:#fbbf24;">Loss: -${lossW}% W / -${loss5h}% 5h</strong>).`) +
+                        `</div>`;
+                    const ncBtn = bannerEl.querySelector('.ams-mp-newchat-btn');
+                    if (ncBtn) {
+                        ncBtn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const trig = document.querySelector('[data-testid="model-selector-trigger"]');
+                            if (trig && trig.getAttribute('aria-expanded') === 'true') trig.click();
+                            triggerNewConversation();
+                        });
+                    }
+                }
+            }
+        }
+
+        // 2. Decorate each model row ([role="menuitem"]) inside the panel with its exact switch cost
+        const menuItems = Array.from(panel.querySelectorAll('[role="menuitem"]'));
+        menuItems.forEach((item) => {
+            const rawText = (item.textContent || '').trim();
+            if (!rawText || /View Usage/i.test(rawText)) return;
+
+            const effortSpan = item.querySelector('[data-testid="model-selector-effort-group"]');
+            const baseModelName = effortSpan
+                ? (effortSpan.getAttribute('data-model-base') || effortSpan.textContent || '').trim()
+                : (item.getAttribute('data-model-label') || rawText.replace(/Notice$|New$|Fast$/i, '')).trim();
+            if (!baseModelName) return;
+
+            const isCurrentModel = currentLabel && currentLabel.toLowerCase().includes(baseModelName.toLowerCase());
+
+            let badge = item.querySelector('.antigravity-model-item-cost-badge');
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'antigravity-model-item-cost-badge';
+                badge.style.cssText =
+                    'display:inline-flex;align-items:center;gap:4px;margin-left:auto;padding:1px 6px;border-radius:4px;' +
+                    'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9.5px;font-weight:700;' +
+                    'font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0;';
+                // Insert right before the trailing checkmark / arrow icons
+                const firstSpan = item.querySelector('span');
+                if (firstSpan && firstSpan.nextSibling) {
+                    item.insertBefore(badge, firstSpan.nextSibling);
+                } else {
+                    item.appendChild(badge);
+                }
+            }
+
+            if (!hasContext) {
+                if (isCurrentModel) {
+                    badge.style.background = 'rgba(16,185,129,0.14)';
+                    badge.style.border = '1px solid rgba(52,211,153,0.35)';
+                    badge.style.color = '#34d399';
+                    badge.innerHTML = `${amsIcon('check', 10, '#34d399')}<span>${isDe ? 'Aktiv (0% Verlust)' : 'Active (0% loss)'}</span>`;
+                } else {
+                    badge.style.background = 'rgba(255,255,255,0.04)';
+                    badge.style.border = '1px solid rgba(255,255,255,0.08)';
+                    badge.style.color = '#94a3b8';
+                    badge.textContent = '0.0000% W';
+                }
+                return;
+            }
+
+            const mult = getModelWeightMultiplier(baseModelName);
+            const switchColdW = Number((cacheInfo.coldSendWeeklyPct * mult).toFixed(4));
+            const switchCold5h = Number((cacheInfo.coldSend5hPct * mult).toFixed(4));
+            const stayWarmW = cacheInfo.warmSendWeeklyPct;
+            const lossW = Number(Math.max(0.0001, switchColdW - stayWarmW).toFixed(4));
+            const loss5h = Number(Math.max(0.0004, switchCold5h - cacheInfo.warmSend5hPct).toFixed(4));
+
+            if (isCurrentModel) {
+                const isWarm = cacheInfo.state === 'warm' || cacheInfo.isRunning;
+                badge.style.background = isWarm ? 'rgba(16,185,129,0.14)' : 'rgba(245,158,11,0.14)';
+                badge.style.border = isWarm ? '1px solid rgba(52,211,153,0.38)' : '1px solid rgba(245,158,11,0.38)';
+                badge.style.color = isWarm ? '#34d399' : '#fbbf24';
+                badge.innerHTML = isWarm
+                    ? `${amsIcon('flame', 10, '#34d399')}<span>Cache aktiv (-${stayWarmW.toFixed(4)}% W)</span>`
+                    : `${amsIcon('snowflake', 10, '#fbbf24')}<span>Kalt (-${switchColdW.toFixed(4)}% W)</span>`;
+                badge.title = isDe
+                    ? `Aktuelles Modell (${baseModelName}):\n• Kein Modellwechsel-Verlust!\n• Nächster Send im warmen Cache: -${stayWarmW.toFixed(4)}% Weekly (-${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)`
+                    : `Current Model (${baseModelName}):\n• No model-switch penalty!\n• Next warm send: -${stayWarmW.toFixed(4)}% Weekly`;
+            } else {
+                badge.style.background = 'rgba(239,68,68,0.13)';
+                badge.style.border = '1px solid rgba(248,113,113,0.38)';
+                badge.style.color = '#fca5a5';
+                badge.innerHTML =
+                    `${amsIcon('alert', 10, '#fca5a5')}<span>-${lossW.toFixed(4)}% W</span>` +
+                    `<span style="opacity:0.75;font-size:8.5px;">(-${loss5h.toFixed(3)}% 5h)</span>`;
+                badge.title = isDe
+                    ? `Wechsel zu ${baseModelName} im laufenden Chat (${formatTokensCompact(cacheInfo.contextTokens)} Tok Kontext):\n` +
+                      `• KV-Cache geht verloren (100% Uncached Reload beim nächsten Prompt)!\n` +
+                      `• Nächste Nachricht kostet dann: -${switchColdW.toFixed(4)}% Weekly (-${switchCold5h.toFixed(4)}% 5h)\n` +
+                      `• Direkter Verlust gegenüber aktuellem Modell: -${lossW.toFixed(4)}% Weekly (-${loss5h.toFixed(4)}% 5h)\n` +
+                      `💡 Tipp: Starte für einen Modellwechsel lieber einen neuen Chat (0% Verlust)!`
+                    : `Switching to ${baseModelName} mid-chat (${formatTokensCompact(cacheInfo.contextTokens)} tok context):\n` +
+                      `• KV-Cache is lost (100% uncached reload on next prompt)!\n` +
+                      `• Next message will cost: -${switchColdW.toFixed(4)}% Weekly (-${switchCold5h.toFixed(4)}% 5h)\n` +
+                      `• Direct switch penalty: -${lossW.toFixed(4)}% Weekly (-${loss5h.toFixed(4)}% 5h)`;
+            }
+        });
+    }
+
+    // Observe DOM for instant decoration as soon as the Model Picker opens
+    const modelPickerObserver = new MutationObserver(() => {
+        if (document.querySelector('[data-testid="model-selector-panel"]')) {
+            decorateOpenModelPickerMenu();
+        }
+    });
+    if (document.body) {
+        modelPickerObserver.observe(document.body, { childList: true, subtree: true });
+    } else {
+        window.addEventListener('DOMContentLoaded', () => {
+            modelPickerObserver.observe(document.body, { childList: true, subtree: true });
+        });
+    }
+
+    // ----------------------------------------------------------------------------
     // 10. Periodic Polling & Live Countdown Ticker
     // ----------------------------------------------------------------------------
     setTimeout(() => {
@@ -1586,6 +1978,8 @@
         if (document.hidden) return;
         updateComposerChatBadge();
         updateLiveSendEstimator();
+        updateModelSelectorTriggerBadge();
+        decorateOpenModelPickerMenu();
         decorateSidebarConversations();
         patchModelsAndUsagePage();
     }, 1000);

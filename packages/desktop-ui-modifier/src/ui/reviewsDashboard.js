@@ -1836,8 +1836,8 @@
         const soundOnInit = !(window.amsTelemetryState && window.amsTelemetryState.soundEnabled === false);
         const soundItem = createMenuItem(
             soundOnInit
-                ? '🔊 Cache-Hit Sound: Aktiv (Cha-Ching)'
-                : '🔇 Cache-Hit Sound: Stumm',
+                ? 'Cache-Hit Sound: Aktiv (Cha-Ching)'
+                : 'Cache-Hit Sound: Stumm',
             soundSvg,
             () => {
                 if (typeof window.amsToggleCacheHitSound === 'function') {
@@ -1845,8 +1845,8 @@
                     const lbl = soundItem.querySelector('span');
                     if (lbl) {
                         lbl.textContent = nextOn
-                            ? '🔊 Cache-Hit Sound: Aktiv (Cha-Ching)'
-                            : '🔇 Cache-Hit Sound: Stumm';
+                            ? 'Cache-Hit Sound: Aktiv (Cha-Ching)'
+                            : 'Cache-Hit Sound: Stumm';
                         if (typeof window.amsApplyI18nToDom === 'function') {
                             window.amsApplyI18nToDom(soundItem);
                         }
