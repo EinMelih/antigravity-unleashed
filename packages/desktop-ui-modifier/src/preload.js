@@ -1500,8 +1500,10 @@ const amsScriptContent = `(async function() {
         if (runningPollTimer) return;
         runningPollTimer = setTimeout(async () => {
             runningPollTimer = null;
+            let stillRunning = false;
             for (const [cid, info] of amsTelemetryState.liveTrajectoriesMap.entries()) {
                 if (info.isRunning && window.electronNative && window.electronNative.getTokenStats) {
+                    stillRunning = true;
                     try {
                         const res = await window.electronNative.getTokenStats(cid);
                         if (res && res.status === 'success') {
@@ -1511,7 +1513,11 @@ const amsScriptContent = `(async function() {
                 }
             }
             fetchUserQuotaSummary();
-        }, 2200);
+            // Keep polling every 2s while any agent chat is actively working so the user sees tokens & % climb live!
+            if (stillRunning) {
+                fetchAllCascadeTrajectories();
+            }
+        }, 2000);
     }
 
     function cleanResetTime(desc) {
@@ -1691,6 +1697,36 @@ const amsScriptContent = `(async function() {
 
         const cid = res.cascadeId || currentConvId;
         if (cid) {
+            if (!amsTelemetryState.liveDrainHistory) {
+                amsTelemetryState.liveDrainHistory = new Map();
+            }
+            const curTotalTok = Number(res.totalInput || 0) + Number(res.totalOutput || 0);
+            const curWeeklyUsed = Number(res.weeklyPctUsed || 0);
+            const cur5hUsed = Number(res.fiveHourPctUsed || 0);
+            const prevDrain = amsTelemetryState.liveDrainHistory.get(cid);
+            if (!prevDrain) {
+                const lastTurn = Array.isArray(res.turns) && res.turns.length > 0 ? res.turns[res.turns.length - 1] : null;
+                amsTelemetryState.liveDrainHistory.set(cid, {
+                    prevTotalTok: curTotalTok,
+                    prevWeeklyUsed: curWeeklyUsed,
+                    lastDeltaTok: Number((res.latestInput || 0) + (res.latestOutput || 0)),
+                    lastDeltaWeeklyPct: Number(lastTurn ? (lastTurn.weeklyPct / Math.max(1, lastTurn.steps)) : 0.0048),
+                    lastDelta5hPct: Number(lastTurn ? (lastTurn.fiveHourPct / Math.max(1, lastTurn.steps)) : 0.0192),
+                    lastPulseTs: 0,
+                });
+            } else if (curTotalTok > prevDrain.prevTotalTok) {
+                const dTok = curTotalTok - prevDrain.prevTotalTok;
+                const dW = Math.max(0.0001, curWeeklyUsed - prevDrain.prevWeeklyUsed);
+                amsTelemetryState.liveDrainHistory.set(cid, {
+                    prevTotalTok: curTotalTok,
+                    prevWeeklyUsed: curWeeklyUsed,
+                    lastDeltaTok: dTok,
+                    lastDeltaWeeklyPct: dW,
+                    lastDelta5hPct: dW * 4.0,
+                    lastPulseTs: Date.now(),
+                });
+            }
+
             const prevStepIdx = amsTelemetryState.lastObservedStepByConv.get(cid);
             const curStepIdx = Number(res.latestStepIdx || 0);
             if (prevStepIdx !== undefined && curStepIdx > prevStepIdx && Number(res.latestCached || 0) > 0) {
@@ -2616,15 +2652,78 @@ const amsScriptContent = `(async function() {
             \`</tr>\`;
         }).join('');
 
-        // Top chats table rows
+        // Top chats table rows (Pin currently running agent chats to the very top!)
         const recentChatsList = Array.from(amsTelemetryState.recentChatsMap.values())
-            .sort((a, b) => (b.lastStepTimestamp || 0) - (a.lastStepTimestamp || 0))
+            .sort((a, b) => {
+                const aRun = getChatCacheState(a.cascadeId).isRunning ? 1 : 0;
+                const bRun = getChatCacheState(b.cascadeId).isRunning ? 1 : 0;
+                if (aRun !== bRun) return bRun - aRun;
+                return (b.lastStepTimestamp || 0) - (a.lastStepTimestamp || 0);
+            })
             .slice(0, 25);
+
+        // Live Active Agent Streams Section (shows all currently working agent chats + most recent warm chat)
+        const runningChats = recentChatsList.filter(c => getChatCacheState(c.cascadeId).isRunning);
+        const liveShowcaseChats = runningChats.length > 0
+            ? runningChats
+            : recentChatsList.filter(c => getChatCacheState(c.cascadeId).state === 'warm').slice(0, 2);
+
+        const liveStreamsCardsHtml = liveShowcaseChats.map(c => {
+            const liveMeta = amsTelemetryState.liveTrajectoriesMap.get(c.cascadeId);
+            const title = (liveMeta && liveMeta.summary) || c.title || ('Chat ' + c.cascadeId.slice(0, 8));
+            const cState = getChatCacheState(c.cascadeId);
+            const drainInfo = (amsTelemetryState.liveDrainHistory && amsTelemetryState.liveDrainHistory.get(c.cascadeId)) || {
+                lastDeltaTok: Number((c.latestInput || 0) + (c.latestOutput || 0)),
+                lastDeltaWeeklyPct: 0.0052,
+                lastDelta5hPct: 0.0208,
+                lastPulseTs: 0,
+            };
+            const isJustPulsed = (Date.now() - (drainInfo.lastPulseTs || 0)) < 3500;
+            const totalTokExact = (Number(c.totalInput || 0) + Number(c.totalOutput || 0)).toLocaleString(isDe ? 'de-DE' : 'en-US');
+            const savedW = ((Number(c.totalCached || 0) * 0.9) * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
+            const saved5h = ((Number(c.totalCached || 0) * 0.9) * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
+            const drainBarWidth = Math.min(100, Math.max(4, Number(c.weeklyPctUsed || 0) * 45)).toFixed(1);
+
+            return \`<div style="padding:10px 12px;border-radius:8px;background:\${cState.isRunning ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.025)'};border:1px solid \${isJustPulsed ? '#34d399' : cState.isRunning ? 'rgba(52,211,153,0.40)' : 'rgba(255,255,255,0.08)'};box-shadow:\${isJustPulsed ? '0 0 18px rgba(16,185,129,0.28)' : 'none'};transition:all 0.25s ease;display:flex;flex-direction:column;gap:6px;">\` +
+                \`<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;">\` +
+                    \`<div style="display:flex;align-items:center;gap:7px;min-width:0;">\` +
+                        \`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;font-size:9.5px;font-weight:800;background:\${cState.isRunning ? 'rgba(16,185,129,0.22)' : 'rgba(56,189,248,0.14)'};border:1px solid \${cState.isRunning ? 'rgba(52,211,153,0.55)' : 'rgba(56,189,248,0.35)'};color:\${cState.isRunning ? '#6ee7b7' : '#7dd3fc'};">\` +
+                            \`\${amsIcon(cState.isRunning ? 'zap' : 'flame', 10, cState.isRunning ? '#6ee7b7' : '#7dd3fc')}\` +
+                            \`<span>\${cState.isRunning ? (isDe ? 'ARBEITET LIVE' : 'WORKING LIVE') : (isDe ? 'WARM BEREIT (' + formatDurationShort(cState.remainingGuaranteedSec) + ')' : 'WARM READY')}</span>\` +
+                        \`</span>\` +
+                        \`<strong style="font-size:12px;color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px;" title="\${title.replace(/"/g, '&quot;')}">\${title.replace(/</g, '&lt;')}</strong>\` +
+                        \`<span style="font-size:10.5px;font-family:monospace;color:#94a3b8;">(Step #\${c.stepCount || 0} · \${c.turnCount || 1} Prompts)</span>\` +
+                    \`</div>\` +
+                    \`<div style="display:flex;align-items:center;gap:8px;font-family:monospace;font-size:11px;">\` +
+                        \`<span style="padding:2px 7px;border-radius:5px;background:rgba(239,68,68,0.14);border:1px solid rgba(248,113,113,0.35);color:#fca5a5;font-weight:700;">\` +
+                            \`▲ +\${formatTokensCompact(drainInfo.lastDeltaTok)} Tok · -\${Number(drainInfo.lastDeltaWeeklyPct || 0.005).toFixed(4)}% W (-\${Number(drainInfo.lastDelta5hPct || 0.020).toFixed(4)}% 5h) \${isDe ? 'letzter Step' : 'last step'}\` +
+                        \`</span>\` +
+                    \`</div>\` +
+                \`</div>\` +
+                \`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;font-size:11px;font-family:monospace;padding-top:2px;">\` +
+                    \`<div style="color:#cbd5e1;">\` +
+                        \`<span style="color:#94a3b8;">\${isDe ? 'Live Tokens:' : 'Live Tokens:'}</span> <strong style="color:#f8fafc;">\${totalTokExact}</strong> \` +
+                        \`<span style="color:#34d399;">(\${Math.round(c.cacheRatio || 0)}% Cache)</span>\` +
+                    \`</div>\` +
+                    \`<div style="color:#cbd5e1;">\` +
+                        \`<span style="color:#94a3b8;">\${isDe ? 'Raubt Usage:' : 'Draining Quota:'}</span> <strong style="color:#f87171;">-\${Number(c.weeklyPctUsed || 0).toFixed(4)}% W</strong> \` +
+                        \`<span style="color:#a78bfa;">(-\${Number(c.fiveHourPctUsed || 0).toFixed(4)}% 5h)</span> · <span style="color:#fcd34d;">\${Number(c.apiCostEur || 0).toFixed(2)} €</span>\` +
+                    \`</div>\` +
+                    \`<div style="color:#cbd5e1;">\` +
+                        \`<span style="color:#94a3b8;">\${isDe ? 'Durch Cache gespart:' : 'Saved by Cache:'}</span> <strong style="color:#34d399;">+\${savedW}% W (+\${saved5h}% 5h)</strong> · <span style="color:#6ee7b7;">+\${Number(c.apiSavedEur || 0).toFixed(2)} €</span>\` +
+                    \`</div>\` +
+                \`</div>\` +
+                \`<div style="height:5px;width:100%;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">\` +
+                    \`<div style="height:100%;width:\${drainBarWidth}%;background:linear-gradient(90deg,#10b981,#38bdf8,#f59e0b);border-radius:999px;transition:width 0.4s ease;"></div>\` +
+                \`</div>\` +
+            \`</div>\`;
+        }).join('');
 
         const chatRowsHtml = recentChatsList.map(c => {
             const liveMeta = amsTelemetryState.liveTrajectoriesMap.get(c.cascadeId);
             const title = (liveMeta && liveMeta.summary) || c.title || ('Chat ' + c.cascadeId.slice(0, 8));
             const cState = getChatCacheState(c.cascadeId);
+            const drainInfo = amsTelemetryState.liveDrainHistory && amsTelemetryState.liveDrainHistory.get(c.cascadeId);
             const stateBadge = cState.isRunning
                 ? \`<span style="display:inline-flex;align-items:center;gap:3px;color:#34d399;font-weight:700;">\${amsIcon('zap', 10, '#34d399')}<span>LIVE</span></span>\`
                 : cState.state === 'warm'
@@ -2633,18 +2732,22 @@ const amsScriptContent = `(async function() {
                         ? \`<span style="display:inline-flex;align-items:center;gap:3px;color:#fbbf24;font-weight:700;">\${amsIcon('alert', 10, '#fbbf24')}<span>\${formatDurationShort(cState.idleSec)}</span></span>\`
                         : \`<span style="display:inline-flex;align-items:center;gap:3px;color:#94a3b8;">\${amsIcon('snowflake', 10, '#94a3b8')}<span>\${formatDurationShort(cState.idleSec)}</span></span>\`;
 
-            return \`<tr style="border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;">\` +
-                \`<td style="padding:6px 8px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="\${title.replace(/"/g, '&quot;')}">\${title.replace(/</g, '&lt;')}</td>\` +
+            const liveDeltaPill = (cState.isRunning && drainInfo && drainInfo.lastDeltaTok > 0)
+                ? \` <span style="color:#fca5a5;font-size:9.5px;">(▲+\${formatTokensCompact(drainInfo.lastDeltaTok)})</span>\`
+                : '';
+
+            return \`<tr style="border-bottom:1px solid rgba(255,255,255,0.04);background:\${cState.isRunning ? 'rgba(16,185,129,0.07)' : 'transparent'};font-size:11px;">\` +
+                \`<td style="padding:6px 8px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:\${cState.isRunning ? '700' : '400'};color:\${cState.isRunning ? '#6ee7b7' : 'inherit'};" title="\${title.replace(/"/g, '&quot;')}">\${title.replace(/</g, '&lt;')}</td>\` +
                 \`<td style="padding:6px 8px;text-align:center;font-family:monospace;">\${stateBadge}</td>\` +
                 \`<td style="padding:6px 8px;text-align:right;font-family:monospace;">\${c.turnCount || 1} / \${c.stepCount || 0}</td>\` +
-                \`<td style="padding:6px 8px;text-align:right;font-family:monospace;">\${formatTokensCompact(c.totalInput)} <span style="color:#34d399;">(\${Math.round(c.cacheRatio || 0)}%)</span></td>\` +
+                \`<td style="padding:6px 8px;text-align:right;font-family:monospace;">\${formatTokensCompact(c.totalInput)} <span style="color:#34d399;">(\${Math.round(c.cacheRatio || 0)}%)</span>\${liveDeltaPill}</td>\` +
                 \`<td style="padding:6px 8px;text-align:right;font-family:monospace;color:\${c.cacheMissCount > 0 ? '#fbbf24' : '#64748b'};">\${c.cacheMissCount || 0}</td>\` +
                 \`<td style="padding:6px 8px;text-align:right;font-family:monospace;color:#38bdf8;font-weight:700;">-\${Number(c.weeklyPctUsed || 0).toFixed(4)}%</td>\` +
                 \`<td style="padding:6px 8px;text-align:right;font-family:monospace;color:#fcd34d;">\${Number(c.apiCostEur || 0).toFixed(2)} €</td>\` +
             \`</tr>\`;
         }).join('');
 
-        const renderSig = \`\${gWExact.toFixed(4)}|\${g5hExact.toFixed(4)}|\${wSum.stepCount}|\${recentChatsList.length}|\${amsTelemetryState.soundEnabled}|\${isDe}\`;
+        const renderSig = \`\${gWExact.toFixed(4)}|\${g5hExact.toFixed(4)}|\${wSum.stepCount}|\${runningChats.length}|\${recentChatsList.map(x => x.stepCount).join(',')}|\${amsTelemetryState.soundEnabled}|\${isDe}\`;
         if (dossierEl.getAttribute('data-render-sig') === renderSig) return;
         dossierEl.setAttribute('data-render-sig', renderSig);
 
@@ -2670,6 +2773,22 @@ const amsScriptContent = `(async function() {
                     \`</button>\` +
                 \`</div>\` +
             \`</div>\` +
+
+            // NEW: Live Active Agent Streams & Real-Time Quota Drain Monitor
+            (liveStreamsCardsHtml
+                ? \`<div style="border-radius:10px;background:rgba(16,185,129,0.03);border:1px solid \${runningChats.length > 0 ? 'rgba(52,211,153,0.38)' : 'rgba(255,255,255,0.08)'};padding:11px 13px;display:flex;flex-direction:column;gap:8px;">\` +
+                      \`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">\` +
+                          \`<strong style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:\${runningChats.length > 0 ? '#6ee7b7' : '#f8fafc'};">\` +
+                              \`\${amsIcon('zap', 13, runningChats.length > 0 ? '#34d399' : '#38bdf8')}\` +
+                              \`<span>\${runningChats.length > 0
+                                  ? (isDe ? \`Live Aktive Agenten-Streams (\${runningChats.length} arbeitet gerade · Echtzeit Usage-Drain)\` : \`Live Active Agent Streams (\${runningChats.length} running now · Real-Time Quota Drain)\`)
+                                  : (isDe ? 'Letzte aktive Agenten-Streams (Echtzeit Token- & Usage-Monitor)' : 'Recent Active Agent Streams (Real-Time Token & Quota Monitor)')}</span>\` +
+                          \`</strong>\` +
+                          \`<span style="font-size:10px;font-family:monospace;color:#94a3b8;">\${isDe ? 'Aktualisiert live alle 2s pro KI-Step' : 'Updates live every 2s per AI step'}</span>\` +
+                      \`</div>\` +
+                      \`<div style="display:flex;flex-direction:column;gap:8px;">\${liveStreamsCardsHtml}</div>\` +
+                  \`</div>\`
+                : '') +
 
             // 4 KPI Summary Cards
             \`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:10px;">\` +
