@@ -56,16 +56,21 @@ flowchart LR
   - **Ausgehend (zum `language_server`):** Begriffe wie `OpenClaw` $\rightarrow$ `Workspace Assistant`, `Hermes` $\rightarrow$ `Project Assistant`, `Nous Research` $\rightarrow$ `Workspace Team`, `SOUL.md` $\rightarrow$ `PROJECT_CONTEXT.md` werden lokal maskiert (wobei Lookaround-Assertions CLI-Befehle wie `hermes status` und Dateipfade unangetastet lassen).
   - **Eingehend (zurück an Hermes/OpenClaw):** `unmask_response_text` wandelt `Project Assistant` $\rightarrow$ `Hermes`, `Workspace Team` $\rightarrow$ `Nous Research` und `Workspace Assistant` $\rightarrow$ `OpenClaw` im Live-SSE-Stream und JSON-Response transparent zurück.
 
-### Schild 3: Lokaler Heartbeat-Blocker & Smart Adaptive Pacing
+### Schild 3: Lokaler Heartbeat-Blocker (`0 ms`) & Optionales Menschliches Pacing (Standard: AUS für Max-Speed)
 - **Lokaler Heartbeat-Abfangjäger (`0 ms`):** Periodische Hintergrund-Pings von OpenClaw/Hermes (z. B. `HEARTBEAT_OK`, leere Cron-Checks) werden von `HeartbeatAndPacingGuard` erkannt und direkt lokal von der Bridge beantwortet – sie verbrauchen **0 Tokens** und erzeugen keinen Traffic bei Google.
-- **Smart Adaptive Pacing (Schnell im Alltag, sicher bei Bot-Loops):**
-  - Liegt der letzte Request auf einem Slot mehr als `3 Sekunden` zurück (normales interaktives Arbeiten), startet der Request **sofort** mit minimalem Mikro-Jitter (`0.1s–0.4s`).
-  - Feuert ein Agent jedoch in einer engen Endlosschleife (`< 2.0s` nach Antwortende), schaltet sich automatisch ein menschlicher Pacing-Jitter (`1.5s–4.5s`) sowie das konfigurierbare RPM-Limit ein.
+- **Menschliche Pause (`adaptive_pacing_enabled`, Standard: `false`):**
+  - Für maximale Antwortgeschwindigkeit (`~1.4–1.9s`) ist die künstliche menschliche Pause (`1.5s–4.2s`) standardmäßig **deaktiviert** (`0.0 ms` künstliche Wartezeit).
+  - Wer für vollautomatische Endlosschleifen eine künstliche Denkpause wünscht, kann **„Schild 3b: Menschliche Pause (1,5–4s)“** jederzeit per Checkbox auf der API-Logs-Seite (`#/api-logs`) aktivieren.
 
-### Schild 4: Multi-Turn Session-Reuse, Konversations-Isolation & Auto-Cleanup (`DeleteCascadeTrajectory`)
-- Statt für jeden Request einen verdächtigen 1-Turn-Chat (`step_count == 1`) ohne Projektbezug anzulegen, verwaltet `src/rpc_pool.py` **10 echte Workspace-Ordner** (`ws-00` bis `ws-09`).
-- Zusammengehörige Konversationen von Hermes/OpenClaw werden über eine strikte Konversations-Signatur (System-Prompt + erstes User-Turn-Paar + Vorgänger-Antwort) exakt derselben `cascadeId` zugeordnet.
-- Startet in Hermes/OpenClaw ein neuer Chat oder wird nach `20 Turns` rotiert, wird die alte `cascadeId` sofort per `DeleteCascadeTrajectory` gelöscht, damit sich niemals zwei Sessions vermischen.
+### Schild 4: 5-Schichten App-/Chat-Isolation, Multi-Turn Session-Reuse & Auto-Revert (`RevertToCascadeStep`)
+Damit sich Gespräche weder zwischen verschiedenen Apps (Hermes, OpenClaw, OpenWebUI, eigene Apps/Skripte) noch zwischen zwei parallelen Chats (selbst wenn beide mit `"Hi"` beginnen) jemals vermischen, nutzt `src/rpc_pool.py` eine **5-Schichten-Kontext-Isolation**:
+1. **Schicht 1 – App-/Client-Fingerprint (`app_fingerprint`):** Deterministischer Hash aus `(source_framework, client_ip, api_key_name, user_agent, client_session_key)`. Verschiedene Apps, IPs, API-Keys, User-Agents oder übergebene `session_id`/`chat_id`/`user`-Felder teilen sich **niemals** eine `cascadeId`.
+2. **Schicht 2 – System- & Tool-Schema-Hash (`system_hash`):** Unterschiedliche System-Prompts oder Tool-Definitionen sind strikt voneinander isoliert.
+3. **Schicht 3 – 1-Turn-Guard (`len(turns) == 1`):** Jeder Request mit nur einer User-Nachricht startet **immer** eine komplett neue `cascadeId`.
+4. **Schicht 4 – 2-Pass Newest-First Matching & Greeting-Guard (`"Hi"`-Kollisionsschutz):**
+   - **Pass 1 (Exakter Prefix-Match, neueste zuerst):** Prüft zuerst ausschließlich exakte Verlaufs-Treffer (`conv.turn_hashes == incoming_prefix`), sortiert nach `updated_at DESC`.
+   - **Pass 2 (Extended Prefix für Mid-Chat Modellwechsel zu Codex & zurück / Truncated Prefix für Edit/Revert):** Läuft nur, wenn Pass 1 keinen exakten Treffer fand, und besitzt einen **Greeting-Guard**: Besteht die Überschneidung nur aus einem einzigen kurzen Begrüßungs-Turn (`"hi"`, `"hey"`, `"hallo"`, `"hello"`), wird niemals ein älterer Chat zurückgespult oder übernommen.
+5. **Schicht 5 – Idle-Ablauf (`1800s`):** Sessions, die länger als 30 Minuten inaktiv waren, werden nicht mehr per Prefix gematcht; alte Sessions werden per `DeleteCascadeTrajectory` sauber bereinigt.
 
 ### Schild 5: 1:1 React-UI Payload-Klon + Native IDE-Tool-Abschaltung (`customAgent`), Live-Thinking & Vision
 Alle lokalen ConnectRPC-Aufrufe in `src/rpc_client.py` nutzen ausschließlich offizielle Protobuf-Felder der echten Antigravity-IDE (`v2.24.0`), die lokal im Go-Binary `language_server` auf `127.0.0.1` ausgewertet werden:

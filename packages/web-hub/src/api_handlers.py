@@ -29,7 +29,7 @@ from src.api_token_reader import parse_generator_metadata_tokens
 from src.cdp_lifecycle import cdp_operation as _DEFAULT_CDP_OPERATION
 from src.config import config
 from src.database import db
-from src.rpc_pool import DirectRPCPool, rpc_pool
+from src.rpc_pool import DirectRPCPool, compute_app_fingerprint, rpc_pool
 
 # Keep module-level reference so unit tests can patch `api_handlers.cdp_operation`
 cdp_operation = _DEFAULT_CDP_OPERATION
@@ -38,15 +38,36 @@ DEFAULT_TIMEOUT = 120
 MAX_REQUEST_TIMEOUT = 600
 
 
+_EFFORT_NORMALIZATION = {
+    "none": "low",
+    "minimal": "low",
+    "low": "low",
+    "medium": "medium",
+    "med": "medium",
+    "high": "high",
+    "xhigh": "high",
+    "extra_high": "high",
+    "max": "high",
+    "ultra": "high",
+}
+
+
 def _reasoning_effort(body: Dict[str, Any]) -> Optional[str]:
     effort = body.get("reasoning_effort")
-    if effort is None and isinstance(body.get("reasoning"), dict):
-        effort = body["reasoning"].get("effort")
-    if effort is not None and effort not in ("low", "medium", "high"):
+    reasoning_obj = body.get("reasoning")
+    if isinstance(reasoning_obj, dict):
+        if reasoning_obj.get("enabled") is False:
+            return "low"
+        if effort is None:
+            effort = reasoning_obj.get("effort")
+    if effort is None:
+        return None
+    normalized = _EFFORT_NORMALIZATION.get(str(effort).strip().lower())
+    if normalized is None:
         raise ValueError(
             "reasoning_effort must be low, medium or high and supported by the selected native model."
         )
-    return effort
+    return normalized
 
 
 def _execution_metadata(request: Any, cdp: Any) -> Dict[str, Any]:
@@ -145,6 +166,38 @@ def _extract_request_context(
     }
 
 
+def _extract_app_fingerprint(
+    request: Any,
+    body: Optional[Dict[str, Any]],
+    req_ctx: Dict[str, str],
+) -> str:
+    """Build a deterministic client/app/session fingerprint so different apps or chat sessions never mix."""
+    headers = getattr(request, "headers", None) or {}
+    payload = body if isinstance(body, dict) else {}
+    meta = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    client_session_key = str(
+        payload.get("session_id")
+        or payload.get("chat_id")
+        or payload.get("thread_id")
+        or payload.get("user")
+        or meta.get("session_id")
+        or meta.get("chat_id")
+        or meta.get("thread_id")
+        or meta.get("user_id")
+        or headers.get("X-Session-Id")
+        or headers.get("X-Chat-Id")
+        or headers.get("X-Thread-Id")
+        or ""
+    ).strip()
+    return compute_app_fingerprint(
+        client_ip=req_ctx.get("client_ip", "127.0.0.1"),
+        source_framework=req_ctx.get("source_framework", ""),
+        user_agent=req_ctx.get("user_agent", ""),
+        api_key_name=req_ctx.get("api_key_name", "default"),
+        client_session_key=client_session_key,
+    )
+
+
 def _build_usage_dict(token_metrics: Dict[str, Any]) -> Dict[str, Any]:
     prompt_t = int(token_metrics.get("prompt_tokens") or 0)
     comp_t = int(token_metrics.get("completion_tokens") or 0)
@@ -195,6 +248,12 @@ async def chat_completions_handler(request: web.Request) -> web.Response:
     tool_choice = body.get("tool_choice")
     # Stage 1 (Local Hub Detection): Identify OpenClaw / Hermes / User BEFORE Shield 2 scrubs signatures for Google
     req_ctx = _extract_request_context(request, messages, tools=tools)
+    app_fp = _extract_app_fingerprint(request, body, req_ctx)
+    if hasattr(request, "__setitem__"):
+        try:
+            request["app_fingerprint"] = app_fp
+        except Exception:
+            pass
 
     # Stage 2 (Shield 2 Sanitizer): Strip all OpenClaw / Hermes / SOUL.md signatures before contacting language_server.exe
     firewall_enabled = bool(config.api_engine.get("keyword_firewall_enabled", True))
@@ -283,6 +342,11 @@ async def chat_completions_handler(request: web.Request) -> web.Response:
                 force_new_chat=new_chat,
                 timeout=timeout,
                 client_ip=req_ctx["client_ip"],
+                **(
+                    {"app_fingerprint": app_fp}
+                    if isinstance(pool, DirectRPCPool) or hasattr(pool, "_resolve_slot_and_session")
+                    else {}
+                ),
             )
         except QuotaExhaustedError as q_err:
             duration = (time.monotonic() - start) * 1000
@@ -678,6 +742,10 @@ async def _handle_streaming(
             else rpc_pool
         )
         _mark_running(request)
+        stream_app_fp = str(
+            (request.get("app_fingerprint") if hasattr(request, "get") else None)
+            or _extract_app_fingerprint(request, None, ctx)
+        )
         rpc_stream_iter = pool.execute_chat_streaming(
             messages=messages,
             model=model,
@@ -689,6 +757,11 @@ async def _handle_streaming(
             timeout=timeout,
             client_ip=ctx["client_ip"],
             state_out=rpc_state,
+            **(
+                {"app_fingerprint": stream_app_fp}
+                if isinstance(pool, DirectRPCPool) or hasattr(pool, "_resolve_slot_and_session")
+                else {}
+            ),
         ).__aiter__()
         try:
             first_rpc_delta = await rpc_stream_iter.__anext__()

@@ -42,6 +42,8 @@ class TrackedConversation:
     workspace_dir: Path
     model: str = "gemini-3.1-pro-high"
     system_hash: str = ""
+    app_fingerprint: str = ""
+    first_user_len: int = 0
     turn_hashes: List[str] = field(default_factory=list)
     step_offsets: List[int] = field(default_factory=list)
     last_step_count: int = 0
@@ -60,6 +62,7 @@ class WorkspaceSlot:
         self.lock = asyncio.Lock()
         self.active_cascade_id: Optional[str] = None
         self.last_used_at: float = 0.0
+        self.alloc_seq: int = 0
         self._seed_workspace_files()
 
     def _seed_workspace_files(self) -> None:
@@ -89,6 +92,32 @@ def _hash_turn(role: str, content: str) -> str:
     canonical_text, _ = sanitize_prompt_text(content or "", enabled=True)
     norm = f"{role.strip().lower()}:{canonical_text.strip()}"
     return hashlib.sha256(norm.encode("utf-8", errors="ignore")).hexdigest()[:16]
+
+
+def compute_app_fingerprint(
+    *,
+    client_ip: str = "127.0.0.1",
+    source_framework: str = "",
+    user_agent: str = "",
+    api_key_name: str = "",
+    client_session_key: str = "",
+) -> str:
+    """Compute a deterministic isolation fingerprint for the calling app/client/session.
+
+    Guarantees that requests from different apps (Hermes, OpenClaw, OpenWebUI, custom apps,
+    scripts, different IPs, different API keys, or different client session/user IDs)
+    NEVER share a `cascade_id` or mix conversation context.
+    """
+    raw = "|".join(
+        [
+            (source_framework or "unknown").strip().lower(),
+            (client_ip or "127.0.0.1").strip().lower(),
+            (api_key_name or "default").strip().lower(),
+            (user_agent or "").strip()[:80],
+            (client_session_key or "").strip(),
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8", errors="ignore")).hexdigest()[:16]
 
 
 class DirectRPCPool:
@@ -136,14 +165,52 @@ class DirectRPCPool:
         force_new_chat: bool = False,
         requested_model: Optional[str] = None,
         client_ip: str = "127.0.0.1",
+        app_fingerprint: str = "",
     ) -> Tuple[WorkspaceSlot, TrackedConversation, Optional[Dict[str, Any]]]:
-        """Find or allocate a workspace slot + `TrackedConversation`, performing auto-revert if needed."""
+        """Find or allocate a workspace slot + `TrackedConversation`, performing auto-revert if needed.
+
+        5-Layer Multi-App & Multi-Chat Context Isolation:
+          1. App/Client Isolation (`app_fingerprint`): Different apps (Hermes, OpenClaw, OpenWebUI,
+             custom scripts), different IPs, API keys, User-Agents, or `user`/`session_id` fields
+             never share a `cascade_id`.
+          2. System & Tool Schema Isolation (`system_hash`): Different system prompts or tool
+             definitions never share a `cascade_id`.
+          3. Single-Turn Guard (`len(turns) == 1`): Every 1-turn request always creates a brand-new
+             `cascade_id` and never attaches to an existing chat.
+          4. Two-Pass Newest-First Matching + Greeting Anti-Collision Guard:
+             - Pass 1 checks ONLY exact prefix matches (`conv.turn_hashes == incoming_prefix`),
+               ordered newest-first (`updated_at DESC`), so a new chat with a short greeting (`"hi"`)
+               never triggers an accidental auto-revert on an older longer chat.
+             - Pass 2 (Extended prefix for mid-chat Codex switch / Truncated prefix for Edit/Revert)
+               only runs if Pass 1 found no exact match, and enforces a Greeting Guard: if only
+               1 exchange (`overlap == 2`) overlaps, the first user prompt must be substantive
+               (`first_user_len >= 16`) and recent (`<= 600s`), preventing two `"hi"` chats from colliding.
+          5. Idle Session Expiry (`1800s`): Conversations idle for > 30 minutes are never prefix-matched.
+        """
         req_system_hash = _hash_turn("system", system_instructions)
+        effective_app_fp = app_fingerprint or compute_app_fingerprint(client_ip=client_ip)
         user_assistant_hashes = [
             _hash_turn(t["role"], t["content"]) for t in conversation_turns
         ]
+        first_user_content = next(
+            (str(t.get("content") or "").strip() for t in conversation_turns if t.get("role") == "user"),
+            "",
+        )
+        req_first_user_len = len(first_user_content)
+        is_trivial_greeting = first_user_content.lower().rstrip("!.? ") in {
+            "hi",
+            "hey",
+            "hallo",
+            "hello",
+            "moin",
+            "yo",
+            "servus",
+            "guten tag",
+        }
         max_turns = int(config.api_engine.get("max_turns_per_session", 20))
         revert_info: Optional[Dict[str, Any]] = None
+        now_mono = time.monotonic()
+        idle_ttl_sec = 1800.0
 
         async with self._pool_lock:
             matched: Optional[TrackedConversation] = None
@@ -152,45 +219,79 @@ class DirectRPCPool:
             if explicit_conversation_id and explicit_conversation_id in self._conversations:
                 matched = self._conversations[explicit_conversation_id]
 
-            # 2. Prefix hash affinity match (strictly isolated by system_hash so different agents never mix!)
+            # 2. 5-Layer Prefix Hash Affinity Match
             if matched is None and not force_new_chat and len(user_assistant_hashes) > 1:
                 incoming_prefix = user_assistant_hashes[:-1]
-                best_match: Optional[TrackedConversation] = None
-                best_overlap = 0
-                for conv in self._conversations.values():
-                    if conv.system_hash and conv.system_hash != req_system_hash:
+                # Sort candidate conversations newest-first so active chats always take precedence
+                candidates: List[TrackedConversation] = []
+                for conv in sorted(
+                    self._conversations.values(),
+                    key=lambda c: c.updated_at,
+                    reverse=True,
+                ):
+                    # Layer 1: App/Client Fingerprint Isolation
+                    if conv.app_fingerprint and conv.app_fingerprint != effective_app_fp:
+                        continue
+                    # Layer 2: System Prompt & Tool Schema Isolation
+                    if conv.system_hash != req_system_hash:
+                        continue
+                    # Layer 5: Idle Expiry (30 min)
+                    if (now_mono - conv.updated_at) > idle_ttl_sec:
                         continue
                     slot_obj = self._get_slot_by_id(conv.slot_id)
                     if slot_obj.lock.locked():
                         continue
                     if conv.native_turns >= max_turns:
                         continue
-                    # Exact prefix match (normal next turn of the exact same chat)
+                    candidates.append(conv)
+
+                # Pass 1: Exact prefix match (normal next turn of the exact same chat)
+                for conv in candidates:
                     if conv.turn_hashes == incoming_prefix:
-                        best_match = conv
+                        matched = conv
                         break
-                    # Extended prefix match (e.g. user switched to Codex for 1-2 turns in Hermes and switched back)
-                    if (
-                        len(conv.turn_hashes) >= 2
-                        and len(incoming_prefix) > len(conv.turn_hashes)
-                        and incoming_prefix[: len(conv.turn_hashes)] == conv.turn_hashes
-                    ):
-                        if len(conv.turn_hashes) > best_overlap:
-                            best_overlap = len(conv.turn_hashes)
-                            best_match = conv
-                        continue
-                    # Truncated prefix match (User clicked Edit / Retry / Revert in Hermes — requires >= 2 turns!)
-                    common = 0
-                    for h_old, h_new in zip(conv.turn_hashes, incoming_prefix):
-                        if h_old == h_new:
-                            common += 1
-                        else:
-                            break
-                    if common >= 2 and common == len(incoming_prefix) and common < len(conv.turn_hashes):
-                        if common > best_overlap:
-                            best_overlap = common
-                            best_match = conv
-                matched = best_match
+
+                # Pass 2: Extended prefix (mid-chat model switch) or Truncated prefix (Edit/Revert)
+                if matched is None:
+                    best_match: Optional[TrackedConversation] = None
+                    best_overlap = 0
+                    for conv in candidates:
+                        # Extended prefix match (e.g. user switched to Codex for 1-2 turns and switched back)
+                        if (
+                            len(conv.turn_hashes) >= 2
+                            and len(incoming_prefix) > len(conv.turn_hashes)
+                            and incoming_prefix[: len(conv.turn_hashes)] == conv.turn_hashes
+                        ):
+                            overlap = len(conv.turn_hashes)
+                            # Greeting Anti-Collision Guard for 1-turn ("hi") chats
+                            if overlap < 4 and (
+                                is_trivial_greeting
+                                or (now_mono - conv.updated_at) > 600.0
+                            ):
+                                continue
+                            if overlap > best_overlap:
+                                best_overlap = overlap
+                                best_match = conv
+                            continue
+
+                        # Truncated prefix match (User clicked Edit / Retry / Revert — requires >= 2 turns)
+                        common = 0
+                        for h_old, h_new in zip(conv.turn_hashes, incoming_prefix):
+                            if h_old == h_new:
+                                common += 1
+                            else:
+                                break
+                        if common >= 2 and common == len(incoming_prefix) and common < len(conv.turn_hashes):
+                            # Greeting Anti-Collision Guard: never auto-revert an older chat on a 1-turn "hi"
+                            if common < 4 and (
+                                is_trivial_greeting
+                                or (now_mono - conv.updated_at) > 600.0
+                            ):
+                                continue
+                            if common > best_overlap:
+                                best_overlap = common
+                                best_match = conv
+                    matched = best_match
 
             if matched is not None:
                 slot = self._get_slot_by_id(matched.slot_id)
@@ -231,12 +332,14 @@ class DirectRPCPool:
                 return slot, matched, revert_info
 
             # 3. Allocate least-recently-used unlocked workspace slot
+            self._alloc_counter = getattr(self, "_alloc_counter", 0) + 1
             free_slots = [s for s in self.slots if not s.lock.locked()]
             if free_slots:
-                slot = min(free_slots, key=lambda s: s.last_used_at)
+                slot = min(free_slots, key=lambda s: (s.alloc_seq, s.last_used_at, s.slot_index))
             else:
-                slot = min(self.slots, key=lambda s: s.last_used_at)
+                slot = min(self.slots, key=lambda s: (s.alloc_seq, s.last_used_at, s.slot_index))
 
+            slot.alloc_seq = self._alloc_counter
             slot.last_used_at = time.monotonic()
 
         # Start a new cascade session on this slot
@@ -249,6 +352,8 @@ class DirectRPCPool:
             workspace_dir=slot.workspace_dir,
             model=requested_model or "gemini-3.1-pro-high",
             system_hash=req_system_hash,
+            app_fingerprint=effective_app_fp,
+            first_user_len=req_first_user_len,
         )
         evicted_ids: List[str] = []
         max_tracked = max(self.slot_count * 2, 20)
@@ -386,6 +491,7 @@ class DirectRPCPool:
         force_new_chat: bool = False,
         timeout: float = 120.0,
         client_ip: str = "127.0.0.1",
+        app_fingerprint: str = "",
     ) -> Dict[str, Any]:
         """Execute a complete non-streaming chat turn via Direct ConnectRPC with all 8 Shields."""
         firewall_enabled = bool(config.api_engine.get("keyword_firewall_enabled", True))
@@ -440,6 +546,7 @@ class DirectRPCPool:
                 force_new_chat=force_new_chat,
                 requested_model=model,
                 client_ip=client_ip,
+                app_fingerprint=app_fingerprint,
             )
             async with slot.lock:
                 # Shield 3: Smart Adaptive Pacing
@@ -450,6 +557,8 @@ class DirectRPCPool:
 
                 if tracked.last_step_count == 0 and not tracked.turn_hashes:
                     baseline_count = 0
+                elif revert_info is None and tracked.last_step_count > 0:
+                    baseline_count = tracked.last_step_count
                 else:
                     baseline_steps = await self.rpc_client.get_trajectory_steps(
                         tracked.cascade_id, step_offset=0
@@ -511,22 +620,33 @@ class DirectRPCPool:
 
                 thinking_text = "".join(thinking_chunks).strip()
                 response_text = "".join(chunks).strip()
-                after_steps = await self.rpc_client.get_trajectory_steps(
-                    tracked.cascade_id, step_offset=0
+                cached_step_count = getattr(self.rpc_client, "_last_step_counts", {}).pop(
+                    tracked.cascade_id, None
                 )
-                if after_steps and (not response_text or not thinking_text):
-                    if hasattr(self.rpc_client, "extract_planner_response_state"):
-                        ext_thinking, ext_text, _ = self.rpc_client.extract_planner_response_state(
-                            after_steps[baseline_count:]
-                        )
-                        if not thinking_text and ext_thinking:
-                            thinking_text = ext_thinking
-                        if not response_text and ext_text:
-                            response_text = ext_text
-                    elif not response_text:
-                        response_text, _ = self.rpc_client.extract_planner_response_text(
-                            after_steps[baseline_count:]
-                        )
+                cached_final_steps = getattr(self.rpc_client, "_last_final_steps", {}).pop(
+                    tracked.cascade_id, None
+                )
+                if cached_step_count is not None and response_text:
+                    final_step_count = cached_step_count
+                else:
+                    after_steps = await self.rpc_client.get_trajectory_steps(
+                        tracked.cascade_id, step_offset=0
+                    )
+                    final_step_count = len(after_steps)
+                    tail_steps = after_steps[baseline_count:] if after_steps else (cached_final_steps or [])
+                    if tail_steps and (not response_text or not thinking_text):
+                        if hasattr(self.rpc_client, "extract_planner_response_state"):
+                            ext_thinking, ext_text, _ = self.rpc_client.extract_planner_response_state(
+                                tail_steps
+                            )
+                            if not thinking_text and ext_thinking:
+                                thinking_text = ext_thinking
+                            if not response_text and ext_text:
+                                response_text = ext_text
+                        elif not response_text:
+                            response_text, _ = self.rpc_client.extract_planner_response_text(
+                                tail_steps
+                            )
 
                 thinking_text = unmask_response_text(
                     thinking_text, firewall_hits=sanitized["firewall_hits"]
@@ -553,9 +673,9 @@ class DirectRPCPool:
                     )
                 tracked.step_offsets.append(baseline_count)
                 tracked.turn_hashes.append(_hash_turn("user", user_message))
-                tracked.step_offsets.append(len(after_steps))
+                tracked.step_offsets.append(final_step_count)
                 tracked.turn_hashes.append(_hash_turn("assistant", canonical_assistant_text))
-                tracked.last_step_count = len(after_steps)
+                tracked.last_step_count = final_step_count
                 tracked.native_turns += 1
                 tracked.updated_at = time.monotonic()
                 slot.last_used_at = time.monotonic()
@@ -621,6 +741,7 @@ class DirectRPCPool:
         force_new_chat: bool = False,
         timeout: float = 120.0,
         client_ip: str = "127.0.0.1",
+        app_fingerprint: str = "",
         state_out: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[Any, None]:
         """Stream live deltas via Direct ConnectRPC with all 8 Shields."""
@@ -673,6 +794,7 @@ class DirectRPCPool:
                 force_new_chat=force_new_chat,
                 requested_model=model,
                 client_ip=client_ip,
+                app_fingerprint=app_fingerprint,
             )
             out["conversation_id"] = tracked.cascade_id
             out["workspace_slot"] = slot.slot_id
@@ -682,6 +804,8 @@ class DirectRPCPool:
 
                 if tracked.last_step_count == 0 and not tracked.turn_hashes:
                     baseline_count = 0
+                elif revert_info is None and tracked.last_step_count > 0:
+                    baseline_count = tracked.last_step_count
                 else:
                     baseline_steps = await self.rpc_client.get_trajectory_steps(
                         tracked.cascade_id, step_offset=0
@@ -809,9 +933,19 @@ class DirectRPCPool:
                     else (cleaned_text or full_text)
                 )
 
-                after_steps = await self.rpc_client.get_trajectory_steps(
-                    tracked.cascade_id, step_offset=0
+                cached_step_count = getattr(self.rpc_client, "_last_step_counts", {}).pop(
+                    tracked.cascade_id, None
                 )
+                getattr(self.rpc_client, "_last_final_steps", {}).pop(
+                    tracked.cascade_id, None
+                )
+                if cached_step_count is not None:
+                    final_step_count = cached_step_count
+                else:
+                    after_steps = await self.rpc_client.get_trajectory_steps(
+                        tracked.cascade_id, step_offset=0
+                    )
+                    final_step_count = len(after_steps)
                 for prior_turn in unrecorded_prior:
                     tracked.step_offsets.append(baseline_count)
                     tracked.turn_hashes.append(
@@ -819,9 +953,9 @@ class DirectRPCPool:
                     )
                 tracked.step_offsets.append(baseline_count)
                 tracked.turn_hashes.append(_hash_turn("user", user_message))
-                tracked.step_offsets.append(len(after_steps))
+                tracked.step_offsets.append(final_step_count)
                 tracked.turn_hashes.append(_hash_turn("assistant", canonical_assistant_text))
-                tracked.last_step_count = len(after_steps)
+                tracked.last_step_count = final_step_count
                 tracked.native_turns += 1
                 tracked.updated_at = time.monotonic()
                 slot.last_used_at = time.monotonic()

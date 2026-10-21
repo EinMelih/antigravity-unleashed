@@ -415,7 +415,15 @@ class HeartbeatAndPacingGuard:
     def __init__(self) -> None:
         self._slot_last_completed: Dict[str, float] = {}
         self._recent_timestamps: List[float] = []
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._lock = asyncio.Lock()
+
+    def _get_lock(self) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        if self._loop is not loop:
+            self._loop = loop
+            self._lock = asyncio.Lock()
+        return self._lock
 
     def is_heartbeat_prompt(self, user_message: str, system_prompt: str = "") -> Tuple[bool, str]:
         """Return ``(True, synthetic_reply)`` if the prompt is an automated heartbeat check."""
@@ -439,11 +447,11 @@ class HeartbeatAndPacingGuard:
           human pacing jitter (`1.5s - 4.2s`).
         Returns the applied delay in milliseconds.
         """
-        if not config.api_engine.get("adaptive_pacing_enabled", True):
+        if not config.api_engine.get("adaptive_pacing_enabled", False):
             return 0.0
 
         now = time.monotonic()
-        async with self._lock:
+        async with self._get_lock():
             last_done = self._slot_last_completed.get(slot_id, 0.0)
             elapsed = now - last_done if last_done > 0 else 999.0
             self._recent_timestamps = [t for t in self._recent_timestamps if now - t < 60.0]
@@ -484,7 +492,15 @@ class QuotaCircuitBreaker:
         self._cached_at: float = 0.0
         self._cached_owner_id: Optional[int] = None
         self._exhausted_until: Dict[str, Dict[str, Any]] = {}
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._lock = asyncio.Lock()
+
+    def _get_lock(self) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        if self._loop is not loop:
+            self._loop = loop
+            self._lock = asyncio.Lock()
+        return self._lock
 
     def reset_cache(self) -> None:
         self._cached_summary = None
@@ -549,7 +565,7 @@ class QuotaCircuitBreaker:
 
         now = time.monotonic()
         owner_id = id(getattr(fetch_quota_fn, "__self__", fetch_quota_fn))
-        async with self._lock:
+        async with self._get_lock():
             if (
                 self._cached_summary is None
                 or self._cached_owner_id != owner_id
@@ -770,8 +786,19 @@ class StaggeredConcurrencyLimiter:
         self._active_count = 0
         self._waiting_count = 0
         self._last_start_mono = 0.0
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._condition = asyncio.Condition()
         self._stagger_lock = asyncio.Lock()
+
+    def _ensure_loop_primitives(self) -> Tuple[asyncio.Condition, asyncio.Lock]:
+        loop = asyncio.get_running_loop()
+        if self._loop is not loop:
+            self._loop = loop
+            self._active_count = 0
+            self._waiting_count = 0
+            self._condition = asyncio.Condition()
+            self._stagger_lock = asyncio.Lock()
+        return self._condition, self._stagger_lock
 
     @property
     def max_parallel(self) -> int:
@@ -786,22 +813,28 @@ class StaggeredConcurrencyLimiter:
 
     async def acquire(self) -> float:
         """Acquire a generation slot and enforce start stagger. Returns stagger delay in ms."""
-        async with self._condition:
+        cond, stagger_lock = self._ensure_loop_primitives()
+        async with cond:
             self._waiting_count += 1
             try:
                 while self._active_count >= self.max_parallel:
-                    await self._condition.wait()
+                    await cond.wait()
                 self._active_count += 1
             finally:
                 self._waiting_count -= 1
+
+        if not config.api_engine.get("stagger_enabled", False):
+            return 0.0
 
         stagger_ms = 0.0
         try:
             stagger_min = int(config.api_engine.get("stagger_min_ms", 400)) / 1000.0
             stagger_max = int(config.api_engine.get("stagger_max_ms", 1200)) / 1000.0
+            if stagger_max <= 0:
+                return 0.0
             if stagger_max < stagger_min:
                 stagger_max = stagger_min
-            async with self._stagger_lock:
+            async with stagger_lock:
                 now = time.monotonic()
                 elapsed = now - self._last_start_mono
                 required_gap = random.uniform(stagger_min, stagger_max)
@@ -816,14 +849,15 @@ class StaggeredConcurrencyLimiter:
         return stagger_ms
 
     def release(self) -> None:
-        async def _notify() -> None:
-            async with self._condition:
+        async def _notify(cond: asyncio.Condition) -> None:
+            async with cond:
                 self._active_count = max(0, self._active_count - 1)
-                self._condition.notify(1)
+                cond.notify(1)
 
         try:
+            cond, _ = self._ensure_loop_primitives()
             loop = asyncio.get_running_loop()
-            loop.create_task(_notify())
+            loop.create_task(_notify(cond))
         except RuntimeError:
             self._active_count = max(0, self._active_count - 1)
 

@@ -60,6 +60,7 @@ interface EngineSettings {
   mode: "rpc" | "ui";
   max_parallel_streams: number;
   slot_count: number;
+  stagger_enabled: boolean;
   stagger_min_ms: number;
   stagger_max_ms: number;
   adaptive_pacing_enabled: boolean;
@@ -106,9 +107,10 @@ const SAFE_UNDETECTED_DEFAULTS: EngineSettings = {
   mode: "rpc",
   max_parallel_streams: 4,
   slot_count: 10,
+  stagger_enabled: false,
   stagger_min_ms: 400,
   stagger_max_ms: 1200,
-  adaptive_pacing_enabled: true,
+  adaptive_pacing_enabled: false,
   heartbeat_blocker_enabled: true,
   keyword_firewall_enabled: true,
   quota_breaker_enabled: true,
@@ -227,31 +229,31 @@ const EIGHT_SHIELDS_INFO = [
   {
     numDe: "Schild 3",
     numEn: "Shield 3",
-    titleDe: "Heartbeat-Blocker & Menschlicher Pacing-Jitter",
-    titleEn: "Heartbeat Blocker & Human Pacing Jitter",
+    titleDe: "Heartbeat-Blocker (Aktiv) & Optionales Menschliches Pacing (Aus für Max-Speed)",
+    titleEn: "Heartbeat Blocker (Active) & Optional Human Pacing (Off for Max Speed)",
     threatDe:
-      "Periodische 30-Minuten-Cron-Pings ('HEARTBEAT_OK') und ungebremste Millisekunden-Folgeaufrufe erzeugen unnatürliche Aktivitätsmuster.",
+      "Periodische 30-Minuten-Cron-Pings ('HEARTBEAT_OK') erzeugen unnötige Backend-Aufrufe; künstliches Pacing kostet 1,5–4s Wartezeit.",
     threatEn:
-      "Periodic 30-minute cron pings ('HEARTBEAT_OK') and unthrottled millisecond follow-up requests create unnatural activity patterns.",
+      "Periodic 30-minute cron pings ('HEARTBEAT_OK') create unnecessary backend calls; artificial pacing adds 1.5–4s wait time.",
     measureDe:
-      "Automatische Heartbeat-Pings werden lokal beantwortet (0 Backend-Aufrufe). Echte Folge-Requests erhalten einen menschlichen Tipp-/Denk-Jitter.",
+      "Automatische Heartbeat-Pings werden lokal in 0 ms beantwortet. Künstliches menschliches Pacing (1,5–4s Pause) ist für maximale API-Geschwindigkeit standardmäßig AUS und jederzeit optional zuschaltbar.",
     measureEn:
-      "Automated heartbeat pings are answered locally (0 backend calls). Real follow-up requests receive human typing/thinking jitter.",
+      "Automated heartbeat pings are answered locally in 0 ms. Artificial human pacing (1.5–4s delay) is OFF by default for maximum API speed and can be toggled anytime.",
     settingKey: "heartbeat_blocker_enabled" as const,
   },
   {
     numDe: "Schild 4",
     numEn: "Shield 4",
-    titleDe: "Multi-Turn Session-Reuse & Nativer Revert (RevertToCascadeStep)",
-    titleEn: "Multi-Turn Session Reuse & Native Revert (RevertToCascadeStep)",
+    titleDe: "5-Schichten App-/Chat-Isolation, Session-Reuse & Nativer Revert",
+    titleEn: "5-Layer App/Chat Isolation, Session Reuse & Native Revert",
     threatDe:
-      "Stateless-Proxies starten für jeden API-Aufruf einen neuen Chat mit step_count == 1 (tausende 1-Turn-Wegwerf-Chats).",
+      "Verschiedene Apps (Hermes, OpenClaw, OpenWebUI, eigene Apps) oder zwei parallele Chats, die beide mit 'Hi' starten, könnten sonst dieselbe cascade_id treffen und Kontext vermischen.",
     threatEn:
-      "Stateless proxies start a brand-new chat with step_count == 1 for every API call (creating thousands of 1-turn throwaway chats).",
+      "Different apps (Hermes, OpenClaw, OpenWebUI, custom apps) or two parallel chats both starting with 'Hi' could otherwise hit the same cascade_id and mix context.",
     measureDe:
-      "Zusammenhängende Gespräche nutzen dieselbe cascade_id weiter (Rotation erst nach ~20 Turns). Bei Edit/Regenerate wird nativ RevertToCascadeStep genutzt.",
+      "Trennt strikt nach App-Fingerprint (App/IP/Key/User-Agent/Session-ID), System-Hash, 2-Pass Newest-First Matching & Greeting-Guard ('Hi'-Kollisionsschutz). Kein Kontext-Mix zwischen Apps oder neuen Chats.",
     measureEn:
-      "Related conversations reuse the same cascade_id (rotating after ~20 turns). On edit/regenerate, native RevertToCascadeStep is invoked.",
+      "Strictly isolates by app_fingerprint (App/IP/Key/User-Agent/Session-ID), system_hash, 2-Pass Newest-First matching & Greeting Guard ('Hi' anti-collision). Zero context mixing across apps or chats.",
     alwaysActive: true,
   },
   {
@@ -910,8 +912,24 @@ export function ApiLogsPage() {
               />
               <span>
                 {en
-                  ? "Shield 3b: Adaptive Pacing"
-                  : "Schild 3b: Adaptive Pacing"}
+                  ? "Shield 3b: Human Delay (1.5–4s)"
+                  : "Schild 3b: Menschliche Pause (1,5–4s)"}
+              </span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                checked={Boolean(engine.stagger_enabled)}
+                onChange={(e) =>
+                  void updateEngineSetting({
+                    stagger_enabled: e.target.checked,
+                  })
+                }
+                type="checkbox"
+              />
+              <span>
+                {en
+                  ? "Shield 8b: Start Stagger (0.4–1.2s)"
+                  : "Schild 8b: Start-Verzögerung (0,4–1,2s)"}
               </span>
             </label>
             <label className="flex items-center gap-2">

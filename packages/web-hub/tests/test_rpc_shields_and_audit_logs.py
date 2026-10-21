@@ -358,7 +358,7 @@ class RpcShieldsAndAuditLogsTests(unittest.IsolatedAsyncioTestCase):
         responses = await asyncio.gather(*(fire_one(i) for i in range(10)))
         self.assertEqual(10, len(responses))
         for r in responses:
-            self.assertEqual(200, r.status)
+            self.assertEqual(200, r.status, r.text)
 
         conv_ids = {json.loads(r.text)["conversation_id"] for r in responses}
         self.assertEqual(10, len(conv_ids))
@@ -503,6 +503,89 @@ class RpcShieldsAndAuditLogsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Nous Research", row_hm["system_prompt"])
         self.assertNotIn("Hermes", row_hm["system_prompt"])
         self.assertNotIn("SOUL.md", row_hm["system_prompt"])
+
+    async def test_five_layer_multi_app_and_greeting_collision_isolation(self) -> None:
+        fake_rpc = FakeRPCClient()
+        pool = DirectRPCPool(
+            rpc_client=fake_rpc,
+            base_workspaces_dir=self.base_path / "workspaces",
+            slot_count=10,
+        )
+
+        # 1. App A (Hermes) starts a chat with "hi" and continues to Turn 2
+        req_a1 = _MockReq(
+            {"model": "claude-opus-4-6", "messages": [{"role": "user", "content": "hi"}]},
+            app={"rpc_pool": pool},
+            headers={"User-Agent": "Hermes-Agent/2.0"},
+        )
+        resp_a1 = await api_handlers.chat_completions_handler(req_a1)
+        body_a1 = json.loads(resp_a1.text)
+        cid_a = body_a1["conversation_id"]
+        reply_a1 = body_a1["choices"][0]["message"]["content"]
+
+        req_a2 = _MockReq(
+            {
+                "model": "claude-opus-4-6",
+                "messages": [
+                    {"role": "user", "content": "hi"},
+                    {"role": "assistant", "content": reply_a1},
+                    {"role": "user", "content": "Explain quantum computing"},
+                ],
+            },
+            app={"rpc_pool": pool},
+            headers={"User-Agent": "Hermes-Agent/2.0"},
+        )
+        resp_a2 = await api_handlers.chat_completions_handler(req_a2)
+        body_a2 = json.loads(resp_a2.text)
+        self.assertEqual(cid_a, body_a2["conversation_id"])
+
+        # 2. App B (different app / User-Agent / session_id) sends the EXACT same prefix -> MUST NOT share cid_a!
+        req_b2 = _MockReq(
+            {
+                "model": "claude-opus-4-6",
+                "messages": [
+                    {"role": "user", "content": "hi"},
+                    {"role": "assistant", "content": reply_a1},
+                    {"role": "user", "content": "Question from another app"},
+                ],
+            },
+            app={"rpc_pool": pool},
+            headers={"User-Agent": "OpenWebUI/0.5.0"},
+        )
+        resp_b2 = await api_handlers.chat_completions_handler(req_b2)
+        body_b2 = json.loads(resp_b2.text)
+        self.assertNotEqual(cid_a, body_b2["conversation_id"])
+        self.assertEqual(0, len(fake_rpc.reverts))
+
+        # 3. Same App A starts a SECOND chat with "hi" -> must never revert or hijack Chat 1 (cid_a)!
+        req_new_hi_1 = _MockReq(
+            {"model": "claude-opus-4-6", "messages": [{"role": "user", "content": "hi"}]},
+            app={"rpc_pool": pool},
+            headers={"User-Agent": "Hermes-Agent/2.0"},
+        )
+        resp_new_hi_1 = await api_handlers.chat_completions_handler(req_new_hi_1)
+        body_new_hi_1 = json.loads(resp_new_hi_1.text)
+        cid_new_hi = body_new_hi_1["conversation_id"]
+        reply_new_hi_1 = body_new_hi_1["choices"][0]["message"]["content"]
+        self.assertNotEqual(cid_a, cid_new_hi)
+
+        # Turn 2 of the second "hi" chat must match cid_new_hi (Pass 1 Exact Match) and NEVER revert cid_a!
+        req_new_hi_2 = _MockReq(
+            {
+                "model": "claude-opus-4-6",
+                "messages": [
+                    {"role": "user", "content": "hi"},
+                    {"role": "assistant", "content": reply_new_hi_1},
+                    {"role": "user", "content": "Second chat follow-up"},
+                ],
+            },
+            app={"rpc_pool": pool},
+            headers={"User-Agent": "Hermes-Agent/2.0"},
+        )
+        resp_new_hi_2 = await api_handlers.chat_completions_handler(req_new_hi_2)
+        body_new_hi_2 = json.loads(resp_new_hi_2.text)
+        self.assertEqual(cid_new_hi, body_new_hi_2["conversation_id"])
+        self.assertEqual(0, len(fake_rpc.reverts))
 
 
 if __name__ == "__main__":
