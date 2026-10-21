@@ -1247,8 +1247,27 @@ const amsScriptContent = `(async function() {
 
     function amsIcon(name, size = 11, color = 'currentColor') {
         const p = AMS_LUCIDE_PATHS[name] || AMS_LUCIDE_PATHS.zap;
-        return \`<svg xmlns="http://www.w3.org/2000/svg" width="\${size}" height="\${size}" viewBox="0 0 24 24" fill="none" stroke="\${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1.5px;flex-shrink:0;">\${p}</svg>\`;
+        return \`<svg xmlns="http://www.w3.org/2000/svg" width="\${size}" height="\${size}" viewBox="0 0 24 24" fill="none" stroke="\${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1.5px;flex-shrink:0;">\${p}</svg>\`;
     }
+
+    // Claude Design Token System rooted in Native Antigravity IDE (--background: #0D0D0D, --border: rgba(255,255,255,0.05))
+    const AMS_THEME = {
+        textBright: 'rgba(255, 255, 255, 0.86)',
+        textPrimary: 'var(--secondary-foreground, rgba(255, 255, 255, 0.75))',
+        textMuted: 'var(--muted-foreground, rgba(255, 255, 255, 0.48))',
+        textFaint: 'rgba(255, 255, 255, 0.26)',
+        surfacePill: 'rgba(255, 255, 255, 0.03)',
+        surfaceHover: 'rgba(255, 255, 255, 0.055)',
+        borderSubtle: 'rgba(255, 255, 255, 0.065)',
+        borderHover: 'rgba(255, 255, 255, 0.12)',
+        // Low-chroma oklch() semantic accents (used sparingly on 10px icons, never loud neon boxes)
+        sage: '#75b092',    // oklch(72% 0.075 155) — warm cache / active stream
+        sand: '#c29b61',    // oklch(74% 0.075 75)  — cold cache / idle notice
+        coral: '#c7746e',   // oklch(68% 0.095 25)  — critical <10% quota
+    };
+
+    const myInstanceId = Date.now() + '_' + Math.random();
+    window.__ams_active_instance_id = myInstanceId;
 
     function ensureCleanUiStyles() {
         let st = document.getElementById('ams-clean-ui-override');
@@ -1262,14 +1281,31 @@ const amsScriptContent = `(async function() {
             '.antigravity-ultra-badge,' +
             '.ams-models-ultra-pill,' +
             '.antigravity-quota-display,' +
+            '#antigravity-quota-display-v2,' +
+            '#antigravity-composer-status-strip,' +
             '.antigravity-turn-cost-badge,' +
+            '.antigravity-turn-cost-badge-v2,' +
             '#antigravity-chat-token-counter,' +
             '#antigravity-live-send-estimator,' +
             '#antigravity-model-trigger-loss-pill,' +
             '#antigravity-model-switch-popover,' +
             '.antigravity-sidebar-chat-meta,' +
-            '#antigravity-models-usage-intelligence {' +
+            '.antigravity-sidebar-chat-meta-v2,' +
+            '#antigravity-models-usage-intelligence,' +
+            '#antigravity-models-usage-intelligence-v2 {' +
             '  display: none !important;' +
+            '}' +
+            '.antigravity-quickmenu-btn {' +
+            '  background: rgba(255, 255, 255, 0.03) !important;' +
+            '  border: 1px solid rgba(255, 255, 255, 0.07) !important;' +
+            '  height: 24px !important;' +
+            '  border-radius: 6px !important;' +
+            '}' +
+            '.antigravity-quickmenu-btn span {' +
+            '  background: none !important;' +
+            '  -webkit-text-fill-color: rgba(255, 255, 255, 0.72) !important;' +
+            '  color: rgba(255, 255, 255, 0.72) !important;' +
+            '  font-weight: 600 !important;' +
             '}';
         if (st.textContent !== css) {
             st.textContent = css;
@@ -1492,9 +1528,11 @@ const amsScriptContent = `(async function() {
 
     let runningPollTimer = null;
     function scheduleRunningConvPoll() {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         if (runningPollTimer) return;
         runningPollTimer = setTimeout(async () => {
             runningPollTimer = null;
+            if (window.__ams_active_instance_id !== myInstanceId) return;
             let stillRunning = false;
             for (const [cid, info] of amsTelemetryState.liveTrajectoriesMap.entries()) {
                 if (info.isRunning && window.electronNative && window.electronNative.getTokenStats) {
@@ -1502,13 +1540,12 @@ const amsScriptContent = `(async function() {
                     try {
                         const res = await window.electronNative.getTokenStats(cid);
                         if (res && res.status === 'success') {
-                            window.amsIngestTokenStatsResult(res, cid === currentConvId);
+                            window.amsIngestTokenStatsResult(res, cid === getActiveCascadeId());
                         }
                     } catch (_) {}
                 }
             }
             fetchUserQuotaSummary();
-            // Keep polling every 2s while any agent chat is actively working so the user sees tokens & % climb live!
             if (stillRunning) {
                 fetchAllCascadeTrajectories();
             }
@@ -1964,10 +2001,10 @@ const amsScriptContent = `(async function() {
         const flexContainer = addContextBtn ? addContextBtn.parentElement : null;
         if (!flexContainer) return;
 
-        let quotaEl = document.getElementById('antigravity-quota-display-v2');
+        let quotaEl = document.getElementById('antigravity-quota-display-v3');
         if (!quotaEl) {
             quotaEl = document.createElement('div');
-            quotaEl.id = 'antigravity-quota-display-v2';
+            quotaEl.id = 'antigravity-quota-display-v3';
             quotaEl.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -2009,65 +2046,55 @@ const amsScriptContent = `(async function() {
         const remPromptsXL = Math.round(gWExact / 0.400);
 
         const tooltipText = isDe
-            ? \`✦ Google AI Ultra · Gemini Quota (Exakt):\\n\` +
+            ? \`Gemini Quota (Exakt):\\n\` +
               \`• Weekly-Limit: \${gWExact.toFixed(4)}% übrig (-\${(100 - gWExact).toFixed(4)}% verbraucht · Reset: \${gWReset})\\n\` +
               \`• 5-Stunden-Limit: \${g5hExact.toFixed(4)}% übrig (-\${(100 - g5hExact).toFixed(4)}% verbraucht · Reset: \${g5hReset})\\n\\n\` +
-              \`Verbleibendes Ultra-Kontingent (aus \${gWExact.toFixed(2)}% Weekly):\\n\` +
+              \`Verbleibendes Kontingent (aus \${gWExact.toFixed(2)}% Weekly):\\n\` +
               \`• ~\${remStepsW.toLocaleString('de-DE')} Agent-Steps\\n\` +
               \`• ~\${remPromptsS.toLocaleString('de-DE')} Kurze Prompts (Typ S · 1–2 Steps)\\n\` +
               \`• ~\${remPromptsM.toLocaleString('de-DE')} Kleine Tasks (Typ M · ~8 Steps)\\n\` +
               \`• ~\${remPromptsL.toLocaleString('de-DE')} Komplexe Coding-Tasks (Typ L · ~25 Steps)\\n\` +
               \`• ~\${remPromptsXL.toLocaleString('de-DE')} Große Deep-Dives (Typ XL · ~80 Steps)\\n\` +
-              \`(Klicken für das vollständige Models & Usage Dossier)\`
-            : \`✦ Google AI Ultra · Gemini Quota (Exact):\\n\` +
+              \`(Klicken für Models & Usage)\`
+            : \`Gemini Quota (Exact):\\n\` +
               \`• Weekly Limit: \${gWExact.toFixed(4)}% left (-\${(100 - gWExact).toFixed(4)}% used · Reset: \${gWReset})\\n\` +
               \`• 5-Hour Limit: \${g5hExact.toFixed(4)}% left (-\${(100 - g5hExact).toFixed(4)}% used · Reset: \${g5hReset})\\n\\n\` +
-              \`Remaining Ultra Capacity (from \${gWExact.toFixed(2)}% Weekly):\\n\` +
+              \`Remaining Capacity (from \${gWExact.toFixed(2)}% Weekly):\\n\` +
               \`• ~\${remStepsW.toLocaleString('en-US')} Agent Steps\\n\` +
               \`• ~\${remPromptsS.toLocaleString('en-US')} Quick Prompts (Type S · 1–2 steps)\\n\` +
               \`• ~\${remPromptsM.toLocaleString('en-US')} Small Tasks (Type M · ~8 steps)\\n\` +
               \`• ~\${remPromptsL.toLocaleString('en-US')} Complex Coding Tasks (Type L · ~25 steps)\\n\` +
               \`• ~\${remPromptsXL.toLocaleString('en-US')} Autonomous Deep-Dives (Type XL · ~80 steps)\\n\` +
-              \`(Click to open full Models & Usage Dossier)\`;
+              \`(Click to open Models & Usage)\`;
 
-        function getPercentColorHex(pct) {
-            if (pct > 45) return '#34d399';
-            if (pct > 20) return '#fbbf24';
-            return '#f87171';
+        function getToneColor(pct) {
+            if (pct < 10) return AMS_THEME.coral;
+            return AMS_THEME.textBright;
         }
 
         quotaEl.style.cssText =
-            'display:inline-flex;align-items:center;gap:5px;margin-left:6px;margin-right:4px;' +
+            'display:inline-flex;align-items:center;margin-left:6px;margin-right:4px;' +
             'font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;' +
             'white-space:nowrap;flex-shrink:0;user-select:none;cursor:pointer;';
         quotaEl.title = tooltipText;
 
-        // Unified Single-Line Quota Pill (Weekly + 5h — never wraps, never collides with right buttons)
         const unifiedQuotaPill = document.createElement('span');
-        unifiedQuotaPill.className = 'antigravity-quota-pill-v2';
+        unifiedQuotaPill.className = 'antigravity-quota-pill-v3';
         unifiedQuotaPill.style.cssText =
-            'display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:5px;' +
-            'background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.09);font-size:10.5px;white-space:nowrap;';
+            \`display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:6px;\` +
+            \`background:\${AMS_THEME.surfacePill};border:1px solid \${AMS_THEME.borderSubtle};font-size:11px;white-space:nowrap;\`;
         unifiedQuotaPill.innerHTML =
-            \`<span style="display:inline-flex;align-items:center;gap:3px;">\` +
-                \`<span style="color:#94a3b8;font-weight:500;">W</span>\` +
-                \`<strong style="color:\${getPercentColorHex(gWExact)};font-weight:700;">\${gWExact.toFixed(2)}%</strong>\` +
+            \`<span style="display:inline-flex;align-items:center;gap:3.5px;">\` +
+                \`<span style="color:\${AMS_THEME.textMuted};font-weight:400;">W</span>\` +
+                \`<span style="color:\${getToneColor(gWExact)};font-weight:500;">\${gWExact.toFixed(2)}%</span>\` +
             \`</span>\` +
-            \`<span style="opacity:0.25;">·</span>\` +
-            \`<span style="display:inline-flex;align-items:center;gap:3px;">\` +
-                \`<span style="color:#94a3b8;font-weight:500;">5h</span>\` +
-                \`<strong style="color:\${getPercentColorHex(g5hExact)};font-weight:600;">\${g5hExact.toFixed(1)}%</strong>\` +
+            \`<span style="color:\${AMS_THEME.textFaint};">·</span>\` +
+            \`<span style="display:inline-flex;align-items:center;gap:3.5px;">\` +
+                \`<span style="color:\${AMS_THEME.textMuted};font-weight:400;">5h</span>\` +
+                \`<span style="color:\${getToneColor(g5hExact)};font-weight:500;">\${g5hExact.toFixed(1)}%</span>\` +
             \`</span>\`;
 
         quotaEl.replaceChildren(unifiedQuotaPill);
-
-        // Keep legacy inline toolbar elements hidden so the button row never overflows
-        const legacyChatTokenEl = document.getElementById('antigravity-chat-token-counter');
-        if (legacyChatTokenEl) legacyChatTokenEl.style.display = 'none';
-        const legacyEstimatorEl = document.getElementById('antigravity-live-send-estimator');
-        if (legacyEstimatorEl) legacyEstimatorEl.style.display = 'none';
-        const legacyTriggerPill = document.getElementById('antigravity-model-trigger-loss-pill');
-        if (legacyTriggerPill) legacyTriggerPill.style.display = 'none';
 
         // Update the clean full-width Composer Status Strip below the button row
         updateComposerStatusStrip();
@@ -2087,16 +2114,26 @@ const amsScriptContent = `(async function() {
     }
 
     // ----------------------------------------------------------------------------
-    // 6. Clean Full-Width Composer Status Strip (Below Toolbar — Zero Overlap!)
+    // 6. Clean Full-Width Composer Status Strip (Native Antigravity Aesthetic)
     // ----------------------------------------------------------------------------
+    let lastRequestedTokenStatsCid = null;
+    let lastRequestedTokenStatsTs = 0;
+
     function getActiveCascadeId() {
-        if (currentConvId) return currentConvId;
-        const selectedRow = document.querySelector('[data-testid="conversation-row-sidebar"][data-selected="true"][data-cascade-id]');
-        if (selectedRow) return selectedRow.getAttribute('data-cascade-id');
-        if (amsTelemetryState.activeConvStats && amsTelemetryState.activeConvStats.cascadeId) {
-            return amsTelemetryState.activeConvStats.cascadeId;
+        const parts = window.location.pathname.split('/');
+        if (parts.length > 2 && parts[1] === 'c' && parts[2]) {
+            currentConvId = parts[2];
+            return parts[2];
         }
-        return null;
+        const selectedRow = document.querySelector('[data-testid="conversation-row-sidebar"][data-selected="true"][data-cascade-id]');
+        if (selectedRow) {
+            const cid = selectedRow.getAttribute('data-cascade-id');
+            if (cid) {
+                currentConvId = cid;
+                return cid;
+            }
+        }
+        return currentConvId || null;
     }
 
     function getComposerInputText() {
@@ -2108,12 +2145,6 @@ const amsScriptContent = `(async function() {
     }
 
     function updateComposerStatusStrip() {
-        // Hide any legacy inline items inside the narrow button row
-        const legacyChatTokenEl = document.getElementById('antigravity-chat-token-counter');
-        if (legacyChatTokenEl) legacyChatTokenEl.style.display = 'none';
-        const legacyEstimatorEl = document.getElementById('antigravity-live-send-estimator');
-        if (legacyEstimatorEl) legacyEstimatorEl.style.display = 'none';
-
         const addContextBtn = document.querySelector('button[aria-label="Add context"]');
         if (!addContextBtn || !addContextBtn.parentElement) return;
         const buttonRow = addContextBtn.parentElement;
@@ -2121,27 +2152,43 @@ const amsScriptContent = `(async function() {
         const composerCard = toolbarFooter ? toolbarFooter.parentElement : null;
         if (!composerCard) return;
 
-        let stripEl = document.getElementById('antigravity-composer-status-strip');
+        let stripEl = document.getElementById('antigravity-composer-status-strip-v3');
         if (!stripEl) {
             stripEl = document.createElement('div');
-            stripEl.id = 'antigravity-composer-status-strip';
+            stripEl.id = 'antigravity-composer-status-strip-v3';
             stripEl.style.cssText =
-                'display:none;align-items:center;justify-content:space-between;gap:10px;width:100%;' +
-                'padding:5px 8px 3px 8px;margin-top:2px;border-top:1px solid rgba(255,255,255,0.06);' +
-                'font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:11px;' +
-                'font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;user-select:none;';
+                \`display:none;align-items:center;justify-content:space-between;gap:12px;width:100%;\` +
+                \`padding:5px 6px 2px 6px;margin-top:4px;border-top:1px solid rgba(255,255,255,0.045);\` +
+                \`font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:11px;\` +
+                \`color:\${AMS_THEME.textMuted};font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;user-select:none;\`;
             composerCard.appendChild(stripEl);
         } else if (stripEl.parentElement !== composerCard) {
             composerCard.appendChild(stripEl);
         }
 
         const rawText = getComposerInputText().trim();
-        const activeId = currentConvId || getActiveCascadeId();
+        const activeId = getActiveCascadeId();
+
+        // If user switched chats in the sidebar, fetch active chat stats immediately so UI never lags or shows another chat
+        if (activeId && (!amsTelemetryState.activeConvStats || amsTelemetryState.activeConvStats.cascadeId !== activeId)) {
+            const now = Date.now();
+            if ((lastRequestedTokenStatsCid !== activeId || now - lastRequestedTokenStatsTs > 2500) && window.electronNative && window.electronNative.getTokenStats) {
+                lastRequestedTokenStatsCid = activeId;
+                lastRequestedTokenStatsTs = now;
+                window.electronNative.getTokenStats(activeId).then((res) => {
+                    if (res && res.status === 'success') {
+                        window.amsIngestTokenStatsResult(res, activeId === getActiveCascadeId());
+                    }
+                }).catch(() => {});
+            }
+        }
+
         const cacheInfo = activeId ? getChatCacheState(activeId) : null;
-        const stats = amsTelemetryState.activeConvStats;
+        const stats = (amsTelemetryState.activeConvStats && amsTelemetryState.activeConvStats.cascadeId === activeId)
+            ? amsTelemetryState.activeConvStats
+            : (activeId ? amsTelemetryState.recentChatsMap.get(activeId) : null);
         const hasHistory = !!(cacheInfo && cacheInfo.stepCount > 0);
 
-        // If brand new chat and nothing typed yet, keep composer completely clean
         if (!hasHistory && !rawText) {
             stripEl.style.display = 'none';
             return;
@@ -2150,34 +2197,29 @@ const amsScriptContent = `(async function() {
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
         stripEl.style.display = 'flex';
 
-        // Left Side: Human-readable Chat Warmth & Total Chat Usage
+        // Left Side: Quiet, Native-styled Status + Total Chat Usage (No loud colored boxes!)
         let leftHtml = '';
         if (!hasHistory) {
             leftHtml =
-                \`<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:rgba(16,185,129,0.10);border:1px solid rgba(16,185,129,0.28);color:#34d399;font-weight:600;font-size:10.5px;">\` +
-                    \`\${amsIcon('sparkles', 10, '#34d399')}<span>\${isDe ? 'Neuer Chat · Bereit' : 'New Chat · Ready'}</span>\` +
+                \`<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:\${AMS_THEME.textPrimary};">\` +
+                    \`\${amsIcon('sparkles', 10, AMS_THEME.sage)}<span>\${isDe ? 'Neuer Chat' : 'New chat'}</span>\` +
                 \`</span>\`;
         } else {
-            let statusChip = '';
+            let statusLabel = '';
             if (cacheInfo.isRunning) {
-                statusChip =
-                    \`<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:rgba(16,185,129,0.14);border:1px solid rgba(16,185,129,0.40);color:#34d399;font-weight:700;font-size:10.5px;">\` +
-                        \`\${amsIcon('zap', 10, '#34d399')}<span>\${isDe ? \`Arbeitet live · Step #\${cacheInfo.stepCount}\` : \`Working live · Step #\${cacheInfo.stepCount}\`}</span>\` +
+                statusLabel =
+                    \`<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:\${AMS_THEME.textPrimary};font-weight:500;">\` +
+                        \`\${amsIcon('zap', 10, AMS_THEME.sage)}<span>\${isDe ? \`Aktiv · Step #\${cacheInfo.stepCount}\` : \`Active · Step #\${cacheInfo.stepCount}\`}</span>\` +
                     \`</span>\`;
             } else if (cacheInfo.state === 'warm') {
-                statusChip =
-                    \`<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:rgba(16,185,129,0.10);border:1px solid rgba(16,185,129,0.28);color:#34d399;font-weight:600;font-size:10.5px;">\` +
-                        \`\${amsIcon('flame', 10, '#34d399')}<span>\${isDe ? \`Cache warm (\${formatDurationShort(cacheInfo.remainingGuaranteedSec)})\` : \`Cache warm (\${formatDurationShort(cacheInfo.remainingGuaranteedSec)})\`}</span>\` +
-                    \`</span>\`;
-            } else if (cacheInfo.state === 'lukewarm') {
-                statusChip =
-                    \`<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.38);color:#fbbf24;font-weight:600;font-size:10.5px;">\` +
-                        \`\${amsIcon('alert', 10, '#fbbf24')}<span>\${isDe ? \`5m-Garantie um (\${formatDurationShort(cacheInfo.idleSec)} Pause)\` : \`5m TTL expired (\${formatDurationShort(cacheInfo.idleSec)} idle)\`}</span>\` +
+                statusLabel =
+                    \`<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:\${AMS_THEME.textPrimary};font-weight:500;">\` +
+                        \`\${amsIcon('flame', 10, AMS_THEME.sage)}<span>\${isDe ? \`Warm (\${formatDurationShort(cacheInfo.remainingGuaranteedSec)})\` : \`Warm (\${formatDurationShort(cacheInfo.remainingGuaranteedSec)})\`}</span>\` +
                     \`</span>\`;
             } else {
-                statusChip =
-                    \`<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#f87171;font-weight:600;font-size:10.5px;">\` +
-                        \`\${amsIcon('snowflake', 10, '#f87171')}<span>\${isDe ? \`Chat kalt (\${formatDurationShort(cacheInfo.idleSec)} Pause)\` : \`Chat cold (\${formatDurationShort(cacheInfo.idleSec)} idle)\`}</span>\` +
+                statusLabel =
+                    \`<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:\${AMS_THEME.textPrimary};font-weight:500;">\` +
+                        \`\${amsIcon('snowflake', 10, AMS_THEME.sand)}<span>\${isDe ? \`Kalt (\${formatDurationShort(cacheInfo.idleSec)} Pause)\` : \`Cold (\${formatDurationShort(cacheInfo.idleSec)} idle)\`}</span>\` +
                     \`</span>\`;
             }
 
@@ -2185,15 +2227,16 @@ const amsScriptContent = `(async function() {
             const ratioStr = Math.round((stats && stats.cacheRatio) || cacheInfo.cacheRatio || 0);
             leftHtml =
                 \`<div style="display:inline-flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">\` +
-                    statusChip +
-                    \`<span style="color:#94a3b8;font-size:10.5px;">\` +
-                        \`\${isDe ? 'Chat bisher:' : 'Chat used:'} <strong style="color:#e2e8f0;font-weight:600;">-\${wUsedStr}% W</strong> \` +
-                        \`<span style="opacity:0.7;">(\${ratioStr}% Cache)</span>\` +
+                    statusLabel +
+                    \`<span style="color:\${AMS_THEME.textFaint};">·</span>\` +
+                    \`<span style="color:\${AMS_THEME.textMuted};">\` +
+                        \`Chat <span style="color:\${AMS_THEME.textPrimary};font-weight:500;">-\${wUsedStr}% W</span> \` +
+                        \`<span style="opacity:0.75;">(\${ratioStr}% Cache)</span>\` +
                     \`</span>\` +
                 \`</div>\`;
         }
 
-        // Right Side: What happens on Next Send (1 clear number + 1 button if cold)
+        // Right Side: Next message estimate (Calm monochrome + subtle ghost button when cold)
         const typedTokens = rawText ? Math.max(1, Math.round(rawText.length / 3.6)) : 120;
         const ctxTokens = hasHistory ? cacheInfo.contextTokens : 24500;
         const estOutTokens = 850;
@@ -2203,29 +2246,26 @@ const amsScriptContent = `(async function() {
         const activeWeighted = isWarm ? weightedWarm : weightedCold;
 
         const estWeeklyPct = (activeWeighted * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
-        const est5hPct = (activeWeighted * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
+        const est5hPct = (activeWeighted * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(2);
         const extraLossWeeklyPct = Math.max(0, (weightedCold - weightedWarm) * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
 
         let rightHtml = '';
         if (isWarm) {
             rightHtml =
-                \`<div style="display:inline-flex;align-items:center;gap:6px;color:#94a3b8;font-size:10.5px;flex-shrink:0;">\` +
-                    \`<span style="display:inline-flex;align-items:center;gap:3px;color:#7dd3fc;">\` +
-                        \`\${amsIcon('enter', 10, '#7dd3fc')}\` +
-                        \`<span>\${rawText ? (isDe ? 'Senden:' : 'Send:') : (isDe ? 'Nächste Nachricht:' : 'Next msg:')}</span>\` +
-                        \`<strong style="color:#bae6fd;font-weight:600;">~ -\${estWeeklyPct}% W</strong>\` +
-                    \`</span>\` +
-                    \`<span style="opacity:0.6;">(-\${est5hPct}% 5h)</span>\` +
+                \`<div style="display:inline-flex;align-items:center;gap:5px;color:\${AMS_THEME.textMuted};flex-shrink:0;">\` +
+                    \`<span>\${rawText ? (isDe ? 'Senden' : 'Send') : (isDe ? 'Nächste Nachricht' : 'Next msg')}</span>\` +
+                    \`<span style="color:\${AMS_THEME.textPrimary};font-weight:500;">~ -\${estWeeklyPct}% W</span>\` +
+                    \`<span style="opacity:0.65;">(-\${est5hPct}% 5h)</span>\` +
                 \`</div>\`;
         } else {
             rightHtml =
-                \`<div style="display:inline-flex;align-items:center;gap:7px;font-size:10.5px;flex-shrink:0;">\` +
-                    \`<span style="display:inline-flex;align-items:center;gap:4px;color:#fbbf24;">\` +
-                        \`\${amsIcon('alert', 10, '#fbbf24')}\` +
-                        \`<span>\${isDe ? 'Kalt-Senden:' : 'Cold send:'} <strong>-\${estWeeklyPct}% W</strong> <span style="opacity:0.85;">(-\${extraLossWeeklyPct}% W \${isDe ? 'Verlust' : 'loss'})</span></span>\` +
+                \`<div style="display:inline-flex;align-items:center;gap:8px;flex-shrink:0;">\` +
+                    \`<span style="color:\${AMS_THEME.textMuted};">\` +
+                        \`\${isDe ? 'Kalt-Senden' : 'Cold send'} <span style="color:\${AMS_THEME.sand};font-weight:500;">-\${estWeeklyPct}% W</span> \` +
+                        \`<span style="opacity:0.75;">(-\${extraLossWeeklyPct}% \${isDe ? 'Verlust' : 'loss'})</span>\` +
                     \`</span>\` +
-                    \`<button type="button" class="antigravity-inline-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 7px;border-radius:4px;border:1px solid rgba(52,211,153,0.45);background:rgba(16,185,129,0.16);color:#6ee7b7;font-size:10px;font-weight:700;cursor:pointer;transition:background 0.15s ease;">\` +
-                        \`\${amsIcon('plus', 9, '#6ee7b7')}<span>\${isDe ? 'Neuer Chat' : 'New Chat'}</span>\` +
+                    \`<button type="button" class="antigravity-inline-newchat-btn" style="display:inline-flex;align-items:center;gap:3.5px;height:20px;padding:0 7px;border-radius:5px;border:1px solid \${AMS_THEME.borderHover};background:\${AMS_THEME.surfaceHover};color:\${AMS_THEME.textBright};font-size:10.5px;font-weight:500;cursor:pointer;transition:background 0.15s ease;">\` +
+                        \`\${amsIcon('plus', 9, AMS_THEME.textPrimary)}<span>\${isDe ? 'Neuer Chat' : 'New Chat'}</span>\` +
                     \`</button>\` +
                 \`</div>\`;
         }
@@ -2274,11 +2314,13 @@ const amsScriptContent = `(async function() {
     }, true);
 
     // ----------------------------------------------------------------------------
-    // 7. Per-Message Post-Turn Cost Badges in Chat Stream (Clean 3-Chip Single-Line)
+    // 7. Per-Message Post-Turn Cost Line (Quiet Native Inline Metadata)
     // ----------------------------------------------------------------------------
     function renderPerMessageTurnBadges() {
+        const activeId = getActiveCascadeId();
         const stats = amsTelemetryState.activeConvStats;
-        if (!stats || !Array.isArray(stats.turns) || stats.turns.length === 0) return;
+        if (!stats || (activeId && stats.cascadeId && stats.cascadeId !== activeId)) return;
+        if (!Array.isArray(stats.turns) || stats.turns.length === 0) return;
 
         const agentArticles = Array.from(document.querySelectorAll('[role="article"][aria-label="Agent response"]'));
         if (agentArticles.length === 0) return;
@@ -2290,17 +2332,18 @@ const amsScriptContent = `(async function() {
             const turn = turns[idx] || (idx === agentArticles.length - 1 ? turns[turns.length - 1] : null);
             if (!turn || !turn.steps) return;
 
-            let badge = article.querySelector('.antigravity-turn-cost-badge-v2');
+            let badge = article.querySelector('.antigravity-turn-cost-badge-v3');
             if (!badge) {
                 badge = document.createElement('div');
-                badge.className = 'antigravity-turn-cost-badge-v2';
+                badge.className = 'antigravity-turn-cost-badge-v3';
                 article.appendChild(badge);
             }
             badge.style.cssText =
-                'display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:0;' +
-                'font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:11px;' +
-                'font-variant-numeric:tabular-nums;white-space:nowrap;max-width:100%;overflow-x:auto;' +
-                'color:var(--muted-foreground,#94a3b8);user-select:none;cursor:help;';
+                \`display:inline-flex;align-items:center;gap:8px;margin-top:6px;padding:3px 9px;border-radius:6px;\` +
+                \`background:\${AMS_THEME.surfacePill};border:1px solid \${AMS_THEME.borderSubtle};\` +
+                \`font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:11px;\` +
+                \`font-variant-numeric:tabular-nums;white-space:nowrap;max-width:100%;overflow-x:auto;\` +
+                \`color:\${AMS_THEME.textMuted};user-select:none;cursor:help;\`;
 
             const cachePct = turn.totalInput > 0 ? Math.round((turn.cached / turn.totalInput) * 100) : 0;
             const wPct = Number(turn.weeklyPct || 0).toFixed(4);
@@ -2311,34 +2354,36 @@ const amsScriptContent = `(async function() {
             const savedTurnW = (savedTurnTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(2);
             const savedTurn5h = (savedTurnTokens * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(2);
 
-            // Chip 1: Quota Used
-            const quotaChip =
-                \`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.22);color:#e2e8f0;">\` +
-                    \`\${amsIcon('zap', 10, '#38bdf8')}\` +
-                    \`<strong style="color:#38bdf8;font-weight:700;">-\${wPct}% W</strong>\` +
-                    \`<span style="opacity:0.65;font-size:10px;">(-\${hPct}% 5h)</span>\` +
+            const quotaSegment =
+                \`<span style="display:inline-flex;align-items:center;gap:4px;">\` +
+                    \`<span style="color:\${AMS_THEME.textPrimary};font-weight:500;">-\${wPct}% W</span>\` +
+                    \`<span style="opacity:0.7;">(-\${hPct}% 5h)</span>\` +
                 \`</span>\`;
 
-            // Chip 2: Cache Hit / Miss Status
-            const cacheChip = turn.cacheMiss
-                ? \`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.28);color:#fbbf24;font-weight:600;">\` +
-                      \`\${amsIcon('snowflake', 10, '#fbbf24')}\` +
-                      \`<span>Cache-Miss · -\${Number(turn.wastedWeeklyPct || 0).toFixed(3)}% W \${isDe ? 'verloren' : 'lost'}</span>\` +
+            const cacheSegment = turn.cacheMiss
+                ? \`<span style="display:inline-flex;align-items:center;gap:4px;color:\${AMS_THEME.sand};">\` +
+                      \`\${amsIcon('snowflake', 10, AMS_THEME.sand)}\` +
+                      \`<span>Cache-Miss (-\${Number(turn.wastedWeeklyPct || 0).toFixed(3)}% W)</span>\` +
                   \`</span>\`
-                : \`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.22);color:#34d399;font-weight:600;">\` +
-                      \`\${amsIcon('flame', 10, '#34d399')}\` +
-                      \`<span>\${cachePct}% Cache · +\${savedTurnW}% W \${isDe ? 'gespart' : 'saved'}</span>\` +
+                : \`<span style="display:inline-flex;align-items:center;gap:4px;">\` +
+                      \`\${amsIcon('flame', 10, AMS_THEME.sage)}\` +
+                      \`<span style="color:\${AMS_THEME.textPrimary};">\${cachePct}% Cache</span>\` +
+                      \`<span style="opacity:0.75;">(+\${savedTurnW}% W \${isDe ? 'gespart' : 'saved'})</span>\` +
                   \`</span>\`;
 
-            // Chip 3: Steps & Euro Summary
-            const metaChip =
-                \`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);color:#94a3b8;font-size:10.5px;">\` +
+            const metaSegment =
+                \`<span style="display:inline-flex;align-items:center;gap:6px;">\` +
                     \`<span>\${turn.steps} \${turn.steps === 1 ? 'Step' : 'Steps'}</span>\` +
-                    \`<span style="opacity:0.4;">·</span>\` +
-                    \`<span style="color:#fcd34d;font-weight:600;">~\${eurStr} €</span>\` +
+                    \`<span style="color:\${AMS_THEME.textFaint};">·</span>\` +
+                    \`<span style="color:\${AMS_THEME.textPrimary};">~\${eurStr} €</span>\` +
                 \`</span>\`;
 
-            badge.innerHTML = quotaChip + cacheChip + metaChip;
+            const dot = \`<span style="color:\${AMS_THEME.textFaint};">·</span>\`;
+            const html = quotaSegment + dot + cacheSegment + dot + metaSegment;
+            if (badge.getAttribute('data-sig') !== html) {
+                badge.setAttribute('data-sig', html);
+                badge.innerHTML = html;
+            }
 
             badge.title = isDe
                 ? \`Details zu dieser KI-Antwort (\${turn.steps} Steps):\\n\` +
@@ -2355,7 +2400,7 @@ const amsScriptContent = `(async function() {
     }
 
     // ----------------------------------------------------------------------------
-    // 8. Left Navigation Sidebar Conversation Badges & Cold-Chat Warning Popover
+    // 8. Left Navigation Sidebar Conversation Badges & Cold-Chat Popover
     // ----------------------------------------------------------------------------
     let activeColdPopover = null;
     let activeColdPopoverConvId = null;
@@ -2383,8 +2428,8 @@ const amsScriptContent = `(async function() {
         pop.className = 'antigravity-modal-overlay';
         pop.style.cssText =
             'position:fixed;z-index:999999;width:335px;padding:12px 14px;border-radius:10px;' +
-            'background:rgba(18,18,22,0.97);backdrop-filter:blur(16px);border:1px solid rgba(245,158,11,0.42);' +
-            'box-shadow:0 16px 36px rgba(0,0,0,0.65);color:#f8fafc;font-family:ui-sans-serif,system-ui,sans-serif;' +
+            'background:rgba(20,20,22,0.98);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.10);' +
+            'box-shadow:0 16px 36px rgba(0,0,0,0.65);color:rgba(255,255,255,0.88);font-family:ui-sans-serif,system-ui,sans-serif;' +
             'font-size:11.5px;line-height:1.45;font-variant-numeric:tabular-nums;';
 
         const top = Math.min(window.innerHeight - 250, Math.max(12, rect.bottom + 6));
@@ -2394,30 +2439,28 @@ const amsScriptContent = `(async function() {
 
         const isWarm = cacheInfo.state === 'warm' || cacheInfo.isRunning;
         const statusHeader = isWarm
-            ? \`\${amsIcon('flame', 12, '#34d399')} <span>\${isDe ? \`Prompt-Cache ist WARM (\${formatDurationShort(cacheInfo.remainingGuaranteedSec)} garantiert)\` : \`Prompt Cache is WARM (\${formatDurationShort(cacheInfo.remainingGuaranteedSec)} guaranteed)\`}</span>\`
-            : cacheInfo.state === 'lukewarm'
-                ? \`\${amsIcon('alert', 12, '#fbbf24')} <span>\${isDe ? \`5-Minuten-Garantie abgelaufen (Pause: \${formatDurationShort(cacheInfo.idleSec)})\` : \`5-Minute Guarantee Expired (Idle: \${formatDurationShort(cacheInfo.idleSec)})\`}</span>\`
-                : \`\${amsIcon('snowflake', 12, '#f87171')} <span>\${isDe ? \`Chat ist KALT (Pause: \${formatDurationShort(cacheInfo.idleSec)})\` : \`Chat is COLD (Idle: \${formatDurationShort(cacheInfo.idleSec)})\`}</span>\`;
+            ? \`\${amsIcon('flame', 12, AMS_THEME.sage)} <span>\${isDe ? \`Prompt-Cache ist warm (\${formatDurationShort(cacheInfo.remainingGuaranteedSec)})\` : \`Prompt Cache is warm (\${formatDurationShort(cacheInfo.remainingGuaranteedSec)})\`}</span>\`
+            : \`\${amsIcon('snowflake', 12, AMS_THEME.sand)} <span>\${isDe ? \`Chat ist kalt (Pause: \${formatDurationShort(cacheInfo.idleSec)})\` : \`Chat is cold (Idle: \${formatDurationShort(cacheInfo.idleSec)})\`}</span>\`;
 
         pop.innerHTML =
-            \`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.08);">\` +
-                \`<strong style="display:inline-flex;align-items:center;gap:5px;color:\${isWarm ? '#34d399' : '#fbbf24'};font-size:12px;">\${statusHeader}</strong>\` +
-                \`<button type="button" class="ams-cold-pop-close" style="display:inline-flex;align-items:center;background:transparent;border:none;color:#94a3b8;cursor:pointer;padding:2px;">\${amsIcon('close', 12, '#94a3b8')}</button>\` +
+            \`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.07);">\` +
+                \`<strong style="display:inline-flex;align-items:center;gap:5px;color:\${AMS_THEME.textBright};font-size:12px;font-weight:600;">\${statusHeader}</strong>\` +
+                \`<button type="button" class="ams-cold-pop-close" style="display:inline-flex;align-items:center;background:transparent;border:none;color:\${AMS_THEME.textMuted};cursor:pointer;padding:2px;">\${amsIcon('close', 12, AMS_THEME.textMuted)}</button>\` +
             \`</div>\` +
-            \`<div style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:#cbd5e1;">\` +
-                \`<div style="display:flex;justify-content:space-between;"><span>\${isDe ? 'Bisheriger Chat-Verbrauch:' : 'Chat Quota Used:'}</span><strong style="color:#f8fafc;">-\${cacheInfo.weeklyPctUsed.toFixed(4)}% W (-\${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)</strong></div>\` +
-                \`<div style="display:flex;justify-content:space-between;"><span>\${isDe ? 'Kontextfenster-Größe:' : 'Context Window Size:'}</span><strong style="color:#f8fafc;">\${cacheInfo.contextTokens.toLocaleString(isDe ? 'de-DE' : 'en-US')} Tokens (\${cacheInfo.stepCount} Steps)</strong></div>\` +
-                \`<div style="display:flex;justify-content:space-between;"><span>\${isDe ? 'Schreiben in WARMEN Chat (0.1x):' : 'Sending in WARM Chat (0.1x):'}</span><strong style="color:#34d399;">-\${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W (-\${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)</strong></div>\` +
-                \`<div style="display:flex;justify-content:space-between;"><span>\${isDe ? 'Schreiben in KALTEN Chat (1.0x):' : 'Sending in COLD Chat (1.0x):'}</span><strong style="color:#f87171;">-\${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W (-\${cacheInfo.coldSend5hPct.toFixed(4)}% 5h)</strong></div>\` +
-                \`<div style="margin-top:3px;padding:6px 8px;border-radius:6px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#fecaca;font-size:10.5px;">\` +
+            \`<div style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:\${AMS_THEME.textMuted};">\` +
+                \`<div style="display:flex;justify-content:space-between;"><span>\${isDe ? 'Bisheriger Chat-Verbrauch:' : 'Chat Quota Used:'}</span><span style="color:\${AMS_THEME.textBright};font-weight:500;">-\${cacheInfo.weeklyPctUsed.toFixed(4)}% W (-\${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)</span></div>\` +
+                \`<div style="display:flex;justify-content:space-between;"><span>\${isDe ? 'Kontextfenster-Größe:' : 'Context Window Size:'}</span><span style="color:\${AMS_THEME.textBright};font-weight:500;">\${cacheInfo.contextTokens.toLocaleString(isDe ? 'de-DE' : 'en-US')} Tokens (\${cacheInfo.stepCount} Steps)</span></div>\` +
+                \`<div style="display:flex;justify-content:space-between;"><span>\${isDe ? 'Schreiben im warmen Chat (0.1x):' : 'Sending in warm chat (0.1x):'}</span><span style="color:\${AMS_THEME.sage};font-weight:500;">-\${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W (-\${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)</span></div>\` +
+                \`<div style="display:flex;justify-content:space-between;"><span>\${isDe ? 'Schreiben im kalten Chat (1.0x):' : 'Sending in cold chat (1.0x):'}</span><span style="color:\${AMS_THEME.sand};font-weight:500;">-\${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W (-\${cacheInfo.coldSend5hPct.toFixed(4)}% 5h)</span></div>\` +
+                \`<div style="margin-top:4px;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);color:\${AMS_THEME.textPrimary};font-size:10.5px;">\` +
                     (isDe
-                        ? \`\${amsIcon('info', 11, '#fca5a5')} <strong>Aufpreis bei kaltem Chat:</strong> Du verlierst <strong>+\${cacheInfo.extraColdLossWeeklyPct.toFixed(4)}% Weekly</strong> (<strong>+\${cacheInfo.extraColdLoss5hPct.toFixed(4)}% 5h</strong>) extra durch das uncached Nachladen des gesamten Verlaufs!\`
-                        : \`\${amsIcon('info', 11, '#fca5a5')} <strong>Cold Reload Penalty:</strong> You lose an extra <strong>+\${cacheInfo.extraColdLossWeeklyPct.toFixed(4)}% Weekly</strong> (<strong>+\${cacheInfo.extraColdLoss5hPct.toFixed(4)}% 5h</strong>) reloading the full context uncached!\`) +
+                        ? \`\${amsIcon('info', 11, AMS_THEME.sand)} <span>Aufpreis bei kaltem Chat: <strong style="color:\${AMS_THEME.textBright};">+\${cacheInfo.extraColdLossWeeklyPct.toFixed(4)}% Weekly</strong> (+\${cacheInfo.extraColdLoss5hPct.toFixed(4)}% 5h) durch uncached Nachladen.</span>\`
+                        : \`\${amsIcon('info', 11, AMS_THEME.sand)} <span>Cold reload penalty: <strong style="color:\${AMS_THEME.textBright};">+\${cacheInfo.extraColdLossWeeklyPct.toFixed(4)}% Weekly</strong> (+\${cacheInfo.extraColdLoss5hPct.toFixed(4)}% 5h) uncached reload.</span>\`) +
                 \`</div>\` +
             \`</div>\` +
             \`<div style="display:flex;gap:8px;margin-top:10px;">\` +
-                \`<button type="button" class="ams-cold-pop-newchat" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 10px;border-radius:6px;border:1px solid rgba(52,211,153,0.45);background:linear-gradient(135deg,rgba(5,150,105,0.35),rgba(16,185,129,0.22));color:#6ee7b7;font-size:11px;font-weight:700;cursor:pointer;">\` +
-                    \`\${amsIcon('plus', 11, '#6ee7b7')}<span>\${isDe ? 'Direkt in neuen Chat springen' : 'Jump to New Chat (Save Quota)'}</span>\` +
+                \`<button type="button" class="ams-cold-pop-newchat" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:\${AMS_THEME.textBright};font-size:11px;font-weight:500;cursor:pointer;">\` +
+                    \`\${amsIcon('plus', 11, AMS_THEME.textBright)}<span>\${isDe ? 'Direkt in neuen Chat springen' : 'Jump to New Chat'}</span>\` +
                 \`</button>\` +
             \`</div>\`;
 
@@ -2437,7 +2480,7 @@ const amsScriptContent = `(async function() {
     }
 
     document.addEventListener('click', (e) => {
-        if (activeColdPopover && !activeColdPopover.contains(e.target) && !e.target.closest('.antigravity-sidebar-chat-meta-v2')) {
+        if (activeColdPopover && !activeColdPopover.contains(e.target) && !e.target.closest('.antigravity-sidebar-chat-meta-v3')) {
             closeColdChatPopover();
         }
         if (activeModelSwitchPopover && !activeModelSwitchPopover.contains(e.target) && !e.target.closest('[data-testid="model-selector-trigger"]') && !e.target.closest('[data-testid="model-selector-panel"]')) {
@@ -2450,6 +2493,7 @@ const amsScriptContent = `(async function() {
         if (!rows || rows.length === 0) return;
 
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
+        const activeId = getActiveCascadeId();
 
         rows.forEach((row) => {
             const cascadeId = row.getAttribute('data-cascade-id');
@@ -2458,20 +2502,19 @@ const amsScriptContent = `(async function() {
             const cacheInfo = getChatCacheState(cascadeId);
             if (cacheInfo.stepCount === 0 && !cacheInfo.isRunning) return;
 
-            // Locate the right-side container holding the loading spinner / timestamp
             const rightContainer = row.querySelector('.shrink-0.ml-2 .flex.items-center.gap-1\\\\.5') ||
                                    row.querySelector('.shrink-0.ml-2');
             if (!rightContainer) return;
 
-            let badge = row.querySelector('.antigravity-sidebar-chat-meta-v2');
+            let badge = row.querySelector('.antigravity-sidebar-chat-meta-v3');
             if (!badge) {
                 badge = document.createElement('span');
-                badge.className = 'antigravity-sidebar-chat-meta-v2';
+                badge.className = 'antigravity-sidebar-chat-meta-v3';
                 badge.style.cssText =
                     'display:inline-flex;align-items:center;gap:3px;padding:1px 5px;border-radius:4px;' +
-                    'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9.5px;font-weight:600;' +
+                    'font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:10.5px;font-weight:500;' +
                     'font-variant-numeric:tabular-nums;line-height:1.2;cursor:pointer;pointer-events:auto;' +
-                    'margin-right:3px;white-space:nowrap;transition:all 0.15s ease;';
+                    'margin-right:3px;white-space:nowrap;transition:opacity 0.15s ease;';
                 badge.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -2480,42 +2523,41 @@ const amsScriptContent = `(async function() {
                 rightContainer.insertBefore(badge, rightContainer.firstChild);
             }
 
-            const isSelected = row.getAttribute('data-selected') === 'true' || cascadeId === currentConvId;
+            const isSelected = row.getAttribute('data-selected') === 'true' || cascadeId === activeId;
 
             if (cacheInfo.isRunning) {
-                // LIVE Running Chat: High-visibility emerald pill with 4 decimals
-                badge.style.background = 'rgba(16, 185, 129, 0.15)';
-                badge.style.border = '1px solid rgba(16, 185, 129, 0.45)';
-                badge.style.color = '#6ee7b7';
+                // LIVE Running Chat: Subtle neutral pill + soft sage icon
+                badge.style.background = 'rgba(255, 255, 255, 0.045)';
+                badge.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+                badge.style.color = AMS_THEME.textBright;
                 badge.style.padding = '1px 5px';
                 badge.style.opacity = '1';
-                badge.innerHTML = \`\${amsIcon('zap', 10, '#6ee7b7')}<span>-\${cacheInfo.weeklyPctUsed.toFixed(4)}%</span>\`;
+                badge.innerHTML = \`\${amsIcon('zap', 9, AMS_THEME.sage)}<span>-\${cacheInfo.weeklyPctUsed.toFixed(isSelected ? 4 : 2)}%</span>\`;
             } else if (cacheInfo.state === 'warm') {
-                // WARM Chat (< 5m): Emerald pill with countdown + %
-                badge.style.background = 'rgba(16, 185, 129, 0.10)';
-                badge.style.border = '1px solid rgba(16, 185, 129, 0.30)';
-                badge.style.color = '#34d399';
-                badge.style.padding = '1px 5px';
-                badge.style.opacity = '1';
-                const remM = Math.ceil(cacheInfo.remainingGuaranteedSec / 60);
-                const wDec = isSelected ? 4 : 2;
-                badge.innerHTML = \`\${amsIcon('flame', 10, '#34d399')}<span>\${remM}m · -\${cacheInfo.weeklyPctUsed.toFixed(wDec)}%</span>\`;
-            } else if (cacheInfo.state === 'lukewarm' || (cacheInfo.idleSec < 1800 && cacheInfo.contextTokens > 25000)) {
-                // Freshly Cold (5m - 30m): Subtle Amber Pill so user knows it just cooled down
-                badge.style.background = 'rgba(245, 158, 11, 0.12)';
-                badge.style.border = '1px solid rgba(245, 158, 11, 0.35)';
-                badge.style.color = '#fbbf24';
+                // WARM Chat (< 5m): Subtle neutral pill + soft sage flame + countdown
+                badge.style.background = 'rgba(255, 255, 255, 0.035)';
+                badge.style.border = '1px solid rgba(255, 255, 255, 0.065)';
+                badge.style.color = AMS_THEME.textPrimary;
                 badge.style.padding = '1px 5px';
                 badge.style.opacity = '0.95';
-                badge.innerHTML = \`\${amsIcon('snowflake', 9, '#fbbf24')}<span>-\${cacheInfo.weeklyPctUsed.toFixed(2)}%</span>\`;
+                const remM = Math.ceil(cacheInfo.remainingGuaranteedSec / 60);
+                badge.innerHTML = \`\${amsIcon('flame', 9, AMS_THEME.sage)}<span>\${remM}m · -\${cacheInfo.weeklyPctUsed.toFixed(2)}%</span>\`;
+            } else if (cacheInfo.state === 'lukewarm' || (cacheInfo.idleSec < 1800 && cacheInfo.contextTokens > 25000)) {
+                // Recently cooled down (5m - 30m): Borderless quiet label with tiny soft sand snowflake
+                badge.style.background = 'transparent';
+                badge.style.border = '1px solid transparent';
+                badge.style.color = AMS_THEME.textMuted;
+                badge.style.padding = '0 2px';
+                badge.style.opacity = '0.85';
+                badge.innerHTML = \`\${amsIcon('snowflake', 9, AMS_THEME.sand)}<span>-\${cacheInfo.weeklyPctUsed.toFixed(2)}%</span>\`;
             } else {
-                // Old Cold Chats (> 30m ago): Quiet, borderless label so the sidebar stays clean and uncluttered!
-                badge.style.background = isSelected ? 'rgba(255,255,255,0.06)' : 'transparent';
-                badge.style.border = isSelected ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent';
-                badge.style.color = '#94a3b8';
-                badge.style.padding = isSelected ? '1px 5px' : '0 2px';
-                badge.style.opacity = isSelected ? '0.9' : '0.55';
-                badge.innerHTML = \`<span>-\${cacheInfo.weeklyPctUsed.toFixed(isSelected ? 3 : 2)}%</span>\`;
+                // Older Cold Chats (> 30m ago): Quiet borderless muted text
+                badge.style.background = 'transparent';
+                badge.style.border = '1px solid transparent';
+                badge.style.color = AMS_THEME.textMuted;
+                badge.style.padding = '0 2px';
+                badge.style.opacity = isSelected ? '0.85' : '0.50';
+                badge.innerHTML = \`<span>-\${cacheInfo.weeklyPctUsed.toFixed(2)}%</span>\`;
             }
 
             badge.title = isDe
@@ -2578,8 +2620,8 @@ const amsScriptContent = `(async function() {
                 pctSpan.style.fontVariantNumeric = 'tabular-nums';
                 pctSpan.style.whiteSpace = 'nowrap';
                 pctSpan.innerHTML =
-                    \`<span style="font-size:13.5px;font-weight:700;color:\${exactVal > 45 ? '#34d399' : exactVal > 20 ? '#fbbf24' : '#f87171'};">\${exactVal.toFixed(4)}%</span>\` +
-                    \`<span style="display:block;font-size:9.5px;font-weight:500;color:var(--muted-foreground,#94a3b8);">-\${usedVal.toFixed(4)}% \${isDe ? 'verbr.' : 'used'}</span>\`;
+                    \`<span style="font-size:13.5px;font-weight:600;color:\${exactVal < 10 ? AMS_THEME.coral : AMS_THEME.textBright};">\${exactVal.toFixed(4)}%</span>\` +
+                    \`<span style="display:block;font-size:9.5px;font-weight:400;color:\${AMS_THEME.textMuted};">-\${usedVal.toFixed(4)}% \${isDe ? 'verbr.' : 'used'}</span>\`;
             }
         }
 
@@ -2590,7 +2632,7 @@ const amsScriptContent = `(async function() {
 
         // If we haven't loaded token stats yet, trigger a fetch using any known conversation ID
         if (!amsTelemetryState.weeklySummary && window.electronNative && window.electronNative.getTokenStats) {
-            const anyCid = currentConvId ||
+            const anyCid = getActiveCascadeId() ||
                            (amsTelemetryState.liveTrajectoriesMap.keys().next().value) ||
                            (document.querySelector('[data-cascade-id]')?.getAttribute('data-cascade-id'));
             if (anyCid && !window.__ams_fetching_initial_stats) {
@@ -2598,7 +2640,7 @@ const amsScriptContent = `(async function() {
                 window.electronNative.getTokenStats(anyCid).then((res) => {
                     window.__ams_fetching_initial_stats = false;
                     if (res && res.status === 'success') {
-                        window.amsIngestTokenStatsResult(res, anyCid === currentConvId);
+                        window.amsIngestTokenStatsResult(res, anyCid === getActiveCascadeId());
                     }
                 }).catch(() => {
                     window.__ams_fetching_initial_stats = false;
@@ -2606,14 +2648,14 @@ const amsScriptContent = `(async function() {
             }
         }
 
-        let dossierEl = scrollRoot.querySelector('#antigravity-models-usage-intelligence-v2');
+        let dossierEl = scrollRoot.querySelector('#antigravity-models-usage-intelligence-v3');
         if (!dossierEl) {
             dossierEl = document.createElement('div');
-            dossierEl.id = 'antigravity-models-usage-intelligence-v2';
+            dossierEl.id = 'antigravity-models-usage-intelligence-v3';
             dossierEl.style.cssText =
-                'margin-top:20px;padding-top:18px;border-top:1px solid var(--border,rgba(255,255,255,0.09));' +
+                'margin-top:20px;padding-top:18px;border-top:1px solid var(--border,rgba(255,255,255,0.07));' +
                 'display:flex;flex-direction:column;gap:16px;font-family:ui-sans-serif,system-ui,sans-serif;' +
-                'font-variant-numeric:tabular-nums;color:var(--foreground,#f8fafc);';
+                'font-variant-numeric:tabular-nums;color:var(--foreground,#e4e4e7);';
             scrollRoot.appendChild(dossierEl);
         }
 
@@ -3114,22 +3156,22 @@ const amsScriptContent = `(async function() {
             if (bannerEl.getAttribute('data-sig') !== sig) {
                 bannerEl.setAttribute('data-sig', sig);
                 if (!hasContext) {
-                    bannerEl.style.background = 'rgba(16,185,129,0.08)';
-                    bannerEl.style.border = '1px solid rgba(52,211,153,0.25)';
-                    bannerEl.style.color = '#a7f3d0';
+                    bannerEl.style.background = AMS_THEME.surfacePill;
+                    bannerEl.style.border = \`1px solid \${AMS_THEME.borderSubtle}\`;
+                    bannerEl.style.color = AMS_THEME.textPrimary;
                     bannerEl.innerHTML =
                         \`<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">\` +
-                            \`<span style="display:inline-flex;align-items:center;gap:4px;">\${amsIcon('check', 11, '#34d399')}<strong>\${isDe ? 'Neuer Chat' : 'New Chat'}</strong> · \${isDe ? 'Modellwechsel ohne Verlust (0%)' : 'Switch penalty: 0%'}</span>\` +
+                            \`<span style="display:inline-flex;align-items:center;gap:4px;">\${amsIcon('check', 11, AMS_THEME.sage)}<strong>\${isDe ? 'Neuer Chat' : 'New Chat'}</strong> · \${isDe ? 'Modellwechsel ohne Verlust (0%)' : 'Switch penalty: 0%'}</span>\` +
                         \`</div>\`;
                 } else {
                     const lossW = cacheInfo.extraColdLossWeeklyPct.toFixed(4);
-                    bannerEl.style.background = 'rgba(245,158,11,0.10)';
-                    bannerEl.style.border = '1px solid rgba(245,158,11,0.32)';
-                    bannerEl.style.color = '#fde68a';
+                    bannerEl.style.background = AMS_THEME.surfacePill;
+                    bannerEl.style.border = \`1px solid \${AMS_THEME.borderSubtle}\`;
+                    bannerEl.style.color = AMS_THEME.textPrimary;
                     bannerEl.innerHTML =
                         \`<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">\` +
-                            \`<span style="display:inline-flex;align-items:center;gap:4px;color:#fbbf24;font-weight:600;">\${amsIcon('alert', 11, '#fbbf24')}<span>\${isDe ? \`Wechsel verwirft Cache (-\${lossW}% W)\` : \`Switch drops cache (-\${lossW}% W)\`}</span></span>\` +
-                            \`<button type="button" class="ams-mp-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;border:1px solid rgba(52,211,153,0.45);background:rgba(16,185,129,0.18);color:#6ee7b7;font-size:9.5px;font-weight:700;cursor:pointer;">\${amsIcon('plus', 9, '#6ee7b7')}<span>\${isDe ? 'Neuer Chat' : 'New Chat'}</span></button>\` +
+                            \`<span style="display:inline-flex;align-items:center;gap:4px;color:\${AMS_THEME.textPrimary};font-weight:500;">\${amsIcon('info', 11, AMS_THEME.sand)}<span>\${isDe ? \`Wechsel verwirft Cache (-\${lossW}% W)\` : \`Switch drops cache (-\${lossW}% W)\`}</span></span>\` +
+                            \`<button type="button" class="ams-mp-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;border:1px solid \${AMS_THEME.borderHover};background:\${AMS_THEME.surfaceHover};color:\${AMS_THEME.textBright};font-size:9.5px;font-weight:500;cursor:pointer;">\${amsIcon('plus', 9, AMS_THEME.textPrimary)}<span>\${isDe ? 'Neuer Chat' : 'New Chat'}</span></button>\` +
                         \`</div>\`;
                     const ncBtn = bannerEl.querySelector('.ams-mp-newchat-btn');
                     if (ncBtn) {
@@ -3165,7 +3207,7 @@ const amsScriptContent = `(async function() {
                 badge.className = 'antigravity-model-item-cost-badge';
                 badge.style.cssText =
                     'display:inline-flex;align-items:center;gap:3px;margin-left:auto;padding:1px 6px;border-radius:4px;' +
-                    'font-family:ui-sans-serif,system-ui,sans-serif;font-size:10px;font-weight:600;' +
+                    'font-family:ui-sans-serif,system-ui,sans-serif;font-size:10px;font-weight:500;' +
                     'font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0;';
                 const firstSpan = item.querySelector('span');
                 if (firstSpan && firstSpan.nextSibling) {
@@ -3177,14 +3219,14 @@ const amsScriptContent = `(async function() {
 
             if (!hasContext) {
                 if (isCurrentModel) {
-                    badge.style.background = 'rgba(16,185,129,0.12)';
-                    badge.style.border = '1px solid rgba(52,211,153,0.30)';
-                    badge.style.color = '#34d399';
-                    badge.innerHTML = \`\${amsIcon('check', 10, '#34d399')}<span>\${isDe ? 'Aktiv' : 'Active'}</span>\`;
+                    badge.style.background = AMS_THEME.surfacePill;
+                    badge.style.border = \`1px solid \${AMS_THEME.borderSubtle}\`;
+                    badge.style.color = AMS_THEME.textPrimary;
+                    badge.innerHTML = \`\${amsIcon('check', 10, AMS_THEME.sage)}<span>\${isDe ? 'Aktiv' : 'Active'}</span>\`;
                 } else {
                     badge.style.background = 'transparent';
                     badge.style.border = 'none';
-                    badge.style.color = '#64748b';
+                    badge.style.color = AMS_THEME.textMuted;
                     badge.textContent = '0% W';
                 }
                 return;
@@ -3199,19 +3241,19 @@ const amsScriptContent = `(async function() {
 
             if (isCurrentModel) {
                 const isWarm = cacheInfo.state === 'warm' || cacheInfo.isRunning;
-                badge.style.background = isWarm ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)';
-                badge.style.border = isWarm ? '1px solid rgba(52,211,153,0.32)' : '1px solid rgba(245,158,11,0.32)';
-                badge.style.color = isWarm ? '#34d399' : '#fbbf24';
+                badge.style.background = AMS_THEME.surfacePill;
+                badge.style.border = \`1px solid \${AMS_THEME.borderSubtle}\`;
+                badge.style.color = AMS_THEME.textPrimary;
                 badge.innerHTML = isWarm
-                    ? \`\${amsIcon('flame', 10, '#34d399')}<span>Cache warm</span>\`
-                    : \`\${amsIcon('snowflake', 10, '#fbbf24')}<span>Kalt</span>\`;
+                    ? \`\${amsIcon('flame', 10, AMS_THEME.sage)}<span>Warm</span>\`
+                    : \`\${amsIcon('snowflake', 10, AMS_THEME.sand)}<span>Kalt</span>\`;
                 badge.title = isDe
                     ? \`Aktuelles Modell (\${baseModelName}) · Nächster Send: -\${stayWarmW.toFixed(4)}% W\`
                     : \`Current Model (\${baseModelName}) · Next send: -\${stayWarmW.toFixed(4)}% W\`;
             } else {
-                badge.style.background = 'rgba(245,158,11,0.10)';
-                badge.style.border = '1px solid rgba(245,158,11,0.28)';
-                badge.style.color = '#fcd34d';
+                badge.style.background = 'transparent';
+                badge.style.border = 'none';
+                badge.style.color = AMS_THEME.textMuted;
                 badge.innerHTML = \`<span>-\${lossW.toFixed(4)}% W</span>\`;
                 badge.title = isDe
                     ? \`Wechsel zu \${baseModelName} verwirft den KV-Cache:\\n• Verlust beim nächsten Senden: -\${lossW.toFixed(4)}% Weekly (-\${loss5h.toFixed(4)}% 5h)\`
@@ -3222,6 +3264,7 @@ const amsScriptContent = `(async function() {
 
     // Observe DOM for instant decoration as soon as the Model Picker opens
     const modelPickerObserver = new MutationObserver(() => {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         if (document.querySelector('[data-testid="model-selector-panel"]')) {
             decorateOpenModelPickerMenu();
         }
@@ -3243,28 +3286,33 @@ const amsScriptContent = `(async function() {
     window.__ams_v2_intervals = [];
 
     setTimeout(() => {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         fetchUserQuotaSummary();
         fetchAllCascadeTrajectories();
     }, 1200);
 
     window.__ams_v2_intervals.push(setInterval(() => {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         fetchUserQuotaSummary();
     }, 20000));
 
     window.__ams_v2_intervals.push(setInterval(() => {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         fetchAllCascadeTrajectories();
     }, 12000));
 
     window.__ams_v2_intervals.push(setInterval(() => {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         if (typeof updateTokenStats === 'function') updateTokenStats();
         if (typeof updateCompactionCounter === 'function') updateCompactionCounter();
     }, 8000));
 
     // 1-second lightweight UI ticker so the 5-minute warm cache countdown ticks smoothly
     window.__ams_v2_intervals.push(setInterval(() => {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         if (document.hidden) return;
         ensureCleanUiStyles();
-        if (!document.getElementById('antigravity-quota-display-v2')) {
+        if (!document.getElementById('antigravity-quota-display-v3')) {
             refreshQuotaDisplay();
         }
         updateComposerChatBadge();
