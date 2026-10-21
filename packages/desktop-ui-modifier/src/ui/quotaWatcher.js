@@ -1963,6 +1963,11 @@
         const activeId = getActiveCascadeId();
         const cacheInfo = activeId ? getChatCacheState(activeId) : null;
         const hasContext = !!(cacheInfo && cacheInfo.stepCount > 0);
+        const menuItems = Array.from(panel.querySelectorAll('[role="menuitem"]'));
+
+        const panelSig = `${hasContext ? cacheInfo.stepCount : 0}|${hasContext ? cacheInfo.state : 'new'}|${hasContext ? cacheInfo.extraColdLossWeeklyPct.toFixed(4) : '0'}|${currentLabel}|${isDe}|${menuItems.length}`;
+        if (panel.getAttribute('data-ams-panel-sig') === panelSig) return;
+        panel.setAttribute('data-ams-panel-sig', panelSig);
 
         const menuEl = panel.closest('[role="menu"]');
         if (menuEl) {
@@ -1984,43 +1989,38 @@
         }
 
         if (bannerEl) {
-            const sig = `${hasContext ? cacheInfo.stepCount : 0}-${hasContext ? cacheInfo.state : 'new'}-${currentLabel}-${isDe}`;
-            if (bannerEl.getAttribute('data-sig') !== sig) {
-                bannerEl.setAttribute('data-sig', sig);
-                if (!hasContext) {
-                    bannerEl.style.background = AMS_THEME.surfacePill;
-                    bannerEl.style.border = `1px solid ${AMS_THEME.borderSubtle}`;
-                    bannerEl.style.color = AMS_THEME.textPrimary;
-                    bannerEl.innerHTML =
-                        `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
-                            `<span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('check', 11, AMS_THEME.sage)}<strong>${isDe ? 'Neuer Chat' : 'New Chat'}</strong> · ${isDe ? 'Modellwechsel ohne Verlust (0%)' : 'Switch penalty: 0%'}</span>` +
-                        `</div>`;
-                } else {
-                    const lossW = cacheInfo.extraColdLossWeeklyPct.toFixed(4);
-                    bannerEl.style.background = AMS_THEME.surfacePill;
-                    bannerEl.style.border = `1px solid ${AMS_THEME.borderSubtle}`;
-                    bannerEl.style.color = AMS_THEME.textPrimary;
-                    bannerEl.innerHTML =
-                        `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
-                            `<span style="display:inline-flex;align-items:center;gap:4px;color:${AMS_THEME.textPrimary};font-weight:500;">${amsIcon('info', 11, AMS_THEME.sand)}<span>${isDe ? `Wechsel verwirft Cache (-${lossW}% W)` : `Switch drops cache (-${lossW}% W)`}</span></span>` +
-                            `<button type="button" class="ams-mp-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;border:1px solid ${AMS_THEME.borderHover};background:${AMS_THEME.surfaceHover};color:${AMS_THEME.textBright};font-size:9.5px;font-weight:500;cursor:pointer;">${amsIcon('plus', 9, AMS_THEME.textPrimary)}<span>${isDe ? 'Neuer Chat' : 'New Chat'}</span></button>` +
-                        `</div>`;
-                    const ncBtn = bannerEl.querySelector('.ams-mp-newchat-btn');
-                    if (ncBtn) {
-                        ncBtn.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const trig = document.querySelector('[data-testid="model-selector-trigger"]');
-                            if (trig && trig.getAttribute('aria-expanded') === 'true') trig.click();
-                            triggerNewConversation();
-                        });
-                    }
+            if (!hasContext) {
+                bannerEl.style.background = AMS_THEME.surfacePill;
+                bannerEl.style.border = `1px solid ${AMS_THEME.borderSubtle}`;
+                bannerEl.style.color = AMS_THEME.textPrimary;
+                bannerEl.innerHTML =
+                    `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
+                        `<span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('check', 11, AMS_THEME.sage)}<strong>${isDe ? 'Neuer Chat' : 'New Chat'}</strong> · ${isDe ? 'Modellwechsel ohne Verlust (0%)' : 'Switch penalty: 0%'}</span>` +
+                    `</div>`;
+            } else {
+                const lossW = cacheInfo.extraColdLossWeeklyPct.toFixed(4);
+                bannerEl.style.background = AMS_THEME.surfacePill;
+                bannerEl.style.border = `1px solid ${AMS_THEME.borderSubtle}`;
+                bannerEl.style.color = AMS_THEME.textPrimary;
+                bannerEl.innerHTML =
+                    `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
+                        `<span style="display:inline-flex;align-items:center;gap:4px;color:${AMS_THEME.textPrimary};font-weight:500;">${amsIcon('info', 11, AMS_THEME.sand)}<span>${isDe ? `Wechsel verwirft Cache (-${lossW}% W)` : `Switch drops cache (-${lossW}% W)`}</span></span>` +
+                        `<button type="button" class="ams-mp-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;border:1px solid ${AMS_THEME.borderHover};background:${AMS_THEME.surfaceHover};color:${AMS_THEME.textBright};font-size:9.5px;font-weight:500;cursor:pointer;">${amsIcon('plus', 9, AMS_THEME.textPrimary)}<span>${isDe ? 'Neuer Chat' : 'New Chat'}</span></button>` +
+                    `</div>`;
+                const ncBtn = bannerEl.querySelector('.ams-mp-newchat-btn');
+                if (ncBtn) {
+                    ncBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const trig = document.querySelector('[data-testid="model-selector-trigger"]');
+                        if (trig && trig.getAttribute('aria-expanded') === 'true') trig.click();
+                        triggerNewConversation();
+                    });
                 }
             }
         }
 
         // 2. Clean 1-number badge on each model row ([role="menuitem"])
-        const menuItems = Array.from(panel.querySelectorAll('[role="menuitem"]'));
         menuItems.forEach((item) => {
             const rawText = (item.textContent || '').trim();
             if (!rawText || /View Usage/i.test(rawText)) return;
@@ -2040,14 +2040,13 @@
                 badge.style.cssText =
                     'display:inline-flex;align-items:center;gap:3px;margin-left:auto;padding:1px 6px;border-radius:4px;' +
                     'font-family:ui-sans-serif,system-ui,sans-serif;font-size:10px;font-weight:500;' +
-                    'font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0;';
-                const firstSpan = item.querySelector('span');
-                if (firstSpan && firstSpan.nextSibling) {
-                    item.insertBefore(badge, firstSpan.nextSibling);
-                } else {
-                    item.appendChild(badge);
-                }
+                    'font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0;pointer-events:none;';
+                item.appendChild(badge);
             }
+
+            const itemSig = `${baseModelName}|${isCurrentModel ? 1 : 0}|${hasContext ? cacheInfo.state : 'new'}|${hasContext ? cacheInfo.coldSendWeeklyPct : 0}|${isDe}`;
+            if (badge.getAttribute('data-sig') === itemSig) return;
+            badge.setAttribute('data-sig', itemSig);
 
             if (!hasContext) {
                 if (isCurrentModel) {
@@ -2094,13 +2093,27 @@
         });
     }
 
-    // Observe DOM for instant decoration as soon as the Model Picker opens
+    // Observe DOM for Model Picker opening using debounced requestAnimationFrame (never mutate synchronously inside MutationObserver!)
+    if (window.__ams_model_picker_observer) {
+        try { window.__ams_model_picker_observer.disconnect(); } catch (e) {}
+    }
+    let modelPickerRafPending = false;
     const modelPickerObserver = new MutationObserver(() => {
-        if (window.__ams_active_instance_id !== myInstanceId) return;
-        if (document.querySelector('[data-testid="model-selector-panel"]')) {
-            decorateOpenModelPickerMenu();
+        if (window.__ams_active_instance_id !== myInstanceId) {
+            try { modelPickerObserver.disconnect(); } catch (e) {}
+            return;
         }
+        if (modelPickerRafPending) return;
+        const panel = document.querySelector('[data-testid="model-selector-panel"]');
+        if (!panel) return;
+        modelPickerRafPending = true;
+        requestAnimationFrame(() => {
+            modelPickerRafPending = false;
+            if (window.__ams_active_instance_id !== myInstanceId) return;
+            decorateOpenModelPickerMenu();
+        });
     });
+    window.__ams_model_picker_observer = modelPickerObserver;
     if (document.body) {
         modelPickerObserver.observe(document.body, { childList: true, subtree: true });
     } else {
