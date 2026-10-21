@@ -82,6 +82,24 @@
         return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1.5px;flex-shrink:0;">${p}</svg>`;
     }
 
+    function ensureCleanUiStyles() {
+        if (document.getElementById('ams-clean-ui-override')) return;
+        const st = document.createElement('style');
+        st.id = 'ams-clean-ui-override';
+        st.textContent =
+            '.antigravity-cache-hit-toast,' +
+            '#antigravity-chat-token-counter,' +
+            '#antigravity-live-send-estimator,' +
+            '#antigravity-model-trigger-loss-pill,' +
+            '#antigravity-model-switch-popover,' +
+            '.antigravity-sidebar-chat-meta,' +
+            '#antigravity-models-usage-intelligence {' +
+            '  display: none !important;' +
+            '}';
+        (document.head || document.documentElement).appendChild(st);
+    }
+    ensureCleanUiStyles();
+
     // ----------------------------------------------------------------------------
     // 1. Synthesized Web Audio API "Cha-Ching / Coin" Cache-Hit Sound
     // ----------------------------------------------------------------------------
@@ -162,64 +180,32 @@
     };
 
     function triggerCacheHitFeedback(cachedTokens, uncachedTokens, outTokens, convId) {
+        // Remove any legacy floating cache-hit toasts immediately
+        document.querySelectorAll('.antigravity-cache-hit-toast').forEach(el => el.remove());
+
         const now = Date.now();
-        if (now - amsTelemetryState.lastCacheHitFlashTs < 2200) return;
+        if (now - amsTelemetryState.lastCacheHitFlashTs < 8000) return;
         amsTelemetryState.lastCacheHitFlashTs = now;
 
-        playCacheHitSound(false);
-
-        const savedTokens = Math.round(cachedTokens * 0.9);
-        const savedWeeklyPct = (savedTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
-        const saved5hPct = (savedTokens * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
-        const ctx = cachedTokens + uncachedTokens;
-        const hitRatioPct = ctx > 0 ? Math.round((cachedTokens / ctx) * 100) : 90;
-        const inRate = ctx > 200000 ? 4.0 : 2.0;
-        const savedEur = ((savedTokens / 1e6) * inRate * 0.92).toFixed(2);
-        const cacheTokStr = cachedTokens >= 1000000
-            ? (cachedTokens / 1000000).toFixed(2) + 'M'
-            : Math.round(cachedTokens / 1000) + 'k';
-
-        // 1. Floating animation pill above the composer bar
-        const quotaEl = document.querySelector('.antigravity-quota-display');
-        if (quotaEl && document.body) {
-            const rect = quotaEl.getBoundingClientRect();
-            const pill = document.createElement('div');
-            pill.className = 'antigravity-cache-hit-toast';
-            pill.style.cssText =
-                'position:fixed;z-index:999999;pointer-events:none;display:inline-flex;align-items:center;gap:6px;' +
-                'padding:5px 12px;border-radius:999px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;' +
-                'font-variant-numeric:tabular-nums;color:#ecfdf5;background:linear-gradient(135deg,rgba(5,150,105,0.96),rgba(16,185,129,0.92));' +
-                'border:1px solid rgba(110,231,183,0.65);box-shadow:0 8px 24px rgba(16,185,129,0.35),0 0 0 1px rgba(16,185,129,0.2);' +
-                'transition:transform 0.65s cubic-bezier(0.16,1,0.3,1),opacity 0.65s ease;opacity:0;transform:translateY(8px) scale(0.94);';
-            pill.style.left = Math.max(16, Math.min(window.innerWidth - 520, rect.left)) + 'px';
-            pill.style.top = Math.max(16, rect.top - 36) + 'px';
-
-            const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
-            pill.innerHTML =
-                `<span style="display:inline-flex;align-items:center;gap:3px;color:#fde68a;">${amsIcon('zap', 12, '#fde68a')}${amsIcon('coins', 12, '#fde68a')}</span>` +
-                `<span>CACHE HIT! ${cacheTokStr} Tokens (${hitRatioPct}% ${isDe ? 'Rabatt' : 'Cache'}) · +${savedWeeklyPct}% W (+${saved5hPct}% 5h) · +${savedEur} € ${isDe ? 'gespart' : 'saved'}</span>`;
-
-            document.body.appendChild(pill);
-            requestAnimationFrame(() => {
-                pill.style.opacity = '1';
-                pill.style.transform = 'translateY(-4px) scale(1)';
-            });
+        // Subtle inline pulse on the composer cache pill (NO floating popup!)
+        const inlineCachePill = document.getElementById('ams-composer-cache-pill');
+        if (inlineCachePill) {
+            inlineCachePill.style.transition = 'box-shadow 0.35s ease, transform 0.35s ease';
+            inlineCachePill.style.boxShadow = '0 0 12px rgba(16, 185, 129, 0.45)';
             setTimeout(() => {
-                pill.style.opacity = '0';
-                pill.style.transform = 'translateY(-18px) scale(0.96)';
-                setTimeout(() => pill.remove(), 680);
-            }, 3100);
+                if (inlineCachePill) inlineCachePill.style.boxShadow = '';
+            }, 900);
         }
 
-        // 2. Pulse the active sidebar row badge
+        // Subtle pulse on the active sidebar row
         if (convId) {
             const row = document.querySelector(`[data-testid="conversation-row-sidebar"][data-cascade-id="${convId}"]`);
             if (row) {
-                row.style.transition = 'box-shadow 0.4s ease, background-color 0.4s ease';
-                row.style.boxShadow = 'inset 0 0 0 1px rgba(16, 185, 129, 0.65), 0 0 14px rgba(16, 185, 129, 0.25)';
+                row.style.transition = 'box-shadow 0.4s ease';
+                row.style.boxShadow = 'inset 0 0 0 1px rgba(16, 185, 129, 0.5)';
                 setTimeout(() => {
                     row.style.boxShadow = '';
-                }, 1800);
+                }, 1000);
             }
         }
     }
@@ -814,8 +800,8 @@
 
         const tooltipText = isDe
             ? `✦ Google AI Ultra · Gemini Quota (Exakt):\n` +
-              `• 5-Stunden-Limit: ${g5hExact.toFixed(4)}% übrig (${(100 - g5hExact).toFixed(4)}% verbraucht · Reset: ${g5hReset})\n` +
-              `• Weekly-Limit: ${gWExact.toFixed(4)}% übrig (${(100 - gWExact).toFixed(4)}% verbraucht · Reset: ${gWReset})\n\n` +
+              `• Weekly-Limit: ${gWExact.toFixed(4)}% übrig (-${(100 - gWExact).toFixed(4)}% verbraucht · Reset: ${gWReset})\n` +
+              `• 5-Stunden-Limit: ${g5hExact.toFixed(4)}% übrig (-${(100 - g5hExact).toFixed(4)}% verbraucht · Reset: ${g5hReset})\n\n` +
               `Verbleibendes Ultra-Kontingent (aus ${gWExact.toFixed(2)}% Weekly):\n` +
               `• ~${remStepsW.toLocaleString('de-DE')} Agent-Steps\n` +
               `• ~${remPromptsS.toLocaleString('de-DE')} Kurze Prompts (Typ S · 1–2 Steps)\n` +
@@ -824,8 +810,8 @@
               `• ~${remPromptsXL.toLocaleString('de-DE')} Große Deep-Dives (Typ XL · ~80 Steps)\n` +
               `(Klicken für das vollständige Models & Usage Dossier)`
             : `✦ Google AI Ultra · Gemini Quota (Exact):\n` +
-              `• 5-Hour Limit: ${g5hExact.toFixed(4)}% left (${(100 - g5hExact).toFixed(4)}% used · Reset: ${g5hReset})\n` +
-              `• Weekly Limit: ${gWExact.toFixed(4)}% left (${(100 - gWExact).toFixed(4)}% used · Reset: ${gWReset})\n\n` +
+              `• Weekly Limit: ${gWExact.toFixed(4)}% left (-${(100 - gWExact).toFixed(4)}% used · Reset: ${gWReset})\n` +
+              `• 5-Hour Limit: ${g5hExact.toFixed(4)}% left (-${(100 - g5hExact).toFixed(4)}% used · Reset: ${g5hReset})\n\n` +
               `Remaining Ultra Capacity (from ${gWExact.toFixed(2)}% Weekly):\n` +
               `• ~${remStepsW.toLocaleString('en-US')} Agent Steps\n` +
               `• ~${remPromptsS.toLocaleString('en-US')} Quick Prompts (Type S · 1–2 steps)\n` +
@@ -840,44 +826,50 @@
             return '#f87171';
         }
 
-        quotaEl.style.fontVariantNumeric = 'tabular-nums';
-        quotaEl.style.gap = '5px';
+        quotaEl.style.cssText =
+            'display:inline-flex;align-items:center;gap:5px;margin-left:6px;margin-right:4px;' +
+            'font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;' +
+            'white-space:nowrap;flex-shrink:0;user-select:none;cursor:pointer;';
         quotaEl.title = tooltipText;
 
-        // 1. Sleek Google AI Ultra Badge
+        // 1. Sleek Google AI Ultra Badge (Single-line, compact)
         const ultraBadge = document.createElement('span');
         ultraBadge.className = 'antigravity-ultra-badge';
         ultraBadge.style.cssText =
-            'display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;' +
-            'font-size:9px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;' +
-            'background:linear-gradient(135deg,rgba(245,158,11,0.16),rgba(139,92,246,0.22));' +
-            'border:1px solid rgba(251,191,36,0.42);color:#fde68a;box-shadow:0 0 10px rgba(245,158,11,0.12);';
+            'display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 6px;border-radius:5px;' +
+            'font-size:9.5px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;' +
+            'background:rgba(245,158,11,0.14);border:1px solid rgba(251,191,36,0.38);color:#fde68a;';
         ultraBadge.innerHTML = `${amsIcon('sparkles', 10, '#fde68a')}<span>ULTRA</span>`;
 
-        // 2. 5h Limit Pill
-        const fiveHPill = document.createElement('span');
-        fiveHPill.style.cssText =
-            'display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;' +
-            'background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);font-size:10px;';
-        fiveHPill.innerHTML =
-            `<span style="opacity:0.65;">5h:</span>` +
-            `<strong style="color:${getPercentColorHex(g5hExact)};font-weight:700;">${g5hExact.toFixed(2)}%</strong>`;
+        // 2. Unified Single-Line Quota Pill (Weekly + 5h — never wraps, never collides with right buttons)
+        const unifiedQuotaPill = document.createElement('span');
+        unifiedQuotaPill.className = 'antigravity-quota-pill-v2';
+        unifiedQuotaPill.style.cssText =
+            'display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:5px;' +
+            'background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.09);font-size:10.5px;white-space:nowrap;';
+        unifiedQuotaPill.innerHTML =
+            `<span style="display:inline-flex;align-items:center;gap:3px;">` +
+                `<span style="color:#94a3b8;font-weight:500;">W</span>` +
+                `<strong style="color:${getPercentColorHex(gWExact)};font-weight:700;">${gWExact.toFixed(2)}%</strong>` +
+            `</span>` +
+            `<span style="opacity:0.25;">·</span>` +
+            `<span style="display:inline-flex;align-items:center;gap:3px;">` +
+                `<span style="color:#94a3b8;font-weight:500;">5h</span>` +
+                `<strong style="color:${getPercentColorHex(g5hExact)};font-weight:600;">${g5hExact.toFixed(1)}%</strong>` +
+            `</span>`;
 
-        // 3. Weekly Limit Pill (4 decimals as requested!)
-        const weeklyPill = document.createElement('span');
-        weeklyPill.style.cssText =
-            'display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;' +
-            'background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.22);font-size:10px;';
-        const wResetCompact = (gWReset && gWReset !== 'Aktiv') ? ` <span style="opacity:0.55;font-size:9px;">(${gWReset})</span>` : '';
-        weeklyPill.innerHTML =
-            `<span style="color:#7dd3fc;opacity:0.85;">W:</span>` +
-            `<strong style="color:${getPercentColorHex(gWExact)};font-weight:700;">${gWExact.toFixed(4)}%</strong>` +
-            wResetCompact;
+        quotaEl.replaceChildren(ultraBadge, unifiedQuotaPill);
 
-        quotaEl.replaceChildren(ultraBadge, fiveHPill, weeklyPill);
+        // Keep legacy inline toolbar elements hidden so the button row never overflows
+        const legacyChatTokenEl = document.getElementById('antigravity-chat-token-counter');
+        if (legacyChatTokenEl) legacyChatTokenEl.style.display = 'none';
+        const legacyEstimatorEl = document.getElementById('antigravity-live-send-estimator');
+        if (legacyEstimatorEl) legacyEstimatorEl.style.display = 'none';
+        const legacyTriggerPill = document.getElementById('antigravity-model-trigger-loss-pill');
+        if (legacyTriggerPill) legacyTriggerPill.style.display = 'none';
 
-        // Update active chat token & cache counter right next to quotaEl
-        updateComposerChatBadge();
+        // Update the clean full-width Composer Status Strip below the button row
+        updateComposerStatusStrip();
 
         // Quoten-Wächter (Model Fallback if user ever selects exhausted Claude before Nov 2)
         if (!isSwitchingModel && typeof getActiveModel === 'function') {
@@ -893,79 +885,19 @@
         }
     }
 
-    function updateComposerChatBadge() {
-        const chatTokenEl = document.getElementById('antigravity-chat-token-counter');
-        if (!chatTokenEl) return;
-
-        if (!currentConvId) {
-            chatTokenEl.style.display = 'none';
-            return;
+    // ----------------------------------------------------------------------------
+    // 6. Clean Full-Width Composer Status Strip (Below Toolbar — Zero Overlap!)
+    // ----------------------------------------------------------------------------
+    function getActiveCascadeId() {
+        if (currentConvId) return currentConvId;
+        const selectedRow = document.querySelector('[data-testid="conversation-row-sidebar"][data-selected="true"][data-cascade-id]');
+        if (selectedRow) return selectedRow.getAttribute('data-cascade-id');
+        if (amsTelemetryState.activeConvStats && amsTelemetryState.activeConvStats.cascadeId) {
+            return amsTelemetryState.activeConvStats.cascadeId;
         }
-
-        const cacheInfo = getChatCacheState(currentConvId);
-        const stats = amsTelemetryState.activeConvStats;
-        if (!stats || !stats.stepCount) {
-            chatTokenEl.style.display = 'none';
-            return;
-        }
-
-        const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
-        chatTokenEl.style.display = 'inline-flex';
-        chatTokenEl.style.alignItems = 'center';
-        chatTokenEl.style.gap = '5px';
-        chatTokenEl.style.fontVariantNumeric = 'tabular-nums';
-        chatTokenEl.style.padding = '1px 7px';
-        chatTokenEl.style.borderRadius = '4px';
-
-        let stateBadgeHtml = '';
-        if (cacheInfo.isRunning) {
-            chatTokenEl.style.background = 'rgba(16, 185, 129, 0.09)';
-            chatTokenEl.style.border = '1px solid rgba(16, 185, 129, 0.32)';
-            stateBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:3px;color:#34d399;font-weight:700;">${amsIcon('zap', 10, '#34d399')}<span>LIVE</span></span>`;
-        } else if (cacheInfo.state === 'warm') {
-            chatTokenEl.style.background = 'rgba(16, 185, 129, 0.07)';
-            chatTokenEl.style.border = '1px solid rgba(16, 185, 129, 0.25)';
-            stateBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:3px;color:#34d399;font-weight:700;">${amsIcon('flame', 10, '#34d399')}<span>${formatDurationShort(cacheInfo.remainingGuaranteedSec)}</span></span>`;
-        } else if (cacheInfo.state === 'lukewarm') {
-            chatTokenEl.style.background = 'rgba(245, 158, 11, 0.10)';
-            chatTokenEl.style.border = '1px solid rgba(245, 158, 11, 0.35)';
-            stateBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:3px;color:#fbbf24;font-weight:700;">${amsIcon('alert', 10, '#fbbf24')}<span>${formatDurationShort(cacheInfo.idleSec)}</span></span>`;
-        } else {
-            chatTokenEl.style.background = 'rgba(239, 68, 68, 0.10)';
-            chatTokenEl.style.border = '1px solid rgba(239, 68, 68, 0.35)';
-            stateBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:3px;color:#f87171;font-weight:700;">${amsIcon('snowflake', 10, '#f87171')}<span>${isDe ? 'Kalt' : 'Cold'} (${formatDurationShort(cacheInfo.idleSec)})</span></span>`;
-        }
-
-        const wUsedStr = cacheInfo.weeklyPctUsed.toFixed(4);
-        const ctxStr = formatTokensCompact(stats.latestInput || 0);
-        const ratioStr = Math.round(stats.cacheRatio || 0) + '%';
-
-        chatTokenEl.innerHTML =
-            stateBadgeHtml +
-            `<span style="opacity:0.4;">·</span>` +
-            `<span style="color:#e2e8f0;font-weight:600;">-${wUsedStr}% W</span>` +
-            `<span style="opacity:0.65;">(${ctxStr} · ${ratioStr} Cache)</span>`;
-
-        chatTokenEl.title = isDe
-            ? `Aktiver Chat Verbrauch & Prompt-Cache Status:\n` +
-              `• Weekly-Verbrauch (dieser Chat): -${wUsedStr}% W (-${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)\n` +
-              `• Aktuelles Kontextfenster: ${(stats.latestInput || 0).toLocaleString('de-DE')} Tokens (Auto-Compact ab 256k -> ~31.5k)\n` +
-              `• Akkumulierter Input: ${(stats.totalInput || 0).toLocaleString('de-DE')} Tokens (${stats.cacheRatio}% aus 0.1x Cache)\n` +
-              `• API-Gegenwert (dieser Chat): ${(stats.apiCostEur || 0).toFixed(2)} € (${(stats.apiSavedEur || 0).toFixed(2)} € durch Cache gespart)\n` +
-              `• Nächste Nachricht (Warm 0.1x): ~ -${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)\n` +
-              `• Nächste Nachricht (Kalt 1.0x): ~ -${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.coldSend5hPct.toFixed(4)}% 5h)`
-            : `Active Chat Usage & Prompt-Cache Status:\n` +
-              `• Weekly Consumed (this chat): -${wUsedStr}% W (-${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)\n` +
-              `• Current Context Window: ${(stats.latestInput || 0).toLocaleString('en-US')} tokens (Auto-compact at 256k -> ~31.5k)\n` +
-              `• Accumulated Input: ${(stats.totalInput || 0).toLocaleString('en-US')} tokens (${stats.cacheRatio}% from 0.1x cache)\n` +
-              `• API Equivalent (this chat): €${(stats.apiCostEur || 0).toFixed(2)} (€${(stats.apiSavedEur || 0).toFixed(2)} saved via cache)\n` +
-              `• Next Message (Warm 0.1x): ~ -${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)\n` +
-              `• Next Message (Cold 1.0x): ~ -${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.coldSend5hPct.toFixed(4)}% 5h)`;
+        return null;
     }
 
-    // ----------------------------------------------------------------------------
-    // 6. Dynamic Live Pre-Send Cost Estimator (While Typing in Composer)
-    // ----------------------------------------------------------------------------
     function getComposerInputText() {
         const el = document.querySelector('[role="combobox"][aria-label="Message input"]') ||
                    document.querySelector('[contenteditable="true"][role="textbox"]') ||
@@ -974,77 +906,135 @@
         return (typeof el.value === 'string' ? el.value : el.textContent) || '';
     }
 
-    function updateLiveSendEstimator() {
+    function updateComposerStatusStrip() {
+        // Hide any legacy inline items inside the narrow button row
+        const legacyChatTokenEl = document.getElementById('antigravity-chat-token-counter');
+        if (legacyChatTokenEl) legacyChatTokenEl.style.display = 'none';
+        const legacyEstimatorEl = document.getElementById('antigravity-live-send-estimator');
+        if (legacyEstimatorEl) legacyEstimatorEl.style.display = 'none';
+
         const addContextBtn = document.querySelector('button[aria-label="Add context"]');
         if (!addContextBtn || !addContextBtn.parentElement) return;
-        const flexContainer = addContextBtn.parentElement;
+        const buttonRow = addContextBtn.parentElement;
+        const toolbarFooter = buttonRow.parentElement;
+        const composerCard = toolbarFooter ? toolbarFooter.parentElement : null;
+        if (!composerCard) return;
 
-        let estimatorEl = document.getElementById('antigravity-live-send-estimator');
-        if (!estimatorEl) {
-            estimatorEl = document.createElement('span');
-            estimatorEl.id = 'antigravity-live-send-estimator';
-            estimatorEl.style.cssText =
-                'display:none;align-items:center;gap:5px;margin-left:6px;padding:1px 7px;border-radius:4px;' +
-                'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-variant-numeric:tabular-nums;' +
-                'user-select:none;transition:all 0.15s ease;';
-            const chatTokenEl = document.getElementById('antigravity-chat-token-counter');
-            if (chatTokenEl) {
-                chatTokenEl.after(estimatorEl);
-            } else {
-                flexContainer.appendChild(estimatorEl);
-            }
+        let stripEl = document.getElementById('antigravity-composer-status-strip');
+        if (!stripEl) {
+            stripEl = document.createElement('div');
+            stripEl.id = 'antigravity-composer-status-strip';
+            stripEl.style.cssText =
+                'display:none;align-items:center;justify-content:space-between;gap:10px;width:100%;' +
+                'padding:5px 8px 3px 8px;margin-top:2px;border-top:1px solid rgba(255,255,255,0.06);' +
+                'font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:11px;' +
+                'font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;user-select:none;';
+            composerCard.appendChild(stripEl);
+        } else if (stripEl.parentElement !== composerCard) {
+            composerCard.appendChild(stripEl);
         }
 
         const rawText = getComposerInputText().trim();
-        const cacheInfo = currentConvId ? getChatCacheState(currentConvId) : null;
-        const isColdWithContext = cacheInfo && (cacheInfo.state === 'cold' || cacheInfo.state === 'lukewarm') && cacheInfo.contextTokens > 20000;
+        const activeId = currentConvId || getActiveCascadeId();
+        const cacheInfo = activeId ? getChatCacheState(activeId) : null;
+        const stats = amsTelemetryState.activeConvStats;
+        const hasHistory = !!(cacheInfo && cacheInfo.stepCount > 0);
 
-        // Show estimator whenever user is typing OR when the current chat has gone cold!
-        if (!rawText && !isColdWithContext) {
-            estimatorEl.style.display = 'none';
+        // If brand new chat and nothing typed yet, keep composer completely clean
+        if (!hasHistory && !rawText) {
+            stripEl.style.display = 'none';
             return;
         }
 
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
-        const typedTokens = rawText ? Math.max(1, Math.round(rawText.length / 3.6)) : 120;
-        const ctxTokens = cacheInfo && cacheInfo.stepCount > 0 ? cacheInfo.contextTokens : 24500;
-        const estOutTokens = 850; // typical single-step response + thinking
+        stripEl.style.display = 'flex';
 
-        const isWarm = !cacheInfo || cacheInfo.stepCount === 0 || cacheInfo.state === 'warm' || cacheInfo.isRunning;
+        // Left Side: Human-readable Chat Warmth & Total Chat Usage
+        let leftHtml = '';
+        if (!hasHistory) {
+            leftHtml =
+                `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:rgba(16,185,129,0.10);border:1px solid rgba(16,185,129,0.28);color:#34d399;font-weight:600;font-size:10.5px;">` +
+                    `${amsIcon('sparkles', 10, '#34d399')}<span>${isDe ? 'Neuer Chat · Bereit' : 'New Chat · Ready'}</span>` +
+                `</span>`;
+        } else {
+            let statusChip = '';
+            if (cacheInfo.isRunning) {
+                statusChip =
+                    `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:rgba(16,185,129,0.14);border:1px solid rgba(16,185,129,0.40);color:#34d399;font-weight:700;font-size:10.5px;">` +
+                        `${amsIcon('zap', 10, '#34d399')}<span>${isDe ? `Arbeitet live · Step #${cacheInfo.stepCount}` : `Working live · Step #${cacheInfo.stepCount}`}</span>` +
+                    `</span>`;
+            } else if (cacheInfo.state === 'warm') {
+                statusChip =
+                    `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:rgba(16,185,129,0.10);border:1px solid rgba(16,185,129,0.28);color:#34d399;font-weight:600;font-size:10.5px;">` +
+                        `${amsIcon('flame', 10, '#34d399')}<span>${isDe ? `Cache warm (${formatDurationShort(cacheInfo.remainingGuaranteedSec)})` : `Cache warm (${formatDurationShort(cacheInfo.remainingGuaranteedSec)})`}</span>` +
+                    `</span>`;
+            } else if (cacheInfo.state === 'lukewarm') {
+                statusChip =
+                    `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.38);color:#fbbf24;font-weight:600;font-size:10.5px;">` +
+                        `${amsIcon('alert', 10, '#fbbf24')}<span>${isDe ? `5m-Garantie um (${formatDurationShort(cacheInfo.idleSec)} Pause)` : `5m TTL expired (${formatDurationShort(cacheInfo.idleSec)} idle)`}</span>` +
+                    `</span>`;
+            } else {
+                statusChip =
+                    `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:4px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#f87171;font-weight:600;font-size:10.5px;">` +
+                        `${amsIcon('snowflake', 10, '#f87171')}<span>${isDe ? `Chat kalt (${formatDurationShort(cacheInfo.idleSec)} Pause)` : `Chat cold (${formatDurationShort(cacheInfo.idleSec)} idle)`}</span>` +
+                    `</span>`;
+            }
+
+            const wUsedStr = cacheInfo.weeklyPctUsed.toFixed(4);
+            const ratioStr = Math.round((stats && stats.cacheRatio) || cacheInfo.cacheRatio || 0);
+            leftHtml =
+                `<div style="display:inline-flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">` +
+                    statusChip +
+                    `<span style="color:#94a3b8;font-size:10.5px;">` +
+                        `${isDe ? 'Chat bisher:' : 'Chat used:'} <strong style="color:#e2e8f0;font-weight:600;">-${wUsedStr}% W</strong> ` +
+                        `<span style="opacity:0.7;">(${ratioStr}% Cache)</span>` +
+                    `</span>` +
+                `</div>`;
+        }
+
+        // Right Side: What happens on Next Send (1 clear number + 1 button if cold)
+        const typedTokens = rawText ? Math.max(1, Math.round(rawText.length / 3.6)) : 120;
+        const ctxTokens = hasHistory ? cacheInfo.contextTokens : 24500;
+        const estOutTokens = 850;
+        const isWarm = !hasHistory || cacheInfo.state === 'warm' || cacheInfo.isRunning;
         const weightedWarm = Math.round(0.1 * ctxTokens + 1.0 * typedTokens + 6.0 * estOutTokens);
         const weightedCold = Math.round(1.0 * ctxTokens + 1.0 * typedTokens + 6.0 * estOutTokens);
         const activeWeighted = isWarm ? weightedWarm : weightedCold;
 
         const estWeeklyPct = (activeWeighted * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
         const est5hPct = (activeWeighted * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
-        const warmWeeklyPct = (weightedWarm * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
         const extraLossWeeklyPct = Math.max(0, (weightedCold - weightedWarm) * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
 
-        estimatorEl.style.display = 'inline-flex';
-
+        let rightHtml = '';
         if (isWarm) {
-            estimatorEl.style.background = 'rgba(56, 189, 248, 0.08)';
-            estimatorEl.style.border = '1px solid rgba(56, 189, 248, 0.28)';
-            estimatorEl.style.color = '#bae6fd';
-            estimatorEl.innerHTML =
-                `<span style="display:inline-flex;align-items:center;gap:3px;color:#38bdf8;font-weight:700;">${amsIcon('enter', 10, '#38bdf8')}<span>Send ≈ -${estWeeklyPct}% W</span></span>` +
-                `<span style="display:inline-flex;align-items:center;gap:3px;opacity:0.8;">(-${est5hPct}% 5h · +${typedTokens} Tok · ${amsIcon('flame', 10, '#34d399')} 0.1x)</span>`;
-            estimatorEl.title = isDe
-                ? `Live-Vorschau beim Drücken von Enter (Cache WARM · 90% Rabatt):\n` +
-                  `• Geschätzter Abzug pro Step: -${estWeeklyPct}% Weekly / -${est5hPct}% 5h\n` +
-                  `• Dein Text: ~${typedTokens} Tokens (1.0x) + Kontext: ${ctxTokens.toLocaleString('de-DE')} Tokens (0.1x Cache)`
-                : `Live Pre-Send Estimate on Enter (Cache WARM · 90% discount):\n` +
-                  `• Estimated drain per step: -${estWeeklyPct}% Weekly / -${est5hPct}% 5h\n` +
-                  `• Your input: ~${typedTokens} tokens (1.0x) + Context: ${ctxTokens.toLocaleString('en-US')} tokens (0.1x cache)`;
+            rightHtml =
+                `<div style="display:inline-flex;align-items:center;gap:6px;color:#94a3b8;font-size:10.5px;flex-shrink:0;">` +
+                    `<span style="display:inline-flex;align-items:center;gap:3px;color:#7dd3fc;">` +
+                        `${amsIcon('enter', 10, '#7dd3fc')}` +
+                        `<span>${rawText ? (isDe ? 'Senden:' : 'Send:') : (isDe ? 'Nächste Nachricht:' : 'Next msg:')}</span>` +
+                        `<strong style="color:#bae6fd;font-weight:600;">~ -${estWeeklyPct}% W</strong>` +
+                    `</span>` +
+                    `<span style="opacity:0.6;">(-${est5hPct}% 5h)</span>` +
+                `</div>`;
         } else {
-            estimatorEl.style.background = 'rgba(245, 158, 11, 0.14)';
-            estimatorEl.style.border = '1px solid rgba(245, 158, 11, 0.45)';
-            estimatorEl.style.color = '#fde68a';
-            estimatorEl.innerHTML =
-                `<span style="display:inline-flex;align-items:center;gap:3px;color:#fbbf24;font-weight:700;">${amsIcon('alert', 10, '#fbbf24')}${amsIcon('enter', 10, '#fbbf24')}<span>${isDe ? 'Kalt-Send' : 'Cold Send'} ≈ -${estWeeklyPct}% W</span></span>` +
-                `<span style="opacity:0.85;">(${isDe ? 'Warm wäre' : 'Warm:'} -${warmWeeklyPct}% W · -${extraLossWeeklyPct}% W ${isDe ? 'Verlust' : 'loss'})</span>` +
-                `<button type="button" class="antigravity-inline-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;margin-left:4px;padding:1px 5px;border-radius:3px;border:1px solid rgba(52,211,153,0.5);background:rgba(16,185,129,0.2);color:#6ee7b7;font-size:9px;font-weight:700;cursor:pointer;">${amsIcon('plus', 9, '#6ee7b7')}<span>${isDe ? 'Neuer Chat' : 'New Chat'}</span></button>`;
-            const btn = estimatorEl.querySelector('.antigravity-inline-newchat-btn');
+            rightHtml =
+                `<div style="display:inline-flex;align-items:center;gap:7px;font-size:10.5px;flex-shrink:0;">` +
+                    `<span style="display:inline-flex;align-items:center;gap:4px;color:#fbbf24;">` +
+                        `${amsIcon('alert', 10, '#fbbf24')}` +
+                        `<span>${isDe ? 'Kalt-Senden:' : 'Cold send:'} <strong>-${estWeeklyPct}% W</strong> <span style="opacity:0.85;">(-${extraLossWeeklyPct}% W ${isDe ? 'Verlust' : 'loss'})</span></span>` +
+                    `</span>` +
+                    `<button type="button" class="antigravity-inline-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 7px;border-radius:4px;border:1px solid rgba(52,211,153,0.45);background:rgba(16,185,129,0.16);color:#6ee7b7;font-size:10px;font-weight:700;cursor:pointer;transition:background 0.15s ease;">` +
+                        `${amsIcon('plus', 9, '#6ee7b7')}<span>${isDe ? 'Neuer Chat' : 'New Chat'}</span>` +
+                    `</button>` +
+                `</div>`;
+        }
+
+        const sig = `${leftHtml}|${rightHtml}`;
+        if (stripEl.getAttribute('data-sig') !== sig) {
+            stripEl.setAttribute('data-sig', sig);
+            stripEl.innerHTML = leftHtml + rightHtml;
+
+            const btn = stripEl.querySelector('.antigravity-inline-newchat-btn');
             if (btn) {
                 btn.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -1053,17 +1043,37 @@
                 });
             }
         }
+
+        if (hasHistory) {
+            stripEl.title = isDe
+                ? `Details zu diesem Chat (${cacheInfo.stepCount} Steps · ${(cacheInfo.contextTokens || 0).toLocaleString('de-DE')} Kontext-Tokens):\n` +
+                  `• Bisher verbraucht: -${cacheInfo.weeklyPctUsed.toFixed(4)}% Weekly (-${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)\n` +
+                  `• Nächste Nachricht im warmen Cache (0.1x): -${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)\n` +
+                  `• Nächste Nachricht kalt ohne Cache (1.0x): -${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.coldSend5hPct.toFixed(4)}% 5h)`
+                : `Chat Details (${cacheInfo.stepCount} steps · ${(cacheInfo.contextTokens || 0).toLocaleString('en-US')} context tokens):\n` +
+                  `• Used so far: -${cacheInfo.weeklyPctUsed.toFixed(4)}% Weekly (-${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)\n` +
+                  `• Next message Warm (0.1x): -${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)\n` +
+                  `• Next message Cold (1.0x): -${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.coldSend5hPct.toFixed(4)}% 5h)`;
+        }
+    }
+
+    function updateComposerChatBadge() {
+        updateComposerStatusStrip();
+    }
+
+    function updateLiveSendEstimator() {
+        updateComposerStatusStrip();
     }
 
     // Attach input listeners for instant pre-send estimation while typing
     document.addEventListener('input', (e) => {
         if (e.target && (e.target.getAttribute('role') === 'combobox' || e.target.isContentEditable || e.target.tagName === 'TEXTAREA')) {
-            updateLiveSendEstimator();
+            updateComposerStatusStrip();
         }
     }, true);
 
     // ----------------------------------------------------------------------------
-    // 7. Per-Message Post-Turn Cost Badges in Chat Stream
+    // 7. Per-Message Post-Turn Cost Badges in Chat Stream (Clean 3-Chip Single-Line)
     // ----------------------------------------------------------------------------
     function renderPerMessageTurnBadges() {
         const stats = amsTelemetryState.activeConvStats;
@@ -1083,36 +1093,63 @@
             if (!badge) {
                 badge = document.createElement('div');
                 badge.className = 'antigravity-turn-cost-badge';
-                badge.style.cssText =
-                    'display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;padding:3px 9px;' +
-                    'border-radius:6px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;' +
-                    'font-variant-numeric:tabular-nums;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.07);' +
-                    'color:var(--muted-foreground,#a1a1aa);user-select:none;';
                 article.appendChild(badge);
             }
+            badge.style.cssText =
+                'display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:0;' +
+                'font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:11px;' +
+                'font-variant-numeric:tabular-nums;white-space:nowrap;max-width:100%;overflow-x:auto;' +
+                'color:var(--muted-foreground,#94a3b8);user-select:none;cursor:help;';
 
             const cachePct = turn.totalInput > 0 ? Math.round((turn.cached / turn.totalInput) * 100) : 0;
             const wPct = Number(turn.weeklyPct || 0).toFixed(4);
-            const hPct = Number(turn.fiveHourPct || 0).toFixed(4);
+            const hPct = Number(turn.fiveHourPct || 0).toFixed(2);
             const eurStr = Number(turn.apiCostEur || 0).toFixed(2);
             const savedEurStr = Number(turn.apiSavedEur || 0).toFixed(2);
             const savedTurnTokens = Math.round(Number(turn.cached || 0) * 0.9);
-            const savedTurnW = (savedTurnTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
-            const savedTurn5h = (savedTurnTokens * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
+            const savedTurnW = (savedTurnTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(2);
+            const savedTurn5h = (savedTurnTokens * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(2);
 
-            const missPill = turn.cacheMiss
-                ? `<span style="display:inline-flex;align-items:center;gap:3px;color:#fbbf24;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);padding:0 5px;border-radius:4px;font-weight:700;">${amsIcon('snowflake', 10, '#fbbf24')}<span>Cache-Miss (${formatDurationShort(turn.maxPauseSec)} ${isDe ? 'Pause' : 'idle'} · -${Number(turn.wastedWeeklyPct || 0).toFixed(4)}% W / -${(Number(turn.wastedWeeklyPct || 0) * 4).toFixed(4)}% 5h)</span></span>`
-                : `<span style="display:inline-flex;align-items:center;gap:3px;color:#34d399;font-weight:700;">${amsIcon('flame', 10, '#34d399')}<span>${cachePct}% Cache (+${savedTurnW}% W / +${savedTurn5h}% 5h ${isDe ? 'gespart' : 'saved'})</span></span>`;
+            // Chip 1: Quota Used
+            const quotaChip =
+                `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.22);color:#e2e8f0;">` +
+                    `${amsIcon('zap', 10, '#38bdf8')}` +
+                    `<strong style="color:#38bdf8;font-weight:700;">-${wPct}% W</strong>` +
+                    `<span style="opacity:0.65;font-size:10px;">(-${hPct}% 5h)</span>` +
+                `</span>`;
 
-            badge.innerHTML =
-                `<span style="display:inline-flex;align-items:center;gap:3px;color:#38bdf8;font-weight:700;">${amsIcon('zap', 10, '#38bdf8')}<span>-${wPct}% W</span></span>` +
-                `<span style="opacity:0.75;">(-${hPct}% 5h)</span>` +
-                `<span style="opacity:0.35;">|</span>` +
-                missPill +
-                `<span style="opacity:0.35;">|</span>` +
-                `<span>${turn.steps} ${turn.steps === 1 ? 'Step' : 'Steps'} · ${formatTokensCompact(turn.cached)} Cache · ${formatTokensCompact(turn.uncached)} In · ${formatTokensCompact(turn.out)} Out</span>` +
-                `<span style="opacity:0.35;">|</span>` +
-                `<span style="display:inline-flex;align-items:center;gap:3px;color:#fcd34d;">${amsIcon('coins', 10, '#fcd34d')}<span>~${eurStr} €</span><span style="opacity:0.65;">(+${savedEurStr} € ${isDe ? 'gespart' : 'saved'})</span></span>`;
+            // Chip 2: Cache Hit / Miss Status
+            const cacheChip = turn.cacheMiss
+                ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.28);color:#fbbf24;font-weight:600;">` +
+                      `${amsIcon('snowflake', 10, '#fbbf24')}` +
+                      `<span>Cache-Miss · -${Number(turn.wastedWeeklyPct || 0).toFixed(3)}% W ${isDe ? 'verloren' : 'lost'}</span>` +
+                  `</span>`
+                : `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.22);color:#34d399;font-weight:600;">` +
+                      `${amsIcon('flame', 10, '#34d399')}` +
+                      `<span>${cachePct}% Cache · +${savedTurnW}% W ${isDe ? 'gespart' : 'saved'}</span>` +
+                  `</span>`;
+
+            // Chip 3: Steps & Euro Summary
+            const metaChip =
+                `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);color:#94a3b8;font-size:10.5px;">` +
+                    `<span>${turn.steps} ${turn.steps === 1 ? 'Step' : 'Steps'}</span>` +
+                    `<span style="opacity:0.4;">·</span>` +
+                    `<span style="color:#fcd34d;font-weight:600;">~${eurStr} €</span>` +
+                `</span>`;
+
+            badge.innerHTML = quotaChip + cacheChip + metaChip;
+
+            badge.title = isDe
+                ? `Details zu dieser KI-Antwort (${turn.steps} Steps):\n` +
+                  `• Abzug: -${wPct}% Weekly / -${Number(turn.fiveHourPct || 0).toFixed(4)}% 5-Stunden-Limit\n` +
+                  `• Durch Cache gespart: +${(savedTurnTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4)}% Weekly (+${savedTurn5h}% 5h)\n` +
+                  `• Tokens: ${formatTokensCompact(turn.cached)} aus Cache (${cachePct}%) · ${formatTokensCompact(turn.uncached)} neu · ${formatTokensCompact(turn.out)} Output\n` +
+                  `• API-Wert: ~${eurStr} € (+${savedEurStr} € durch Cache gespart)`
+                : `AI Response Breakdown (${turn.steps} steps):\n` +
+                  `• Quota used: -${wPct}% Weekly / -${Number(turn.fiveHourPct || 0).toFixed(4)}% 5h\n` +
+                  `• Saved by cache: +${(savedTurnTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4)}% Weekly (+${savedTurn5h}% 5h)\n` +
+                  `• Tokens: ${formatTokensCompact(turn.cached)} cached (${cachePct}%) · ${formatTokensCompact(turn.uncached)} new · ${formatTokensCompact(turn.out)} out\n` +
+                  `• API value: ~€${eurStr} (+€${savedEurStr} saved)`;
         });
     }
 
@@ -1199,7 +1236,7 @@
     }
 
     document.addEventListener('click', (e) => {
-        if (activeColdPopover && !activeColdPopover.contains(e.target) && !e.target.closest('.antigravity-sidebar-chat-meta')) {
+        if (activeColdPopover && !activeColdPopover.contains(e.target) && !e.target.closest('.antigravity-sidebar-chat-meta-v2')) {
             closeColdChatPopover();
         }
         if (activeModelSwitchPopover && !activeModelSwitchPopover.contains(e.target) && !e.target.closest('[data-testid="model-selector-trigger"]') && !e.target.closest('[data-testid="model-selector-panel"]')) {
@@ -1225,10 +1262,10 @@
                                    row.querySelector('.shrink-0.ml-2');
             if (!rightContainer) return;
 
-            let badge = row.querySelector('.antigravity-sidebar-chat-meta');
+            let badge = row.querySelector('.antigravity-sidebar-chat-meta-v2');
             if (!badge) {
                 badge = document.createElement('span');
-                badge.className = 'antigravity-sidebar-chat-meta';
+                badge.className = 'antigravity-sidebar-chat-meta-v2';
                 badge.style.cssText =
                     'display:inline-flex;align-items:center;gap:3px;padding:1px 5px;border-radius:4px;' +
                     'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9.5px;font-weight:600;' +
@@ -1242,35 +1279,42 @@
                 rightContainer.insertBefore(badge, rightContainer.firstChild);
             }
 
-            // Format Weekly %: show 4 decimals when running or active, 3 decimals otherwise for compact sidebar fit
             const isSelected = row.getAttribute('data-selected') === 'true' || cascadeId === currentConvId;
-            const wDecimals = (cacheInfo.isRunning || isSelected) ? 4 : 3;
-            const wPctStr = cacheInfo.weeklyPctUsed.toFixed(wDecimals);
 
             if (cacheInfo.isRunning) {
-                badge.style.background = 'rgba(16, 185, 129, 0.14)';
-                badge.style.border = '1px solid rgba(16, 185, 129, 0.42)';
+                // LIVE Running Chat: High-visibility emerald pill with 4 decimals
+                badge.style.background = 'rgba(16, 185, 129, 0.15)';
+                badge.style.border = '1px solid rgba(16, 185, 129, 0.45)';
                 badge.style.color = '#6ee7b7';
-                badge.innerHTML = `${amsIcon('flame', 10, '#6ee7b7')}<span>-${wPctStr}%W</span>`;
+                badge.style.padding = '1px 5px';
+                badge.style.opacity = '1';
+                badge.innerHTML = `${amsIcon('zap', 10, '#6ee7b7')}<span>-${cacheInfo.weeklyPctUsed.toFixed(4)}%</span>`;
             } else if (cacheInfo.state === 'warm') {
+                // WARM Chat (< 5m): Emerald pill with countdown + %
                 badge.style.background = 'rgba(16, 185, 129, 0.10)';
-                badge.style.border = '1px solid rgba(16, 185, 129, 0.28)';
+                badge.style.border = '1px solid rgba(16, 185, 129, 0.30)';
                 badge.style.color = '#34d399';
+                badge.style.padding = '1px 5px';
+                badge.style.opacity = '1';
                 const remM = Math.ceil(cacheInfo.remainingGuaranteedSec / 60);
-                badge.innerHTML = `${amsIcon('flame', 10, '#34d399')}<span>${remM}m</span><span style="opacity:0.85;">-${wPctStr}%</span>`;
-            } else if (cacheInfo.state === 'lukewarm') {
-                // Freshly expired 5m guarantee (5m - 17m): warn clearly!
-                badge.style.background = 'rgba(245, 158, 11, 0.15)';
-                badge.style.border = '1px solid rgba(245, 158, 11, 0.45)';
+                const wDec = isSelected ? 4 : 2;
+                badge.innerHTML = `${amsIcon('flame', 10, '#34d399')}<span>${remM}m · -${cacheInfo.weeklyPctUsed.toFixed(wDec)}%</span>`;
+            } else if (cacheInfo.state === 'lukewarm' || (cacheInfo.idleSec < 1800 && cacheInfo.contextTokens > 25000)) {
+                // Freshly Cold (5m - 30m): Subtle Amber Pill so user knows it just cooled down
+                badge.style.background = 'rgba(245, 158, 11, 0.12)';
+                badge.style.border = '1px solid rgba(245, 158, 11, 0.35)';
                 badge.style.color = '#fbbf24';
-                badge.innerHTML = `${amsIcon('alert', 10, '#fbbf24')}<span>${ isDe ? 'Kalt?' : 'Cold?' }</span><span style="opacity:0.9;">-${wPctStr}%</span>`;
+                badge.style.padding = '1px 5px';
+                badge.style.opacity = '0.95';
+                badge.innerHTML = `${amsIcon('snowflake', 9, '#fbbf24')}<span>-${cacheInfo.weeklyPctUsed.toFixed(2)}%</span>`;
             } else {
-                // Cold (> 17m)
-                const isFreshlyCold = cacheInfo.idleSec < 3600 && cacheInfo.contextTokens > 35000;
-                badge.style.background = isFreshlyCold ? 'rgba(239, 68, 68, 0.12)' : 'rgba(148, 163, 184, 0.08)';
-                badge.style.border = isFreshlyCold ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(148, 163, 184, 0.18)';
-                badge.style.color = isFreshlyCold ? '#fca5a5' : '#94a3b8';
-                badge.innerHTML = `${amsIcon('snowflake', 10, isFreshlyCold ? '#fca5a5' : '#94a3b8')}<span>-${wPctStr}%</span>`;
+                // Old Cold Chats (> 30m ago): Quiet, borderless label so the sidebar stays clean and uncluttered!
+                badge.style.background = isSelected ? 'rgba(255,255,255,0.06)' : 'transparent';
+                badge.style.border = isSelected ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent';
+                badge.style.color = '#94a3b8';
+                badge.style.padding = isSelected ? '1px 5px' : '0 2px';
+                badge.style.opacity = isSelected ? '0.9' : '0.55';
+                badge.innerHTML = `<span>-${cacheInfo.weeklyPctUsed.toFixed(isSelected ? 3 : 2)}%</span>`;
             }
 
             badge.title = isDe
@@ -1376,10 +1420,10 @@
             }
         }
 
-        let dossierEl = scrollRoot.querySelector('#antigravity-models-usage-intelligence');
+        let dossierEl = scrollRoot.querySelector('#antigravity-models-usage-intelligence-v2');
         if (!dossierEl) {
             dossierEl = document.createElement('div');
-            dossierEl.id = 'antigravity-models-usage-intelligence';
+            dossierEl.id = 'antigravity-models-usage-intelligence-v2';
             dossierEl.style.cssText =
                 'margin-top:20px;padding-top:18px;border-top:1px solid var(--border,rgba(255,255,255,0.09));' +
                 'display:flex;flex-direction:column;gap:16px;font-family:ui-sans-serif,system-ui,sans-serif;' +
@@ -1512,41 +1556,39 @@
             };
             const isJustPulsed = (Date.now() - (drainInfo.lastPulseTs || 0)) < 3500;
             const totalTokExact = (Number(c.totalInput || 0) + Number(c.totalOutput || 0)).toLocaleString(isDe ? 'de-DE' : 'en-US');
-            const savedW = ((Number(c.totalCached || 0) * 0.9) * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
-            const saved5h = ((Number(c.totalCached || 0) * 0.9) * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
+            const savedW = ((Number(c.totalCached || 0) * 0.9) * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(2);
             const drainBarWidth = Math.min(100, Math.max(4, Number(c.weeklyPctUsed || 0) * 45)).toFixed(1);
 
-            return `<div style="padding:10px 12px;border-radius:8px;background:${cState.isRunning ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.025)'};border:1px solid ${isJustPulsed ? '#34d399' : cState.isRunning ? 'rgba(52,211,153,0.40)' : 'rgba(255,255,255,0.08)'};box-shadow:${isJustPulsed ? '0 0 18px rgba(16,185,129,0.28)' : 'none'};transition:all 0.25s ease;display:flex;flex-direction:column;gap:6px;">` +
+            return `<div style="padding:10px 12px;border-radius:8px;background:${cState.isRunning ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.025)'};border:1px solid ${isJustPulsed ? '#34d399' : cState.isRunning ? 'rgba(52,211,153,0.35)' : 'rgba(255,255,255,0.08)'};transition:all 0.25s ease;display:flex;flex-direction:column;gap:8px;">` +
                 `<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;">` +
-                    `<div style="display:flex;align-items:center;gap:7px;min-width:0;">` +
-                        `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;font-size:9.5px;font-weight:800;background:${cState.isRunning ? 'rgba(16,185,129,0.22)' : 'rgba(56,189,248,0.14)'};border:1px solid ${cState.isRunning ? 'rgba(52,211,153,0.55)' : 'rgba(56,189,248,0.35)'};color:${cState.isRunning ? '#6ee7b7' : '#7dd3fc'};">` +
+                    `<div style="display:flex;align-items:center;gap:8px;min-width:0;">` +
+                        `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;background:${cState.isRunning ? 'rgba(16,185,129,0.18)' : 'rgba(56,189,248,0.12)'};border:1px solid ${cState.isRunning ? 'rgba(52,211,153,0.45)' : 'rgba(56,189,248,0.30)'};color:${cState.isRunning ? '#6ee7b7' : '#7dd3fc'};">` +
                             `${amsIcon(cState.isRunning ? 'zap' : 'flame', 10, cState.isRunning ? '#6ee7b7' : '#7dd3fc')}` +
-                            `<span>${cState.isRunning ? (isDe ? 'ARBEITET LIVE' : 'WORKING LIVE') : (isDe ? 'WARM BEREIT (' + formatDurationShort(cState.remainingGuaranteedSec) + ')' : 'WARM READY')}</span>` +
+                            `<span>${cState.isRunning ? 'LIVE' : (isDe ? 'WARM (' + formatDurationShort(cState.remainingGuaranteedSec) + ')' : 'WARM')}</span>` +
                         `</span>` +
-                        `<strong style="font-size:12px;color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px;" title="${title.replace(/"/g, '&quot;')}">${title.replace(/</g, '&lt;')}</strong>` +
-                        `<span style="font-size:10.5px;font-family:monospace;color:#94a3b8;">(Step #${c.stepCount || 0} · ${c.turnCount || 1} Prompts)</span>` +
+                        `<strong style="font-size:12.5px;color:#f8fafc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px;" title="${title.replace(/"/g, '&quot;')}">${title.replace(/</g, '&lt;')}</strong>` +
+                        `<span style="font-size:11px;color:#94a3b8;">Step #${c.stepCount || 0}</span>` +
                     `</div>` +
-                    `<div style="display:flex;align-items:center;gap:8px;font-family:monospace;font-size:11px;">` +
-                        `<span style="padding:2px 7px;border-radius:5px;background:rgba(239,68,68,0.14);border:1px solid rgba(248,113,113,0.35);color:#fca5a5;font-weight:700;">` +
-                            `▲ +${formatTokensCompact(drainInfo.lastDeltaTok)} Tok · -${Number(drainInfo.lastDeltaWeeklyPct || 0.005).toFixed(4)}% W (-${Number(drainInfo.lastDelta5hPct || 0.020).toFixed(4)}% 5h) ${isDe ? 'letzter Step' : 'last step'}` +
-                        `</span>` +
+                    `<span style="padding:2px 8px;border-radius:5px;background:rgba(56,189,248,0.10);border:1px solid rgba(56,189,248,0.25);color:#7dd3fc;font-size:10.5px;font-weight:600;">` +
+                        `+${formatTokensCompact(drainInfo.lastDeltaTok)} Tok · -${Number(drainInfo.lastDeltaWeeklyPct || 0.005).toFixed(4)}% W ${isDe ? 'letzter Step' : 'last step'}` +
+                    `</span>` +
+                `</div>` +
+                `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;font-size:11px;">` +
+                    `<div style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);">` +
+                        `<div style="font-size:9.5px;color:#94a3b8;text-transform:uppercase;">Live Tokens</div>` +
+                        `<div style="font-size:13px;font-weight:700;color:#f8fafc;margin-top:2px;">${totalTokExact} <span style="font-size:10.5px;color:#34d399;font-weight:600;">(${Math.round(c.cacheRatio || 0)}% Cache)</span></div>` +
+                    `</div>` +
+                    `<div style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);">` +
+                        `<div style="font-size:9.5px;color:#94a3b8;text-transform:uppercase;">${isDe ? 'Verbrauch (Chat)' : 'Quota Used'}</div>` +
+                        `<div style="font-size:13px;font-weight:700;color:#38bdf8;margin-top:2px;">-${Number(c.weeklyPctUsed || 0).toFixed(4)}% W <span style="font-size:10.5px;color:#94a3b8;font-weight:400;">(-${Number(c.fiveHourPctUsed || 0).toFixed(2)}% 5h)</span></div>` +
+                    `</div>` +
+                    `<div style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);">` +
+                        `<div style="font-size:9.5px;color:#94a3b8;text-transform:uppercase;">${isDe ? 'Cache-Ersparnis' : 'Cache Saved'}</div>` +
+                        `<div style="font-size:13px;font-weight:700;color:#34d399;margin-top:2px;">+${savedW}% W <span style="font-size:10.5px;color:#fcd34d;font-weight:500;">(+${Number(c.apiSavedEur || 0).toFixed(2)} €)</span></div>` +
                     `</div>` +
                 `</div>` +
-                `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;font-size:11px;font-family:monospace;padding-top:2px;">` +
-                    `<div style="color:#cbd5e1;">` +
-                        `<span style="color:#94a3b8;">${isDe ? 'Live Tokens:' : 'Live Tokens:'}</span> <strong style="color:#f8fafc;">${totalTokExact}</strong> ` +
-                        `<span style="color:#34d399;">(${Math.round(c.cacheRatio || 0)}% Cache)</span>` +
-                    `</div>` +
-                    `<div style="color:#cbd5e1;">` +
-                        `<span style="color:#94a3b8;">${isDe ? 'Raubt Usage:' : 'Draining Quota:'}</span> <strong style="color:#f87171;">-${Number(c.weeklyPctUsed || 0).toFixed(4)}% W</strong> ` +
-                        `<span style="color:#a78bfa;">(-${Number(c.fiveHourPctUsed || 0).toFixed(4)}% 5h)</span> · <span style="color:#fcd34d;">${Number(c.apiCostEur || 0).toFixed(2)} €</span>` +
-                    `</div>` +
-                    `<div style="color:#cbd5e1;">` +
-                        `<span style="color:#94a3b8;">${isDe ? 'Durch Cache gespart:' : 'Saved by Cache:'}</span> <strong style="color:#34d399;">+${savedW}% W (+${saved5h}% 5h)</strong> · <span style="color:#6ee7b7;">+${Number(c.apiSavedEur || 0).toFixed(2)} €</span>` +
-                    `</div>` +
-                `</div>` +
-                `<div style="height:5px;width:100%;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">` +
-                    `<div style="height:100%;width:${drainBarWidth}%;background:linear-gradient(90deg,#10b981,#38bdf8,#f59e0b);border-radius:999px;transition:width 0.4s ease;"></div>` +
+                `<div style="height:4px;width:100%;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">` +
+                    `<div style="height:100%;width:${drainBarWidth}%;background:#10b981;border-radius:999px;transition:width 0.4s ease;"></div>` +
                 `</div>` +
             `</div>`;
         }).join('');
@@ -1838,64 +1880,18 @@
     }
 
     function updateModelSelectorTriggerBadge() {
+        // Keep the narrow toolbar button row clean: remove any legacy trigger pill or floating switch popover
+        const legacyTriggerPill = document.getElementById('antigravity-model-trigger-loss-pill');
+        if (legacyTriggerPill) legacyTriggerPill.remove();
+        closeModelSwitchPopover();
+
         const btn = document.querySelector('[data-testid="model-selector-trigger"], button[aria-label^="Select model, current:"]');
         if (!btn) return;
 
         const currentLabel = getCurrentModelLabelFromTrigger();
-        const activeId = getActiveCascadeId();
-        const cacheInfo = activeId ? getChatCacheState(activeId) : null;
-
-        // Detect model change mid-chat and show interactive warning popover
-        if (currentLabel && lastKnownActiveModelLabel && currentLabel !== lastKnownActiveModelLabel) {
-            if (!suppressNextModelSwitchPopup && cacheInfo && cacheInfo.stepCount > 0) {
-                showModelSwitchWarningPopover(lastKnownActiveModelLabel, currentLabel, cacheInfo);
-            }
-        }
         if (currentLabel) {
             lastKnownActiveModelLabel = currentLabel;
         }
-
-        // Attach subtle pre-click badge next to the Model Selector Trigger button when chat has context
-        let triggerPill = document.getElementById('antigravity-model-trigger-loss-pill');
-        if (!cacheInfo || cacheInfo.stepCount === 0) {
-            if (triggerPill) triggerPill.style.display = 'none';
-            return;
-        }
-
-        if (!triggerPill) {
-            triggerPill = document.createElement('span');
-            triggerPill.id = 'antigravity-model-trigger-loss-pill';
-            triggerPill.style.cssText =
-                'display:inline-flex;align-items:center;gap:3px;padding:1px 6px;margin-left:3px;border-radius:999px;' +
-                'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9.5px;font-weight:600;' +
-                'font-variant-numeric:tabular-nums;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.32);' +
-                'color:#fcd34d;cursor:pointer;white-space:nowrap;user-select:none;';
-            triggerPill.addEventListener('click', (e) => {
-                // Clicking the pill opens the model selector menu so the user sees all inline model costs
-                e.stopPropagation();
-                btn.click();
-            });
-        }
-
-        if (btn.parentElement && triggerPill.parentElement !== btn.parentElement) {
-            btn.parentElement.style.display = 'inline-flex';
-            btn.parentElement.style.alignItems = 'center';
-            btn.insertAdjacentElement('afterend', triggerPill);
-        }
-
-        const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
-        const lossW = cacheInfo.extraColdLossWeeklyPct.toFixed(4);
-        const loss5h = cacheInfo.extraColdLoss5hPct.toFixed(4);
-        triggerPill.style.display = 'inline-flex';
-        triggerPill.innerHTML = `${amsIcon('lock', 9, '#fbbf24')}<span style="opacity:0.85;">${ isDe ? 'Wechsel' : 'Switch' }:</span> <strong style="color:#fbbf24;">-${lossW}% W</strong>`;
-        triggerPill.title = isDe
-            ? `Aktiver Chat-Kontext (${formatTokensCompact(cacheInfo.contextTokens)} Tokens · ${cacheInfo.stepCount} Steps) ist an "${currentLabel}" gebunden.\n` +
-              `• Modellwechsel im selben Chat verwirft den KV-Cache!\n` +
-              `• Direktverlust beim nächsten Senden nach Modellwechsel: -${lossW}% Weekly (-${loss5h}% 5h)\n` +
-              `• Klicke auf den Modell-Picker für den exakten Modell-Vergleich vor dem Wechsel.`
-            : `Active chat context (${formatTokensCompact(cacheInfo.contextTokens)} tokens · ${cacheInfo.stepCount} steps) is bound to "${currentLabel}".\n` +
-              `• Switching models mid-chat discards the KV-Cache!\n` +
-              `• Direct penalty on next send after switching: -${lossW}% Weekly (-${loss5h}% 5h)`;
     }
 
     function decorateOpenModelPickerMenu() {
@@ -1908,22 +1904,21 @@
         const cacheInfo = activeId ? getChatCacheState(activeId) : null;
         const hasContext = !!(cacheInfo && cacheInfo.stepCount > 0);
 
-        // Ensure menu container is wide and tall enough to show inline badges cleanly without clipping
         const menuEl = panel.closest('[role="menu"]');
         if (menuEl) {
-            menuEl.style.maxWidth = '460px';
-            menuEl.style.minWidth = '360px';
+            menuEl.style.maxWidth = '420px';
+            menuEl.style.minWidth = '340px';
         }
-        panel.style.maxHeight = '460px';
+        panel.style.maxHeight = '440px';
 
-        // 1. Inject or update the top Context & Cache-Loss Banner inside the Model Picker
+        // 1. Clean 1-line Context Header inside the Model Picker
         const headerEl = panel.querySelector('[data-testid="model-selector-header"]');
         let bannerEl = panel.querySelector('#antigravity-model-picker-banner');
         if (!bannerEl && headerEl && headerEl.parentElement) {
             bannerEl = document.createElement('div');
             bannerEl.id = 'antigravity-model-picker-banner';
             bannerEl.style.cssText =
-                'margin:2px 6px 6px 6px;padding:7px 9px;border-radius:8px;font-size:10.5px;line-height:1.4;' +
+                'margin:2px 6px 6px 6px;padding:6px 9px;border-radius:7px;font-size:10.5px;line-height:1.35;' +
                 'font-variant-numeric:tabular-nums;user-select:none;';
             headerEl.insertAdjacentElement('afterend', bannerEl);
         }
@@ -1933,30 +1928,22 @@
             if (bannerEl.getAttribute('data-sig') !== sig) {
                 bannerEl.setAttribute('data-sig', sig);
                 if (!hasContext) {
-                    bannerEl.style.background = 'rgba(16,185,129,0.10)';
-                    bannerEl.style.border = '1px solid rgba(52,211,153,0.30)';
+                    bannerEl.style.background = 'rgba(16,185,129,0.08)';
+                    bannerEl.style.border = '1px solid rgba(52,211,153,0.25)';
                     bannerEl.style.color = '#a7f3d0';
                     bannerEl.innerHTML =
                         `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
-                            `<span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('check', 11, '#34d399')}<strong>${isDe ? 'Neuer Chat (0 Kontext)' : 'New Chat (0 Context)'}</strong> — ${isDe ? 'Modellwechsel kostet' : 'Model switch penalty:'} <strong>0.0000% W</strong></span>` +
+                            `<span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('check', 11, '#34d399')}<strong>${isDe ? 'Neuer Chat' : 'New Chat'}</strong> · ${isDe ? 'Modellwechsel ohne Verlust (0%)' : 'Switch penalty: 0%'}</span>` +
                         `</div>`;
                 } else {
                     const lossW = cacheInfo.extraColdLossWeeklyPct.toFixed(4);
-                    const loss5h = cacheInfo.extraColdLoss5hPct.toFixed(4);
-                    const warmW = cacheInfo.warmSendWeeklyPct.toFixed(4);
-                    const coldW = cacheInfo.coldSendWeeklyPct.toFixed(4);
-                    bannerEl.style.background = 'rgba(245,158,11,0.11)';
-                    bannerEl.style.border = '1px solid rgba(245,158,11,0.38)';
+                    bannerEl.style.background = 'rgba(245,158,11,0.10)';
+                    bannerEl.style.border = '1px solid rgba(245,158,11,0.32)';
                     bannerEl.style.color = '#fde68a';
                     bannerEl.innerHTML =
-                        `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:3px;">` +
-                            `<strong style="display:inline-flex;align-items:center;gap:4px;color:#fbbf24;font-size:11px;">${amsIcon('alert', 11, '#fbbf24')}<span>${isDe ? `Aktiver Kontext: ${formatTokensCompact(cacheInfo.contextTokens)} Tok (${cacheInfo.stepCount} Steps)` : `Active Context: ${formatTokensCompact(cacheInfo.contextTokens)} Tok (${cacheInfo.stepCount} Steps)`}</span></strong>` +
-                            `<button type="button" class="ams-mp-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:5px;border:1px solid rgba(52,211,153,0.5);background:rgba(16,185,129,0.22);color:#6ee7b7;font-size:9.5px;font-weight:700;cursor:pointer;">${amsIcon('plus', 10, '#6ee7b7')}<span>${isDe ? 'Neuer Chat (0% Verlust)' : 'New Chat (0% Loss)'}</span></button>` +
-                        `</div>` +
-                        `<div style="color:#e2e8f0;font-size:10px;">` +
-                            (isDe
-                                ? `Andere Modelle besitzen deinen KV-Cache nicht! Wechsel im selben Chat kostet beim nächsten Senden <strong style="color:#f87171;">-${coldW}% W</strong> statt <strong style="color:#34d399;">-${warmW}% W</strong> (<strong style="color:#fbbf24;">Verlust: -${lossW}% W / -${loss5h}% 5h</strong>).`
-                                : `Other models don't share your KV-Cache! Switching mid-chat costs <strong style="color:#f87171;">-${coldW}% W</strong> instead of <strong style="color:#34d399;">-${warmW}% W</strong> (<strong style="color:#fbbf24;">Loss: -${lossW}% W / -${loss5h}% 5h</strong>).`) +
+                        `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
+                            `<span style="display:inline-flex;align-items:center;gap:4px;color:#fbbf24;font-weight:600;">${amsIcon('alert', 11, '#fbbf24')}<span>${isDe ? `Wechsel verwirft Cache (-${lossW}% W)` : `Switch drops cache (-${lossW}% W)`}</span></span>` +
+                            `<button type="button" class="ams-mp-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;border:1px solid rgba(52,211,153,0.45);background:rgba(16,185,129,0.18);color:#6ee7b7;font-size:9.5px;font-weight:700;cursor:pointer;">${amsIcon('plus', 9, '#6ee7b7')}<span>${isDe ? 'Neuer Chat' : 'New Chat'}</span></button>` +
                         `</div>`;
                     const ncBtn = bannerEl.querySelector('.ams-mp-newchat-btn');
                     if (ncBtn) {
@@ -1972,7 +1959,7 @@
             }
         }
 
-        // 2. Decorate each model row ([role="menuitem"]) inside the panel with its exact switch cost
+        // 2. Clean 1-number badge on each model row ([role="menuitem"])
         const menuItems = Array.from(panel.querySelectorAll('[role="menuitem"]'));
         menuItems.forEach((item) => {
             const rawText = (item.textContent || '').trim();
@@ -1991,10 +1978,9 @@
                 badge = document.createElement('span');
                 badge.className = 'antigravity-model-item-cost-badge';
                 badge.style.cssText =
-                    'display:inline-flex;align-items:center;gap:4px;margin-left:auto;padding:1px 6px;border-radius:4px;' +
-                    'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9.5px;font-weight:700;' +
+                    'display:inline-flex;align-items:center;gap:3px;margin-left:auto;padding:1px 6px;border-radius:4px;' +
+                    'font-family:ui-sans-serif,system-ui,sans-serif;font-size:10px;font-weight:600;' +
                     'font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0;';
-                // Insert right before the trailing checkmark / arrow icons
                 const firstSpan = item.querySelector('span');
                 if (firstSpan && firstSpan.nextSibling) {
                     item.insertBefore(badge, firstSpan.nextSibling);
@@ -2005,15 +1991,15 @@
 
             if (!hasContext) {
                 if (isCurrentModel) {
-                    badge.style.background = 'rgba(16,185,129,0.14)';
-                    badge.style.border = '1px solid rgba(52,211,153,0.35)';
+                    badge.style.background = 'rgba(16,185,129,0.12)';
+                    badge.style.border = '1px solid rgba(52,211,153,0.30)';
                     badge.style.color = '#34d399';
-                    badge.innerHTML = `${amsIcon('check', 10, '#34d399')}<span>${isDe ? 'Aktiv (0% Verlust)' : 'Active (0% loss)'}</span>`;
+                    badge.innerHTML = `${amsIcon('check', 10, '#34d399')}<span>${isDe ? 'Aktiv' : 'Active'}</span>`;
                 } else {
-                    badge.style.background = 'rgba(255,255,255,0.04)';
-                    badge.style.border = '1px solid rgba(255,255,255,0.08)';
-                    badge.style.color = '#94a3b8';
-                    badge.textContent = '0.0000% W';
+                    badge.style.background = 'transparent';
+                    badge.style.border = 'none';
+                    badge.style.color = '#64748b';
+                    badge.textContent = '0% W';
                 }
                 return;
             }
@@ -2027,32 +2013,23 @@
 
             if (isCurrentModel) {
                 const isWarm = cacheInfo.state === 'warm' || cacheInfo.isRunning;
-                badge.style.background = isWarm ? 'rgba(16,185,129,0.14)' : 'rgba(245,158,11,0.14)';
-                badge.style.border = isWarm ? '1px solid rgba(52,211,153,0.38)' : '1px solid rgba(245,158,11,0.38)';
+                badge.style.background = isWarm ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)';
+                badge.style.border = isWarm ? '1px solid rgba(52,211,153,0.32)' : '1px solid rgba(245,158,11,0.32)';
                 badge.style.color = isWarm ? '#34d399' : '#fbbf24';
                 badge.innerHTML = isWarm
-                    ? `${amsIcon('flame', 10, '#34d399')}<span>Cache aktiv (-${stayWarmW.toFixed(4)}% W)</span>`
-                    : `${amsIcon('snowflake', 10, '#fbbf24')}<span>Kalt (-${switchColdW.toFixed(4)}% W)</span>`;
+                    ? `${amsIcon('flame', 10, '#34d399')}<span>Cache warm</span>`
+                    : `${amsIcon('snowflake', 10, '#fbbf24')}<span>Kalt</span>`;
                 badge.title = isDe
-                    ? `Aktuelles Modell (${baseModelName}):\n• Kein Modellwechsel-Verlust!\n• Nächster Send im warmen Cache: -${stayWarmW.toFixed(4)}% Weekly (-${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)`
-                    : `Current Model (${baseModelName}):\n• No model-switch penalty!\n• Next warm send: -${stayWarmW.toFixed(4)}% Weekly`;
+                    ? `Aktuelles Modell (${baseModelName}) · Nächster Send: -${stayWarmW.toFixed(4)}% W`
+                    : `Current Model (${baseModelName}) · Next send: -${stayWarmW.toFixed(4)}% W`;
             } else {
-                badge.style.background = 'rgba(239,68,68,0.13)';
-                badge.style.border = '1px solid rgba(248,113,113,0.38)';
-                badge.style.color = '#fca5a5';
-                badge.innerHTML =
-                    `${amsIcon('alert', 10, '#fca5a5')}<span>-${lossW.toFixed(4)}% W</span>` +
-                    `<span style="opacity:0.75;font-size:8.5px;">(-${loss5h.toFixed(3)}% 5h)</span>`;
+                badge.style.background = 'rgba(245,158,11,0.10)';
+                badge.style.border = '1px solid rgba(245,158,11,0.28)';
+                badge.style.color = '#fcd34d';
+                badge.innerHTML = `<span>-${lossW.toFixed(4)}% W</span>`;
                 badge.title = isDe
-                    ? `Wechsel zu ${baseModelName} im laufenden Chat (${formatTokensCompact(cacheInfo.contextTokens)} Tok Kontext):\n` +
-                      `• KV-Cache geht verloren (100% Uncached Reload beim nächsten Prompt)!\n` +
-                      `• Nächste Nachricht kostet dann: -${switchColdW.toFixed(4)}% Weekly (-${switchCold5h.toFixed(4)}% 5h)\n` +
-                      `• Direkter Verlust gegenüber aktuellem Modell: -${lossW.toFixed(4)}% Weekly (-${loss5h.toFixed(4)}% 5h)\n` +
-                      `💡 Tipp: Starte für einen Modellwechsel lieber einen neuen Chat (0% Verlust)!`
-                    : `Switching to ${baseModelName} mid-chat (${formatTokensCompact(cacheInfo.contextTokens)} tok context):\n` +
-                      `• KV-Cache is lost (100% uncached reload on next prompt)!\n` +
-                      `• Next message will cost: -${switchColdW.toFixed(4)}% Weekly (-${switchCold5h.toFixed(4)}% 5h)\n` +
-                      `• Direct switch penalty: -${lossW.toFixed(4)}% Weekly (-${loss5h.toFixed(4)}% 5h)`;
+                    ? `Wechsel zu ${baseModelName} verwirft den KV-Cache:\n• Verlust beim nächsten Senden: -${lossW.toFixed(4)}% Weekly (-${loss5h.toFixed(4)}% 5h)`
+                    : `Switching to ${baseModelName} drops KV-Cache:\n• Next send loss: -${lossW.toFixed(4)}% Weekly (-${loss5h.toFixed(4)}% 5h)`;
             }
         });
     }
@@ -2095,8 +2072,13 @@
     // 1-second lightweight UI ticker so the 5-minute warm cache countdown ticks smoothly
     setInterval(() => {
         if (document.hidden) return;
+        ensureCleanUiStyles();
+        if (!document.querySelector('.antigravity-quota-pill-v2')) {
+            refreshQuotaDisplay();
+        }
         updateComposerChatBadge();
         updateLiveSendEstimator();
+        renderPerMessageTurnBadges();
         updateModelSelectorTriggerBadge();
         decorateOpenModelPickerMenu();
         decorateSidebarConversations();
