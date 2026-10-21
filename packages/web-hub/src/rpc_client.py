@@ -1063,7 +1063,7 @@ foreach ($p in $procs) {{
                     yield ("content", c_delta)
                 if is_complete and emitted_text_len > 0:
                     break
-            await asyncio.sleep(0.025)
+            await asyncio.sleep(0.10)
 
     async def stream_response_deltas(
         self,
