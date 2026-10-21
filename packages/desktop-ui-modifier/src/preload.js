@@ -1251,11 +1251,18 @@ const amsScriptContent = `(async function() {
     }
 
     function ensureCleanUiStyles() {
-        if (document.getElementById('ams-clean-ui-override')) return;
-        const st = document.createElement('style');
-        st.id = 'ams-clean-ui-override';
-        st.textContent =
+        let st = document.getElementById('ams-clean-ui-override');
+        if (!st) {
+            st = document.createElement('style');
+            st.id = 'ams-clean-ui-override';
+            (document.head || document.documentElement).appendChild(st);
+        }
+        const css =
             '.antigravity-cache-hit-toast,' +
+            '.antigravity-ultra-badge,' +
+            '.ams-models-ultra-pill,' +
+            '.antigravity-quota-display,' +
+            '.antigravity-turn-cost-badge,' +
             '#antigravity-chat-token-counter,' +
             '#antigravity-live-send-estimator,' +
             '#antigravity-model-trigger-loss-pill,' +
@@ -1264,7 +1271,9 @@ const amsScriptContent = `(async function() {
             '#antigravity-models-usage-intelligence {' +
             '  display: none !important;' +
             '}';
-        (document.head || document.documentElement).appendChild(st);
+        if (st.textContent !== css) {
+            st.textContent = css;
+        }
     }
     ensureCleanUiStyles();
 
@@ -1951,8 +1960,41 @@ const amsScriptContent = `(async function() {
     }
 
     function refreshQuotaDisplay() {
-        const quotaEl = document.querySelector('.antigravity-quota-display');
-        if (!quotaEl) return;
+        const addContextBtn = document.querySelector('button[aria-label="Add context"]');
+        const flexContainer = addContextBtn ? addContextBtn.parentElement : null;
+        if (!flexContainer) return;
+
+        let quotaEl = document.getElementById('antigravity-quota-display-v2');
+        if (!quotaEl) {
+            quotaEl = document.createElement('div');
+            quotaEl.id = 'antigravity-quota-display-v2';
+            quotaEl.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const settingsBtn = document.querySelector('[data-testid="settings-button"]');
+                if (settingsBtn) {
+                    settingsBtn.click();
+                    let attempts = 0;
+                    const interval = setInterval(() => {
+                        let modelsTab = null;
+                        document.querySelectorAll('button, [role="tab"], [role="button"]').forEach(btn => {
+                            if (btn.textContent && btn.textContent.trim() === 'Models') {
+                                modelsTab = btn;
+                            }
+                        });
+                        if (modelsTab) {
+                            modelsTab.click();
+                            clearInterval(interval);
+                        }
+                        attempts++;
+                        if (attempts > 20) clearInterval(interval);
+                    }, 50);
+                }
+            });
+            flexContainer.appendChild(quotaEl);
+        } else if (quotaEl.parentElement !== flexContainer) {
+            flexContainer.appendChild(quotaEl);
+        }
 
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
         const g5hExact = currentQuotaData.gemini5hExact;
@@ -2000,16 +2042,7 @@ const amsScriptContent = `(async function() {
             'white-space:nowrap;flex-shrink:0;user-select:none;cursor:pointer;';
         quotaEl.title = tooltipText;
 
-        // 1. Sleek Google AI Ultra Badge (Single-line, compact)
-        const ultraBadge = document.createElement('span');
-        ultraBadge.className = 'antigravity-ultra-badge';
-        ultraBadge.style.cssText =
-            'display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 6px;border-radius:5px;' +
-            'font-size:9.5px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;' +
-            'background:rgba(245,158,11,0.14);border:1px solid rgba(251,191,36,0.38);color:#fde68a;';
-        ultraBadge.innerHTML = \`\${amsIcon('sparkles', 10, '#fde68a')}<span>ULTRA</span>\`;
-
-        // 2. Unified Single-Line Quota Pill (Weekly + 5h — never wraps, never collides with right buttons)
+        // Unified Single-Line Quota Pill (Weekly + 5h — never wraps, never collides with right buttons)
         const unifiedQuotaPill = document.createElement('span');
         unifiedQuotaPill.className = 'antigravity-quota-pill-v2';
         unifiedQuotaPill.style.cssText =
@@ -2026,7 +2059,7 @@ const amsScriptContent = `(async function() {
                 \`<strong style="color:\${getPercentColorHex(g5hExact)};font-weight:600;">\${g5hExact.toFixed(1)}%</strong>\` +
             \`</span>\`;
 
-        quotaEl.replaceChildren(ultraBadge, unifiedQuotaPill);
+        quotaEl.replaceChildren(unifiedQuotaPill);
 
         // Keep legacy inline toolbar elements hidden so the button row never overflows
         const legacyChatTokenEl = document.getElementById('antigravity-chat-token-counter');
@@ -2257,10 +2290,10 @@ const amsScriptContent = `(async function() {
             const turn = turns[idx] || (idx === agentArticles.length - 1 ? turns[turns.length - 1] : null);
             if (!turn || !turn.steps) return;
 
-            let badge = article.querySelector('.antigravity-turn-cost-badge');
+            let badge = article.querySelector('.antigravity-turn-cost-badge-v2');
             if (!badge) {
                 badge = document.createElement('div');
-                badge.className = 'antigravity-turn-cost-badge';
+                badge.className = 'antigravity-turn-cost-badge-v2';
                 article.appendChild(badge);
             }
             badge.style.cssText =
@@ -2511,22 +2544,7 @@ const amsScriptContent = `(async function() {
 
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
 
-        // 1. Decorate "Your Plan: Google AI Ultra" with a sleek ULTRA Max-Tier Badge
-        const planDivs = Array.from(dialog.querySelectorAll('div.text-sm.font-medium'));
-        const planLabel = planDivs.find(el => el.textContent && el.textContent.includes('Your Plan:'));
-        if (planLabel && !planLabel.querySelector('.ams-models-ultra-pill')) {
-            const pill = document.createElement('span');
-            pill.className = 'ams-models-ultra-pill';
-            pill.style.cssText =
-                'display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 8px;border-radius:999px;' +
-                'font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;' +
-                'background:linear-gradient(135deg,rgba(245,158,11,0.2),rgba(139,92,246,0.25));' +
-                'border:1px solid rgba(251,191,36,0.5);color:#fde68a;box-shadow:0 0 14px rgba(245,158,11,0.18);';
-            pill.innerHTML = \`\${amsIcon('sparkles', 11, '#fde68a')}<span>ULTRA MAX TIER · 20,000 STEPS/WK</span>\`;
-            planLabel.appendChild(pill);
-        }
-
-        // 2. Patch Native "5-Hour Limit" and "Weekly Limit" Percentage Spans with Exact 4-Decimal Precision!
+        // 1. Patch Native "5-Hour Limit" and "Weekly Limit" Percentage Spans with Exact 4-Decimal Precision!
         const allSpans = Array.from(dialog.querySelectorAll('span'));
         let bucketIdx = 0;
         for (const s of allSpans) {
@@ -2795,11 +2813,11 @@ const amsScriptContent = `(async function() {
 
         dossierEl.innerHTML =
             // Header Bar
-            \`<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:10px;background:linear-gradient(135deg,rgba(245,158,11,0.10),rgba(56,189,248,0.08),rgba(139,92,246,0.12));border:1px solid rgba(251,191,36,0.32);">\` +
+            \`<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.09);">\` +
                 \`<div style="display:flex;flex-direction:column;gap:2px;">\` +
                     \`<div style="display:flex;align-items:center;gap:8px;">\` +
-                        \`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:800;letter-spacing:0.06em;background:rgba(245,158,11,0.22);border:1px solid rgba(251,191,36,0.5);color:#fde68a;">\${amsIcon('sparkles', 11, '#fde68a')}<span>GOOGLE AI ULTRA</span></span>\` +
-                        \`<strong style="font-size:14px;color:#f8fafc;">\${isDe ? 'Argon High Quota-, Token- & Prompt-Cache Dossier' : 'Argon High Quota, Token & Prompt-Cache Dossier'}</strong>\` +
+                        \`\${amsIcon('chart', 14, '#38bdf8')}\` +
+                        \`<strong style="font-size:14px;color:#f8fafc;">\${isDe ? 'Quota-, Token- & Prompt-Cache Dossier' : 'Quota, Token & Prompt-Cache Dossier'}</strong>\` +
                     \`</div>\` +
                     \`<span style="font-size:11.5px;color:var(--muted-foreground,#94a3b8);">\` +
                         (isDe
@@ -3219,29 +3237,34 @@ const amsScriptContent = `(async function() {
     // ----------------------------------------------------------------------------
     // 10. Periodic Polling & Live Countdown Ticker
     // ----------------------------------------------------------------------------
+    if (Array.isArray(window.__ams_v2_intervals)) {
+        window.__ams_v2_intervals.forEach(id => clearInterval(id));
+    }
+    window.__ams_v2_intervals = [];
+
     setTimeout(() => {
         fetchUserQuotaSummary();
         fetchAllCascadeTrajectories();
     }, 1200);
 
-    setInterval(() => {
+    window.__ams_v2_intervals.push(setInterval(() => {
         fetchUserQuotaSummary();
-    }, 20000);
+    }, 20000));
 
-    setInterval(() => {
+    window.__ams_v2_intervals.push(setInterval(() => {
         fetchAllCascadeTrajectories();
-    }, 12000);
+    }, 12000));
 
-    setInterval(() => {
+    window.__ams_v2_intervals.push(setInterval(() => {
         if (typeof updateTokenStats === 'function') updateTokenStats();
         if (typeof updateCompactionCounter === 'function') updateCompactionCounter();
-    }, 8000);
+    }, 8000));
 
     // 1-second lightweight UI ticker so the 5-minute warm cache countdown ticks smoothly
-    setInterval(() => {
+    window.__ams_v2_intervals.push(setInterval(() => {
         if (document.hidden) return;
         ensureCleanUiStyles();
-        if (!document.querySelector('.antigravity-quota-pill-v2')) {
+        if (!document.getElementById('antigravity-quota-display-v2')) {
             refreshQuotaDisplay();
         }
         updateComposerChatBadge();
@@ -3251,7 +3274,7 @@ const amsScriptContent = `(async function() {
         decorateOpenModelPickerMenu();
         decorateSidebarConversations();
         patchModelsAndUsagePage();
-    }, 1000);
+    }, 1000));
 
     let currentPlanText = '';
     const parts = window.location.pathname.split('/');
