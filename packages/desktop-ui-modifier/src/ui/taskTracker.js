@@ -92,20 +92,45 @@
         const chatTokenEl = document.getElementById('antigravity-chat-token-counter');
         const footerTokenEl = document.getElementById('antigravity-token-counter');
 
-        if (!currentConvId || !window.electronNative || !window.electronNative.getTokenStats) {
+        if (!window.electronNative || !window.electronNative.getTokenStats) {
+            if (chatTokenEl) chatTokenEl.style.display = 'none';
+            if (footerTokenEl) footerTokenEl.style.display = 'none';
+            return;
+        }
+
+        const fallbackCid = (window.amsTelemetryState && window.amsTelemetryState.liveTrajectoriesMap && window.amsTelemetryState.liveTrajectoriesMap.keys().next().value) ||
+                            (document.querySelector('[data-cascade-id]') && document.querySelector('[data-cascade-id]').getAttribute('data-cascade-id')) ||
+                            null;
+        const targetConvId = currentConvId || fallbackCid;
+
+        if (!targetConvId) {
             if (chatTokenEl) chatTokenEl.style.display = 'none';
             if (footerTokenEl) footerTokenEl.style.display = 'none';
             return;
         }
 
         try {
-            const res = await window.electronNative.getTokenStats(currentConvId);
+            const res = await window.electronNative.getTokenStats(targetConvId);
             if (res && res.status === 'success') {
+                if (typeof window.amsIngestTokenStatsResult === 'function') {
+                    window.amsIngestTokenStatsResult(res, targetConvId === currentConvId);
+                }
+
+                if (targetConvId !== currentConvId) {
+                    if (chatTokenEl) chatTokenEl.style.display = 'none';
+                    if (footerTokenEl) footerTokenEl.style.display = 'none';
+                    return;
+                }
+
                 const totalIn = res.totalInput || 0;
                 const totalOut = res.totalOutput || 0;
                 const totalUncached = res.totalUncached || 0;
                 const totalCached = res.totalCached || 0;
                 const cacheRatio = res.cacheRatio || 0.0;
+                const weeklyPctUsed = Number(res.weeklyPctUsed || 0).toFixed(4);
+                const fiveHourPctUsed = Number(res.fiveHourPctUsed || 0).toFixed(4);
+                const apiCostEur = Number(res.apiCostEur || 0).toFixed(2);
+                const apiSavedEur = Number(res.apiSavedEur || 0).toFixed(2);
 
                 const latestIn = res.latestInput || 0;
                 const latestOut = res.latestOutput || 0;
@@ -125,11 +150,13 @@
                 const totalStr = formatTokens(totalIn);
 
                 if (footerTokenEl) {
-                    footerTokenEl.querySelector('span').textContent = 'Tokens: ' + totalStr;
+                    footerTokenEl.querySelector('span').textContent = 'Tokens: ' + totalStr + ' (-' + weeklyPctUsed + '% W)';
                     footerTokenEl.style.display = 'inline-flex';
 
                     const tooltip =
                         'Akkumulierter Verbrauch für dieses Gespräch:\n' +
+                        '• Quota-Abzug: -' + weeklyPctUsed + '% Weekly / -' + fiveHourPctUsed + '% 5h\n' +
+                        '• API-Gegenwert: ' + apiCostEur + ' € (+' + apiSavedEur + ' € durch Cache gespart)\n' +
                         '• Input (Gesamt): ' + totalIn.toLocaleString('de-DE') + '\n' +
                         '  - Aus Cache: ' + totalCached.toLocaleString('de-DE') + ' (' + cacheRatio + '%)\n' +
                         '  - Uncached: ' + totalUncached.toLocaleString('de-DE') + '\n' +
@@ -140,18 +167,6 @@
                         '  - Uncached: ' + latestUncached.toLocaleString('de-DE') + '\n' +
                         '• Output: ' + latestOut.toLocaleString('de-DE');
                     footerTokenEl.title = tooltip;
-                }
-
-                if (chatTokenEl) {
-                    chatTokenEl.textContent = 'T: ' + totalStr;
-                    chatTokenEl.style.display = 'inline-flex';
-
-                    const tooltip =
-                        'Akkumulierter Token-Verbrauch (Input): ' + totalIn.toLocaleString('de-DE') + '\n' +
-                        'Cache-Trefferquote: ' + cacheRatio + '%\n' +
-                        'Output: ' + totalOut.toLocaleString('de-DE') + '\n' +
-                        '(Details im Task-Planer)';
-                    chatTokenEl.title = tooltip;
                 }
             } else {
                 if (chatTokenEl) chatTokenEl.style.display = 'none';

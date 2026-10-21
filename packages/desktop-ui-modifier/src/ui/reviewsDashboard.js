@@ -1832,6 +1832,31 @@
             }
         }
 
+        const soundSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
+        const soundOnInit = !(window.amsTelemetryState && window.amsTelemetryState.soundEnabled === false);
+        const soundItem = createMenuItem(
+            soundOnInit
+                ? '🔊 Cache-Hit Sound: Aktiv (Cha-Ching)'
+                : '🔇 Cache-Hit Sound: Stumm',
+            soundSvg,
+            () => {
+                if (typeof window.amsToggleCacheHitSound === 'function') {
+                    const nextOn = window.amsToggleCacheHitSound();
+                    const lbl = soundItem.querySelector('span');
+                    if (lbl) {
+                        lbl.textContent = nextOn
+                            ? '🔊 Cache-Hit Sound: Aktiv (Cha-Ching)'
+                            : '🔇 Cache-Hit Sound: Stumm';
+                        if (typeof window.amsApplyI18nToDom === 'function') {
+                            window.amsApplyI18nToDom(soundItem);
+                        }
+                    }
+                }
+            },
+            false,
+        );
+        actionsSection.appendChild(soundItem);
+
         const langSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
         const activeLang = (typeof window.amsGetLang === 'function') ? window.amsGetLang() : 'en';
         const langItem = createMenuItem(
