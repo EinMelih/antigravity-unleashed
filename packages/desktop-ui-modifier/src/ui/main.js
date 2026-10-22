@@ -69,11 +69,31 @@
         console.error('[AMS] Failed to restore last active session:', e);
     }
 
-    // Save current page path on initial load (any non-root path)
+    // Save current page path on initial load (only if focused or no saved path yet)
+    let lastStoragePathSaveTs = 0;
+    const syncFocusedWindowPath = () => {
+        try {
+            window.__ams_last_user_interaction_ts = Date.now();
+            const activeCid = typeof window.amsGetActiveCascadeId === 'function' ? window.amsGetActiveCascadeId() : '';
+            const curPath = activeCid ? ('/c/' + activeCid) : (window.location.pathname + window.location.search);
+            if (curPath && curPath !== '/' && curPath !== '' && !curPath.includes('blank')) {
+                if (Date.now() - lastStoragePathSaveTs > 1500) {
+                    lastStoragePathSaveTs = Date.now();
+                    window.nativeStorage.updateItems({ antigravity_last_chat_path: curPath });
+                }
+            }
+        } catch (_) {}
+    };
+    window.addEventListener('focus', syncFocusedWindowPath);
+    document.addEventListener('pointerdown', syncFocusedWindowPath, { passive: true });
+    document.addEventListener('keydown', syncFocusedWindowPath, { passive: true });
+
     try {
         const initialPath = window.location.pathname + window.location.search;
         if (initialPath && initialPath !== '/' && initialPath !== '' && !initialPath.includes('blank')) {
-            await window.nativeStorage.updateItems({ antigravity_last_chat_path: initialPath });
+            if (document.hasFocus() || !nativeStorageItems.antigravity_last_chat_path) {
+                await window.nativeStorage.updateItems({ antigravity_last_chat_path: initialPath });
+            }
         }
     } catch (e) {
         // ignore
@@ -230,10 +250,10 @@
                 // Reload task plan for the new active chat
                 loadInitialPlan();
 
-                // Save last active session path (any non-root URL: chats, settings, history, scheduled tasks, etc.)
+                // Save last active session path (if this window is focused)
                 try {
                     const path = window.location.pathname + window.location.search;
-                    if (path && path !== '/' && path !== '') {
+                    if (path && path !== '/' && path !== '' && document.hasFocus()) {
                         window.nativeStorage.updateItems({ antigravity_last_chat_path: path });
                     }
                 } catch (e) {

@@ -116,6 +116,18 @@
         amsTelemetryState.repackInfo.pending = false;
         refreshQuotaDisplay();
         try {
+            const activeCid = typeof getActiveCascadeId === 'function' ? getActiveCascadeId() : '';
+            const curPath = window.location.pathname + window.location.search;
+            if (window.nativeStorage && typeof window.nativeStorage.updateItems === 'function') {
+                const payload = { antigravity_repack_trigger_ts: Date.now() };
+                if (activeCid) {
+                    payload.antigravity_repack_trigger_chat_id = activeCid;
+                    payload.antigravity_last_chat_path = '/c/' + activeCid;
+                } else if (curPath && curPath !== '/') {
+                    payload.antigravity_last_chat_path = curPath;
+                }
+                await window.nativeStorage.updateItems(payload);
+            }
             if (window.electronNative && typeof window.electronNative.getTokenStats === 'function') {
                 await window.electronNative.getTokenStats('__AMS_REPACK_TRIGGER__');
             }
@@ -1025,25 +1037,7 @@
             quotaEl.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                const settingsBtn = document.querySelector('[data-testid="settings-button"]');
-                if (settingsBtn) {
-                    settingsBtn.click();
-                    let attempts = 0;
-                    const interval = setInterval(() => {
-                        let modelsTab = null;
-                        document.querySelectorAll('button, [role="tab"], [role="button"]').forEach(btn => {
-                            if (btn.textContent && btn.textContent.trim() === 'Models') {
-                                modelsTab = btn;
-                            }
-                        });
-                        if (modelsTab) {
-                            modelsTab.click();
-                            clearInterval(interval);
-                        }
-                        attempts++;
-                        if (attempts > 20) clearInterval(interval);
-                    }, 50);
-                }
+                toggleQuotaHudPopover(quotaEl);
             });
             flexContainer.appendChild(quotaEl);
         } else if (quotaEl.parentElement !== flexContainer) {
@@ -1178,8 +1172,8 @@
             }
             const runningNote = rInfo.runningChatsCount > 0
                 ? (isDe
-                    ? `\n⚠️ Hinweis: Aktuell arbeiten ${rInfo.runningChatsCount} Chat(s). Klicke erst, wenn deine Agenten fertig sind.`
-                    : `\n⚠️ Note: ${rInfo.runningChatsCount} chat(s) currently active. Click when ready to restart.`)
+                    ? `\n⚡ Auto-Resume aktiv: Aktuell arbeiten ${rInfo.runningChatsCount} Chat(s) — nach dem Neustart werden alle aktiven Agenten automatisch mit "continue" geweckt.`
+                    : `\n⚡ Auto-Resume active: ${rInfo.runningChatsCount} chat(s) currently working — all active agents will be automatically resumed with "continue" after restart.`)
                 : (isDe ? '\n✓ Kein automatischer Neustart ohne deinen Klick.' : '\n✓ Will only restart when you click.');
             repackBtn.title =
                 (isDe ? `Repack bereit: ${shortTitle}\n` : `Repack ready: ${shortTitle}\n`) +
@@ -1208,10 +1202,156 @@
     }
 
     // ----------------------------------------------------------------------------
+    // 5b. Interactive Live Quota & Cache HUD Popover (Click on Weekly Pill)
+    // ----------------------------------------------------------------------------
+    let activeQuotaHudPopover = null;
+
+    function openModelsAndUsageSettings() {
+        closeQuotaHudPopover();
+        const settingsBtn = document.querySelector('[data-testid="settings-button"]');
+        if (settingsBtn) {
+            settingsBtn.click();
+            let attempts = 0;
+            const interval = setInterval(() => {
+                let modelsTab = null;
+                document.querySelectorAll('button, [role="tab"], [role="button"]').forEach(btn => {
+                    if (btn.textContent && btn.textContent.trim() === 'Models') {
+                        modelsTab = btn;
+                    }
+                });
+                if (modelsTab) {
+                    modelsTab.click();
+                    clearInterval(interval);
+                }
+                attempts++;
+                if (attempts > 20) clearInterval(interval);
+            }, 50);
+        }
+    }
+
+    function closeQuotaHudPopover() {
+        if (activeQuotaHudPopover) {
+            activeQuotaHudPopover.remove();
+            activeQuotaHudPopover = null;
+        }
+    }
+
+    function renderQuotaHudPopoverBody(pop) {
+        if (!pop) return;
+        const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
+        const gWExact = amsLiveOdometer.initialized ? amsLiveOdometer.displayWeekly : currentQuotaData.geminiWeeklyExact;
+        const gWServer = currentQuotaData.geminiWeeklyExact;
+        const g5hExact = currentQuotaData.gemini5hExact;
+        const gWReset = cleanResetTime(currentQuotaData.geminiWeeklyDesc);
+        const g5hReset = cleanResetTime(currentQuotaData.gemini5hDesc);
+
+        const activeId = getActiveCascadeId();
+        if (activeId && document.hasFocus() && lastSavedFocusedCascadeId !== activeId) {
+            lastSavedFocusedCascadeId = activeId;
+            if (window.nativeStorage && typeof window.nativeStorage.updateItems === 'function') {
+                window.nativeStorage.updateItems({ antigravity_last_chat_path: '/c/' + activeId }).catch(() => {});
+            }
+        }
+        const cacheInfo = activeId ? getChatCacheState(activeId) : null;
+        const ctxTok = cacheInfo && cacheInfo.contextTokens ? cacheInfo.contextTokens : 0;
+        const warmInputPct = (ctxTok * 0.1 * 100) / 470000000;
+        const coldInputPct = (ctxTok * 1.0 * 100) / 470000000;
+        const savedPerStepPct = Math.max(0, coldInputPct - warmInputPct);
+        const remStepsW = Math.round(gWExact * 200);
+        const remTasksL = Math.round(gWExact / 0.125);
+        const prefs = window.amsGetUiPrefs ? window.amsGetUiPrefs() : DEFAULT_AMS_UI_PREFS;
+
+        const sig = `${gWExact.toFixed(4)}|${gWServer.toFixed(6)}|${ctxTok}|${cacheInfo ? cacheInfo.state : 'none'}|${cacheInfo ? cacheInfo.stepCount : 0}|${prefs.show5hLimit ? 1 : 0}|${isDe}`;
+        if (pop.getAttribute('data-hud-sig') === sig) return;
+        pop.setAttribute('data-hud-sig', sig);
+
+        const chatSectionHtml = ctxTok > 0
+            ? `<div style="margin-top:8px;padding:8px 10px;border-radius:7px;background:rgba(255,255,255,0.03);border:1px solid ${AMS_THEME.borderSubtle};display:flex;flex-direction:column;gap:4px;">` +
+                  `<div style="display:flex;justify-content:space-between;align-items:center;font-weight:600;color:${AMS_THEME.textBright};margin-bottom:2px;">` +
+                      `<span>${isDe ? `Aktueller Chat (${formatTokensCompact(ctxTok)} Kontext · ${cacheInfo.stepCount} Steps)` : `Current Chat (${formatTokensCompact(ctxTok)} ctx · ${cacheInfo.stepCount} steps)`}</span>` +
+                      `<span style="color:${cacheInfo.state === 'warm' || cacheInfo.isRunning ? AMS_THEME.sage : AMS_THEME.sand};">${cacheInfo.state === 'warm' || cacheInfo.isRunning ? (isDe ? '🔥 Warm' : '🔥 Warm') : (isDe ? '❄️ Kalt' : '❄️ Cold')}</span>` +
+                  `</div>` +
+                  `<div style="display:flex;justify-content:space-between;"><span>${isDe ? '🔥 Warm-Step (0.1× Input, 90% Rabatt):' : '🔥 Warm step (0.1× input, 90% off):'}</span><span style="color:${AMS_THEME.sage};font-weight:600;">-${warmInputPct.toFixed(4)}% W</span></div>` +
+                  `<div style="display:flex;justify-content:space-between;"><span>${isDe ? '❄️ Kaltstart-Reload (1.0× Input, 10×):' : '❄️ Cold reload (1.0× input, 10×):'}</span><span style="color:${AMS_THEME.sand};font-weight:600;">-${coldInputPct.toFixed(4)}% W</span></div>` +
+                  `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Ersparnis pro warmem Step:' : 'Saved per warm step:'}</span><span style="color:${AMS_THEME.textPrimary};font-weight:500;">+${savedPerStepPct.toFixed(4)}% W</span></div>` +
+              `</div>`
+            : '';
+
+        pop.innerHTML =
+            `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:7px;border-bottom:1px solid rgba(255,255,255,0.07);">` +
+                `<strong style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textBright};font-size:12px;font-weight:600;">` +
+                    `${amsIcon('chart', 12, AMS_THEME.sage)}<span>${isDe ? 'Live Quota-Odometer & Token-Faktencheck' : 'Live Quota Odometer & Token Fact-Check'}</span>` +
+                `</strong>` +
+                `<button type="button" class="ams-qhud-close" style="display:inline-flex;align-items:center;background:transparent;border:none;color:${AMS_THEME.textMuted};cursor:pointer;padding:2px;">${amsIcon('close', 12, AMS_THEME.textMuted)}</button>` +
+            `</div>` +
+            `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:11px;color:${AMS_THEME.textMuted};">` +
+                `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Weekly-Limit (Live 4-Dezimal):' : 'Weekly Limit (Live 4-Dec):'}</span><span style="color:${AMS_THEME.textBright};font-weight:700;font-size:12px;">${gWExact.toFixed(4)}%</span></div>` +
+                `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Exakter Google-Server Float:' : 'Exact Google Server Float:'}</span><span style="color:${AMS_THEME.textPrimary};font-family:monospace;">${gWServer.toFixed(6)}% (${gWReset})</span></div>` +
+                `<div style="display:flex;justify-content:space-between;"><span>${isDe ? '5-Stunden-Limit:' : '5-Hour Limit:'}</span><span style="color:${AMS_THEME.textPrimary};">${g5hExact.toFixed(4)}% (${g5hReset})</span></div>` +
+                `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Verbleibende Kapazität:' : 'Remaining Capacity:'}</span><span style="color:${AMS_THEME.sage};font-weight:500;">~${remStepsW.toLocaleString(isDe ? 'de-DE' : 'en-US')} Steps · ~${remTasksL} Tasks</span></div>` +
+            `</div>` +
+            chatSectionHtml +
+            `<div style="margin-top:8px;padding:7px 9px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);font-size:10.5px;line-height:1.4;color:${AMS_THEME.textMuted};">` +
+                (isDe
+                    ? `<strong>Bestätigt durch Google RPC:</strong> Quota wird exakt nach gewichteten Token-Kosten abgerechnet (TPU-HBM Cache = <code>0.1×</code>, Uncached Input = <code>1.0×</code>). Ein Kaltstart (>5m) lädt den Kontext <strong>10× teurer</strong> neu.`
+                    : `<strong>Confirmed via Google RPC:</strong> Quota is billed strictly by weighted token cost (TPU HBM cache = <code>0.1×</code>, uncached input = <code>1.0×</code>). A cold start (>5m) reloads context at <strong>10× cost</strong>.`) +
+            `</div>` +
+            `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding-top:7px;border-top:1px solid rgba(255,255,255,0.07);">` +
+                `<label style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:${AMS_THEME.textPrimary};cursor:pointer;user-select:none;">` +
+                    `<input type="checkbox" class="ams-qhud-5h-chk" ${prefs.show5hLimit ? 'checked' : ''} style="accent-color:#75b092;margin:0;cursor:pointer;" />` +
+                    `<span>${isDe ? '5h-Limit in Leiste zeigen' : 'Show 5h limit in bar'}</span>` +
+                `</label>` +
+                `<button type="button" class="ams-qhud-open-models" style="display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:5px;border:1px solid ${AMS_THEME.borderHover};background:${AMS_THEME.surfaceHover};color:${AMS_THEME.textBright};font-size:10.5px;font-weight:500;cursor:pointer;">` +
+                    `<span>${isDe ? 'Models & Usage →' : 'Models & Usage →'}</span>` +
+                `</button>` +
+            `</div>`;
+
+        const closeBtn = pop.querySelector('.ams-qhud-close');
+        if (closeBtn) closeBtn.onclick = () => closeQuotaHudPopover();
+        const chk5h = pop.querySelector('.ams-qhud-5h-chk');
+        if (chk5h) {
+            chk5h.onchange = (ev) => {
+                if (typeof window.amsSetUiPref === 'function') {
+                    window.amsSetUiPref('show5hLimit', !!ev.target.checked);
+                }
+            };
+        }
+        const openBtn = pop.querySelector('.ams-qhud-open-models');
+        if (openBtn) openBtn.onclick = () => openModelsAndUsageSettings();
+    }
+
+    function toggleQuotaHudPopover(anchorEl) {
+        if (activeQuotaHudPopover) {
+            closeQuotaHudPopover();
+            return;
+        }
+        const rect = anchorEl.getBoundingClientRect();
+        const pop = document.createElement('div');
+        pop.id = 'antigravity-quota-hud-popover';
+        pop.style.cssText =
+            'position:fixed;z-index:999999;width:365px;padding:12px 14px;border-radius:10px;' +
+            'background:rgba(20,20,22,0.98);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.10);' +
+            'box-shadow:0 16px 36px rgba(0,0,0,0.68);color:rgba(255,255,255,0.88);font-family:ui-sans-serif,system-ui,sans-serif;' +
+            'font-size:11.5px;line-height:1.45;font-variant-numeric:tabular-nums;user-select:none;';
+
+        renderQuotaHudPopoverBody(pop);
+        document.body.appendChild(pop);
+        activeQuotaHudPopover = pop;
+
+        const popRect = pop.getBoundingClientRect();
+        const top = Math.max(12, rect.top - popRect.height - 8);
+        const left = Math.min(window.innerWidth - 380, Math.max(12, rect.left));
+        pop.style.top = top + 'px';
+        pop.style.left = left + 'px';
+    }
+
+    // ----------------------------------------------------------------------------
     // 6. Clean Full-Width Composer Status Strip (Native Antigravity Aesthetic)
     // ----------------------------------------------------------------------------
     let lastRequestedTokenStatsCid = null;
     let lastRequestedTokenStatsTs = 0;
+
+    let lastSavedFocusedCascadeId = null;
 
     function getActiveCascadeId() {
         const parts = window.location.pathname.split('/');
@@ -1229,6 +1369,7 @@
         }
         return currentConvId || null;
     }
+    window.amsGetActiveCascadeId = getActiveCascadeId;
 
     function getComposerInputText() {
         const el = document.querySelector('[role="combobox"][aria-label="Message input"]') ||
@@ -1240,6 +1381,9 @@
 
     function updateComposerStatusStrip() {
         if (window.__ams_active_instance_id !== myInstanceId) return;
+        if (activeQuotaHudPopover) {
+            renderQuotaHudPopoverBody(activeQuotaHudPopover);
+        }
         const addContextBtn = document.querySelector('button[aria-label="Add context"]');
         if (!addContextBtn || !addContextBtn.parentElement) return;
         const buttonRow = addContextBtn.parentElement;
@@ -1262,6 +1406,12 @@
         }
 
         const activeId = getActiveCascadeId();
+        if (activeId && document.hasFocus() && lastSavedFocusedCascadeId !== activeId) {
+            lastSavedFocusedCascadeId = activeId;
+            if (window.nativeStorage && typeof window.nativeStorage.updateItems === 'function') {
+                window.nativeStorage.updateItems({ antigravity_last_chat_path: '/c/' + activeId }).catch(() => {});
+            }
+        }
 
         // If user switched chats in the sidebar, fetch active chat stats immediately so UI never lags or shows another chat
         if (activeId && (!amsTelemetryState.activeConvStats || amsTelemetryState.activeConvStats.cascadeId !== activeId)) {
@@ -1288,31 +1438,43 @@
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
         stripEl.style.display = 'flex';
 
-        const ctxCompact = formatTokensCompact(cacheInfo.contextTokens);
+        const ctxTokens = cacheInfo.contextTokens || 0;
+        const ctxCompact = formatTokensCompact(ctxTokens);
+        const warmStepPct = ((ctxTokens * 0.1 * 100) / 470000000).toFixed(4);
+        const coldStepPct = ((ctxTokens * 1.0 * 100) / 470000000).toFixed(4);
+        const stats = amsTelemetryState.activeConvStats;
+        const isStillFillingInitialCache = (cacheInfo.stepCount <= 2 && (!stats || !stats.totalCached || stats.totalCached === 0));
+
         let leftHtml = '';
         let rightHtml = '';
 
         if (cacheInfo.isRunning) {
+            const statusRightText = isStillFillingInitialCache
+                ? (isDe ? `Cache wird aufgebaut (${ctxCompact} Tok)...` : `Filling cache (${ctxCompact} tok)...`)
+                : (isDe ? `90% Cache-Rabatt aktiv (~${warmStepPct}% W/Step)` : `90% cache discount active (~${warmStepPct}% W/step)`);
             leftHtml =
                 `<div style="display:inline-flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">` +
                     `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textPrimary};font-weight:500;">` +
                         `${amsIcon('zap', 10, AMS_THEME.sage)}<span>${isDe ? `Aktiv (Step #${cacheInfo.stepCount})` : `Active (Step #${cacheInfo.stepCount})`}</span>` +
                     `</span>` +
                     `<span style="color:${AMS_THEME.textFaint};">·</span>` +
-                    `<span style="color:${AMS_THEME.textMuted};">${isDe ? '90% Cache-Rabatt aktiv' : '90% cache discount active'}</span>` +
+                    `<span style="color:${AMS_THEME.textMuted};">${statusRightText}</span>` +
                 `</div>`;
             rightHtml =
                 `<div style="display:inline-flex;align-items:center;gap:6px;color:${AMS_THEME.textMuted};flex-shrink:0;">` +
                     `<span>${ctxCompact} ${isDe ? 'Kontext' : 'context'}</span>` +
                 `</div>`;
         } else if (cacheInfo.state === 'warm') {
+            const warmDetail = isStillFillingInitialCache
+                ? (isDe ? `Initialer Kontext bereit (${ctxCompact} Tok)` : `Initial context ready (${ctxCompact} tok)`)
+                : (isDe ? `Du sparst 90% (~${warmStepPct}% statt ${coldStepPct}% W)` : `You save 90% (~${warmStepPct}% vs ${coldStepPct}% W)`);
             leftHtml =
                 `<div style="display:inline-flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">` +
                     `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textPrimary};font-weight:500;">` +
                         `${amsIcon('flame', 10, AMS_THEME.sage)}<span>${isDe ? `Cache warm (noch ${formatDurationShort(cacheInfo.remainingGuaranteedSec)})` : `Cache warm (${formatDurationShort(cacheInfo.remainingGuaranteedSec)} left)`}</span>` +
                     `</span>` +
                     `<span style="color:${AMS_THEME.textFaint};">·</span>` +
-                    `<span style="color:${AMS_THEME.textPrimary};font-weight:500;">${isDe ? 'Du sparst 90%' : 'You save 90%'}</span>` +
+                    `<span style="color:${AMS_THEME.textPrimary};font-weight:500;">${warmDetail}</span>` +
                 `</div>`;
             rightHtml =
                 `<div style="display:inline-flex;align-items:center;gap:6px;color:${AMS_THEME.textMuted};flex-shrink:0;">` +
@@ -1325,7 +1487,7 @@
                         `${amsIcon('snowflake', 10, AMS_THEME.sand)}<span>${isDe ? `Cache kalt (${formatDurationShort(cacheInfo.idleSec)} Pause)` : `Cache cold (${formatDurationShort(cacheInfo.idleSec)} idle)`}</span>` +
                     `</span>` +
                     `<span style="color:${AMS_THEME.textFaint};">·</span>` +
-                    `<span style="color:${AMS_THEME.sand};">${isDe ? `${ctxCompact} Kontext ohne 90%-Rabatt (10× Input)` : `${ctxCompact} context loses 90% discount (10× input)`}</span>` +
+                    `<span style="color:${AMS_THEME.sand};">${isDe ? `Reload kostet ~${coldStepPct}% statt ${warmStepPct}% W (10× Input)` : `Reload costs ~${coldStepPct}% vs ${warmStepPct}% W (10× input)`}</span>` +
                 `</div>`;
             rightHtml =
                 `<div style="display:inline-flex;align-items:center;gap:8px;flex-shrink:0;">` +
@@ -1352,12 +1514,12 @@
 
         stripEl.title = isDe
             ? `Prompt-Cache Status (${cacheInfo.stepCount} Steps · ${(cacheInfo.contextTokens || 0).toLocaleString('de-DE')} Kontext-Tokens):\n` +
-              `• Im warmen Cache (< 5 Min. Pause) zahlst du nur 10% (du sparst 90% Quota).\n` +
-              `• Bei kaltem Cache (> 5 Min. Pause) muss der gesamte Kontext (${ctxCompact} Tokens) 10× teurer neu geladen werden.\n` +
+              `• Im warmen Cache (< 5 Min. Pause): ~${warmStepPct}% Weekly pro Step (du sparst 90% / 0.1× Input).\n` +
+              `• Bei kaltem Cache (> 5 Min. Pause): ~${coldStepPct}% Weekly beim Nachladen (10× teurer / 1.0× Input).\n` +
               `• Bisheriger Chat-Verbrauch: -${cacheInfo.weeklyPctUsed.toFixed(4)}% Weekly`
             : `Prompt-Cache Status (${cacheInfo.stepCount} steps · ${(cacheInfo.contextTokens || 0).toLocaleString('en-US')} context tokens):\n` +
-              `• While warm (< 5m idle), cached context tokens get a 90% discount (0.1×).\n` +
-              `• When cold (> 5m idle), continuing reloads all ${ctxCompact} tokens at 10× cost.\n` +
+              `• While warm (< 5m idle): ~${warmStepPct}% Weekly per step (90% discount / 0.1× input).\n` +
+              `• When cold (> 5m idle): ~${coldStepPct}% Weekly to reload context (10× cost / 1.0× input).\n` +
               `• Chat Weekly used so far: -${cacheInfo.weeklyPctUsed.toFixed(4)}%`;
     }
 
@@ -1378,11 +1540,17 @@
     }, true);
 
     // ----------------------------------------------------------------------------
-    // 7. Per-Message Post-Turn Cost Line (Quiet Native Inline Metadata)
+    // 7. Per-Message Post-Turn Cost Line (Smart Filling Cache vs Cache Hit vs Cold Reload)
     // ----------------------------------------------------------------------------
     function renderPerMessageTurnBadges() {
         if (window.__ams_active_instance_id !== myInstanceId) return;
         const activeId = getActiveCascadeId();
+        if (activeId && document.hasFocus() && lastSavedFocusedCascadeId !== activeId) {
+            lastSavedFocusedCascadeId = activeId;
+            if (window.nativeStorage && typeof window.nativeStorage.updateItems === 'function') {
+                window.nativeStorage.updateItems({ antigravity_last_chat_path: '/c/' + activeId }).catch(() => {});
+            }
+        }
         const stats = amsTelemetryState.activeConvStats;
         if (!stats || (activeId && stats.cascadeId && stats.cascadeId !== activeId)) return;
         if (!Array.isArray(stats.turns) || stats.turns.length === 0) return;
@@ -1412,19 +1580,43 @@
 
             const cachePct = turn.totalInput > 0 ? Math.round((turn.cached / turn.totalInput) * 100) : 0;
             const wPct = Number(turn.weeklyPct || 0).toFixed(4);
+            const savedWPct = Number(turn.savedWeeklyPct || 0).toFixed(4);
             const eurStr = Number(turn.apiCostEur || 0).toFixed(2);
             const savedEurStr = Number(turn.apiSavedEur || 0).toFixed(2);
             const stepsLabel = `${turn.steps} ${turn.steps === 1 ? 'Step' : 'Steps'}`;
             const dot = `<span style="color:${AMS_THEME.textFaint};">·</span>`;
+            const ctxCompact = formatTokensCompact(turn.latestContextTokens || turn.uncached || turn.totalInput);
+            const reloadedCompact = formatTokensCompact(turn.reloadedTokens || turn. latestContextTokens || turn.uncached);
 
             let mainSegment = '';
             if (turn.cacheMiss) {
+                // Genuine cold-start reload after >5m idle pause (or model switch) in an existing conversation
+                if (turn.cacheHit && cachePct >= 25 && turn.steps > 1) {
+                    mainSegment =
+                        `<span style="display:inline-flex;align-items:center;gap:4px;">` +
+                            `${amsIcon('snowflake', 10, AMS_THEME.sand)}` +
+                            `<span style="color:${AMS_THEME.sand};">${isDe ? `Kaltstart (${reloadedCompact} neu geladen)` : `Cold reload (${reloadedCompact})`}</span>` +
+                            `<span style="color:${AMS_THEME.textFaint};">→</span>` +
+                            `${amsIcon('flame', 10, AMS_THEME.sage)}` +
+                            `<span style="color:${AMS_THEME.textPrimary};font-weight:500;">${isDe ? `wieder warm (${cachePct}% Cache)` : `re-warmed (${cachePct}% hit)`}</span>` +
+                        `</span>`;
+                } else {
+                    mainSegment =
+                        `<span style="display:inline-flex;align-items:center;gap:4px;color:${AMS_THEME.sand};">` +
+                            `${amsIcon('snowflake', 10, AMS_THEME.sand)}` +
+                            `<span>${isDe ? `Kaltstart-Reload (${reloadedCompact} Tok → füllt Cache neu)` : `Cold reload (${reloadedCompact} tok → refilling cache)`}</span>` +
+                        `</span>`;
+                }
+            } else if (turn.cacheBuiltInTurn && cachePct > 0) {
+                // First turn of a new chat that filled the cache on Step 1-2 and immediately reused it on Steps 3..N!
                 mainSegment =
-                    `<span style="display:inline-flex;align-items:center;gap:4px;color:${AMS_THEME.sand};">` +
-                        `${amsIcon('snowflake', 10, AMS_THEME.sand)}` +
-                        `<span>${isDe ? `Cache-Miss (${formatTokensCompact(turn.uncached)} Tok neu geladen)` : `Cache miss (${formatTokensCompact(turn.uncached)} tok reloaded)`}</span>` +
+                    `<span style="display:inline-flex;align-items:center;gap:4px;">` +
+                        `${amsIcon('flame', 10, AMS_THEME.sage)}` +
+                        `<span style="color:${AMS_THEME.textPrimary};font-weight:500;">${isDe ? `Cache aufgebaut & ${cachePct}% genutzt` : `Cache built & ${cachePct}% hit`}</span>` +
+                        `<span style="opacity:0.8;">(${isDe ? '90% gespart' : '90% saved'})</span>` +
                     `</span>`;
             } else if (cachePct > 0) {
+                // Standard warm cached turn
                 mainSegment =
                     `<span style="display:inline-flex;align-items:center;gap:4px;">` +
                         `${amsIcon('flame', 10, AMS_THEME.sage)}` +
@@ -1432,14 +1624,16 @@
                         `<span style="opacity:0.8;">(${isDe ? '90% gespart' : '90% saved'})</span>` +
                     `</span>`;
             } else {
+                // Filling cache (initial step(s) of a brand new chat before cache threshold is reached)
                 mainSegment =
                     `<span style="display:inline-flex;align-items:center;gap:4px;">` +
-                        `${amsIcon('check', 10, AMS_THEME.sage)}` +
-                        `<span style="color:${AMS_THEME.textPrimary};">${formatTokensCompact(turn.totalInput + turn.out)} Tokens</span>` +
+                        `${amsIcon('zap', 10, AMS_THEME.sage)}` +
+                        `<span style="color:${AMS_THEME.textPrimary};font-weight:500;">${isDe ? `Cache wird aufgebaut (${ctxCompact} Tok)` : `Filling cache (${ctxCompact} tok)`}</span>` +
                     `</span>`;
             }
 
-            const html = `${mainSegment}${dot}<span>${stepsLabel}</span>`;
+            const costSegment = `<span style="color:${AMS_THEME.textMuted};">-${wPct}% W</span>`;
+            const html = `${mainSegment}${dot}${costSegment}${dot}<span style="color:${AMS_THEME.textPrimary};font-weight:500;">${stepsLabel}</span>`;
             if (badge.getAttribute('data-sig') !== html) {
                 badge.setAttribute('data-sig', html);
                 badge.innerHTML = html;
@@ -1447,12 +1641,14 @@
 
             badge.title = isDe
                 ? `Details zu dieser KI-Antwort (${turn.steps} Steps):\n` +
+                  `• Status: ${turn.cacheMiss ? 'Kaltstart-Reload nach Pause' : (turn.cacheBuiltInTurn ? 'Neuer Chat: Cache aufgebaut & direkt wiederverwendet' : (cachePct > 0 ? 'Warmer Prompt-Cache (90% Rabatt)' : 'Cache wird erstmalig im TPU-RAM aufgebaut (Filling Cache)'))}\n` +
                   `• Tokens: ${formatTokensCompact(turn.cached)} aus Cache (${cachePct}%) · ${formatTokensCompact(turn.uncached)} neu · ${formatTokensCompact(turn.out)} Output\n` +
-                  `• Weekly-Abzug: -${wPct}% Weekly\n` +
+                  `• Weekly-Abzug: -${wPct}% Weekly (${savedWPct > 0 ? '+' + savedWPct + '% Weekly durch Cache gespart' : 'Erstbefüllung'})\n` +
                   `• API-Gegenwert: ~${eurStr} € (+${savedEurStr} € durch Cache gespart)`
                 : `AI Response Breakdown (${turn.steps} steps):\n` +
+                  `• Status: ${turn.cacheMiss ? 'Cold reload after idle pause' : (turn.cacheBuiltInTurn ? 'New chat: Cache built & immediately reused' : (cachePct > 0 ? 'Warm Prompt Cache (90% discount)' : 'Filling initial cache in TPU RAM'))}\n` +
                   `• Tokens: ${formatTokensCompact(turn.cached)} cached (${cachePct}%) · ${formatTokensCompact(turn.uncached)} new · ${formatTokensCompact(turn.out)} out\n` +
-                  `• Weekly used: -${wPct}% Weekly\n` +
+                  `• Weekly used: -${wPct}% Weekly (${savedWPct > 0 ? '+' + savedWPct + '% Weekly saved by cache' : 'initial fill'})\n` +
                   `• API value: ~€${eurStr} (+€${savedEurStr} saved by cache)`;
         });
     }
@@ -2151,6 +2347,12 @@
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
         const currentLabel = getCurrentModelLabelFromTrigger();
         const activeId = getActiveCascadeId();
+        if (activeId && document.hasFocus() && lastSavedFocusedCascadeId !== activeId) {
+            lastSavedFocusedCascadeId = activeId;
+            if (window.nativeStorage && typeof window.nativeStorage.updateItems === 'function') {
+                window.nativeStorage.updateItems({ antigravity_last_chat_path: '/c/' + activeId }).catch(() => {});
+            }
+        }
         const cacheInfo = activeId ? getChatCacheState(activeId) : null;
         const hasContext = !!(cacheInfo && cacheInfo.stepCount > 0);
         const menuItems = Array.from(panel.querySelectorAll('[role="menuitem"]'));
@@ -2365,6 +2567,18 @@
         return 0;
     }
 
+    // Close Quota HUD popover on outside click
+    document.addEventListener('click', (e) => {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
+        if (activeQuotaHudPopover && !activeQuotaHudPopover.contains(e.target)) {
+            const quotaBtn = document.getElementById('antigravity-quota-display-v4');
+            if (!quotaBtn || !quotaBtn.contains(e.target)) {
+                closeQuotaHudPopover();
+            }
+        }
+    });
+
+    let lastFastTokenStatsPollMs = 0;
     window.__ams_v2_intervals.push(setInterval(() => {
         if (window.__ams_active_instance_id !== myInstanceId) return;
         if (document.hidden) return;
@@ -2374,6 +2588,12 @@
         const activeChats = countActiveRunningChats();
 
         if (activeChats > 0) {
+            // Fast 2.2s token stats poll while a chat is actively running so the step counter
+            // ("1 Step -> 2 Steps -> 3 Steps...") and "Filling cache" badge update live per step!
+            if (now - lastFastTokenStatsPollMs > 2200 && typeof updateTokenStats === 'function') {
+                lastFastTokenStatsPollMs = now;
+                updateTokenStats();
+            }
             // Smoothly accumulate intra-step streaming token drain (~0.0001% per 250ms = 0.0004%/s per active chat)
             // Capped at 0.0065% per in-flight step until the step completes and settles against steps.db / server float
             const stepIncrement = 0.0001 * Math.min(activeChats, 3);

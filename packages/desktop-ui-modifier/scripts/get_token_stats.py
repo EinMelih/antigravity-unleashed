@@ -129,6 +129,8 @@ def analyze_conversation_db(db_path: Path, include_turns: bool = False):
     cur_turn = None
     prev_end_ts = 0
     seen_ai_steps = 0
+    has_warmed_cache_before = False
+    prev_step_had_cache = False
 
     for idx, st, meta, payload in rows:
         if st == 14 and not title and payload:
@@ -162,6 +164,9 @@ def analyze_conversation_db(db_path: Path, include_turns: bool = False):
                 "rawUsd": 0.0,
                 "cacheHit": False,
                 "cacheMiss": False,
+                "hadInitialFill": False,
+                "reloadedTokens": 0,
+                "latestContextTokens": 0,
                 "wastedTokens": 0,
                 "maxPauseSec": 0,
             }
@@ -188,15 +193,6 @@ def analyze_conversation_db(db_path: Path, include_turns: bool = False):
             eff_usd_total += eff_u
             raw_usd_total += raw_u
 
-            pause = (start_ts - prev_end_ts) if (prev_end_ts > 0 and start_ts >= prev_end_ts) else 0
-            is_miss = (seen_ai_steps > 1 and cac == 0 and unc > 20_000)
-            if is_miss:
-                cache_miss_count += 1
-                wasted = int(round(unc * 0.9))
-                wasted_reload_tokens += wasted
-            else:
-                wasted = 0
-
             if cur_turn is None:
                 turn_count = 1
                 cur_turn = {
@@ -213,9 +209,39 @@ def analyze_conversation_db(db_path: Path, include_turns: bool = False):
                     "rawUsd": 0.0,
                     "cacheHit": False,
                     "cacheMiss": False,
+                    "hadInitialFill": False,
+                    "reloadedTokens": 0,
+                    "latestContextTokens": 0,
                     "wastedTokens": 0,
                     "maxPauseSec": 0,
                 }
+
+            pause = (start_ts - prev_end_ts) if (prev_end_ts > 0 and start_ts >= prev_end_ts) else 0
+            # A true cache miss only happens AFTER the conversation already had a warm cache once,
+            # and a subsequent turn/step drops back to cac == 0 (after an idle pause or model switch).
+            # In a brand new chat (before has_warmed_cache_before is True), cac == 0 is "Filling cache"!
+            is_miss = (
+                has_warmed_cache_before
+                and prev_step_had_cache
+                and cac == 0
+                and unc > 25_000
+                and (cur_turn["steps"] == 0 or pause >= 60)
+            )
+            if is_miss:
+                cache_miss_count += 1
+                wasted = int(round(unc * 0.9))
+                wasted_reload_tokens += wasted
+            else:
+                wasted = 0
+
+            if cac == 0 and not has_warmed_cache_before:
+                cur_turn["hadInitialFill"] = True
+
+            if cac > 0:
+                has_warmed_cache_before = True
+                prev_step_had_cache = True
+            elif is_miss:
+                prev_step_had_cache = False
 
             cur_turn["steps"] += 1
             cur_turn["uncached"] += unc
@@ -224,10 +250,12 @@ def analyze_conversation_db(db_path: Path, include_turns: bool = False):
             cur_turn["thinking"] += thk
             cur_turn["effUsd"] += eff_u
             cur_turn["rawUsd"] += raw_u
+            cur_turn["latestContextTokens"] = unc + cac
             if cac > 0:
                 cur_turn["cacheHit"] = True
             if is_miss:
                 cur_turn["cacheMiss"] = True
+                cur_turn["reloadedTokens"] = max(cur_turn["reloadedTokens"], unc)
                 cur_turn["wastedTokens"] += wasted
             if pause > cur_turn["maxPauseSec"]:
                 cur_turn["maxPauseSec"] = pause
@@ -331,6 +359,7 @@ def finalize_turn(t):
     weighted = int(round(1.0 * t["uncached"] + 0.1 * t["cached"] + 6.0 * t["out"]))
     weekly_pct = round(weighted * WEEKLY_PCT_PER_WEIGHTED_TOKEN, 4)
     five_h_pct = round(weighted * FIVE_HOUR_PCT_PER_WEIGHTED_TOKEN, 4)
+    saved_weekly_pct = round(t["cached"] * 0.9 * WEEKLY_PCT_PER_WEIGHTED_TOKEN, 4)
     eff_eur = round(t["effUsd"] * EUR_PER_USD, 3)
     raw_eur = round(t["rawUsd"] * EUR_PER_USD, 3)
     return {
@@ -345,10 +374,15 @@ def finalize_turn(t):
         "weightedTokens": weighted,
         "weeklyPct": weekly_pct,
         "fiveHourPct": five_h_pct,
+        "savedWeeklyPct": saved_weekly_pct,
         "apiCostEur": eff_eur,
         "apiSavedEur": round(max(0.0, raw_eur - eff_eur), 3),
         "cacheHit": t["cacheHit"],
         "cacheMiss": t["cacheMiss"],
+        "fillingCache": bool(not t["cacheHit"] and not t["cacheMiss"]),
+        "cacheBuiltInTurn": bool(t.get("hadInitialFill") and t["cacheHit"] and not t["cacheMiss"]),
+        "reloadedTokens": int(t.get("reloadedTokens") or 0),
+        "latestContextTokens": int(t.get("latestContextTokens") or 0),
         "wastedWeeklyPct": round(t["wastedTokens"] * WEEKLY_PCT_PER_WEIGHTED_TOKEN, 4),
         "maxPauseSec": t["maxPauseSec"],
         "startTs": t["startTs"],
@@ -391,24 +425,13 @@ def get_repack_info(conv_dir: Path) -> dict:
     details = str(notice.get("details") or "").strip()
 
     try:
-        src_files = sorted(
-            list((skill_root / "src").rglob("*.js"))
-            + [skill_root / "scripts" / "build_preload.py", skill_root / "scripts" / "patch_asar.py"]
-        )
-        digest = hashlib.sha256()
-        for item in src_files:
-            if item.exists():
-                rel = item.relative_to(skill_root).as_posix()
-                digest.update(rel.encode("utf-8"))
-                digest.update(b"\0")
-                digest.update(item.read_bytes())
-                digest.update(b"\0")
-        current_hash = digest.hexdigest()
+        from auto_repack_guard import source_signature
+        current_hash = source_signature()
         last_hash = ""
         if state_file.exists():
             st_data = json.loads(state_file.read_text("utf-8"))
             if isinstance(st_data, dict):
-                last_hash = str(st_data.get("lastSourceHash") or "")
+                last_hash = str(st_data.get("source") or st_data.get("lastSourceHash") or "")
         if last_hash and current_hash != last_hash:
             pending = True
             if not title:
@@ -453,17 +476,33 @@ def trigger_repack_from_ui(conv_dir: Path) -> dict:
     notice_file = scratch_dir / "repack_pending_notice.json"
 
     chat_id = ""
-    if last_chat_file.exists():
-        try:
-            chat_id = last_chat_file.read_text("utf-8").strip()
-        except Exception:
-            pass
+    # 1. Explicit trigger chat written to app_storage.json by the clicked window
+    try:
+        roaming = os.environ.get("APPDATA", "")
+        storage_path = (Path(roaming) / "Antigravity" / "app_storage.json") if roaming else (Path.home() / "AppData" / "Roaming" / "Antigravity" / "app_storage.json")
+        if storage_path.exists():
+            st_data = json.loads(storage_path.read_text("utf-8"))
+            trig_cid = str(st_data.get("antigravity_repack_trigger_chat_id") or "").strip()
+            trig_ts = float(st_data.get("antigravity_repack_trigger_ts") or 0)
+            if trig_cid and (time.time() * 1000.0 - trig_ts < 120_000):
+                chat_id = trig_cid
+    except Exception:
+        pass
+
+    # 2. Most recently modified conversation DB (avoid stale background window overwrite)
     if not chat_id:
         try:
             candidates = [f for f in conv_dir.glob("*.db") if not f.stem.startswith("__")]
             if candidates:
                 candidates.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-                chat_id = candidates[0].stem
+                if time.time() - candidates[0].stat().st_mtime < 300:
+                    chat_id = candidates[0].stem
+        except Exception:
+            pass
+
+    if not chat_id and last_chat_file.exists():
+        try:
+            chat_id = last_chat_file.read_text("utf-8").strip()
         except Exception:
             pass
 
@@ -473,9 +512,10 @@ def trigger_repack_from_ui(conv_dir: Path) -> dict:
         except Exception:
             pass
 
+    now_sec = time.time()
     try:
         approved_file.write_text(
-            json.dumps({"approved": True, "timestamp": time.time(), "chatId": chat_id}),
+            json.dumps({"approved": True, "approved_at": now_sec, "timestamp": now_sec, "chatId": chat_id}),
             encoding="utf-8",
         )
     except Exception:
@@ -540,12 +580,10 @@ def update_and_load_global_ledger(conv_dir: Path, active_stats: dict):
     cid = active_stats.get("cascadeId")
     if cid and not str(cid).startswith("__"):
         try:
-            scratch_dir.mkdir(parents=True, exist_ok=True)
-            (scratch_dir / "last_active_chat_id.txt").write_text(str(cid), encoding="utf-8")
-        except Exception:
-            pass
-        try:
             st = (conv_dir / f"{cid}.db").stat()
+            if now_ts - st.st_mtime < 60:
+                scratch_dir.mkdir(parents=True, exist_ok=True)
+                (scratch_dir / "last_active_chat_id.txt").write_text(str(cid), encoding="utf-8")
             entry = {k: v for k, v in active_stats.items() if k != "turns"}
             entry["_mtime"] = round(st.st_mtime, 2)
             entry["_size"] = st.st_size

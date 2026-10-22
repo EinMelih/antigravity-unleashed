@@ -396,7 +396,165 @@ async def recv_next(ws, log_file):
             return data
     raise RuntimeError("WebSocket closed unexpectedly")
 
-async def verify_runtime_after_restart(port_file_path, app_path, log_file, target_chat_id=None, active_path=None):
+async def send_chat_message_on_ws(ws, log_file, target_path, post_msg, req_id_base=200):
+    nav_expr = f"""
+    (() => {{
+        const targetPath = {json.dumps(target_path)};
+        const curPath = window.location.pathname + window.location.search;
+        if (curPath !== targetPath && !curPath.includes(targetPath)) {{
+            window.location.href = window.location.origin + targetPath;
+            return "NAVIGATING";
+        }}
+        return "ALREADY_THERE";
+    }})()
+    """
+    await ws.send_json({
+        "id": req_id_base,
+        "method": "Runtime.evaluate",
+        "params": {"expression": nav_expr, "returnByValue": True},
+    })
+    nav_status = ""
+    while True:
+        data = await recv_next(ws, log_file)
+        if data.get("id") == req_id_base:
+            nav_status = data.get("result", {}).get("result", {}).get("value", "")
+            log_file.write(f"Navigation-Status ({target_path}): {nav_status}\n")
+            log_file.flush()
+            break
+
+    if nav_status == "NAVIGATING":
+        await asyncio.sleep(2.0)
+
+    find_input_expr = """
+    (() => {
+        const input = document.querySelector('[role="combobox"][aria-label="Message input"]')
+            || document.querySelector('[role="combobox"]')
+            || document.querySelector('[contenteditable="true"]');
+        return Boolean(input);
+    })()
+    """
+    input_found = False
+    for attempt in range(30):
+        await ws.send_json({
+            "id": req_id_base + 10 + attempt,
+            "method": "Runtime.evaluate",
+            "params": {"expression": find_input_expr, "returnByValue": True},
+        })
+        while True:
+            data = await recv_next(ws, log_file)
+            if data.get("id") == req_id_base + 10 + attempt:
+                input_found = bool(data.get("result", {}).get("result", {}).get("value"))
+                break
+        if input_found:
+            break
+        await asyncio.sleep(0.5)
+
+    if not input_found:
+        log_file.write(f"Warnung: Chat-Eingabefeld fuer {target_path} innerhalb des Zeitlimits nicht gefunden.\n")
+        log_file.flush()
+        return False
+
+    log_file.write(f"Chat-Eingabefeld fuer {target_path} gefunden. Sende Nachricht...\n")
+    log_file.flush()
+    post_script = f"""
+    (async () => {{
+        const text = {json.dumps(post_msg)};
+        if (window.__agBridge && typeof window.__agBridge.prepareAndSend === 'function') {{
+            const res = await window.__agBridge.prepareAndSend(text);
+            if (res && res.success) return "SENT_VIA_BRIDGE";
+        }}
+        const input = document.querySelector('[role="combobox"][aria-label="Message input"]')
+            || document.querySelector('[role="combobox"]')
+            || document.querySelector('[contenteditable="true"]');
+        if (!input) return "NO_INPUT";
+        input.focus();
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(input);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        const deleteEvent = new InputEvent('beforeinput', {{
+            inputType: 'deleteContentBackward',
+            bubbles: true,
+            cancelable: true,
+            composed: true
+        }});
+        input.dispatchEvent(deleteEvent);
+        selection.collapseToStart();
+        try {{
+            const dt = new DataTransfer();
+            dt.setData('text/plain', text);
+            const pasteEvent = new ClipboardEvent('paste', {{
+                clipboardData: dt,
+                bubbles: true,
+                cancelable: true,
+                composed: true
+            }});
+            input.dispatchEvent(pasteEvent);
+        }} catch (e) {{
+            const insertEvent = new InputEvent('beforeinput', {{
+                inputType: 'insertText',
+                data: text,
+                bubbles: true,
+                cancelable: true,
+                composed: true
+            }});
+            input.dispatchEvent(insertEvent);
+        }}
+        const findSendButton = () => Array.from(document.querySelectorAll('button')).find(b => {{
+            const label = (b.getAttribute('aria-label') || '').toLowerCase();
+            return label.includes('send') && b.offsetParent !== null && !b.disabled && b.getAttribute('aria-disabled') !== 'true';
+        }});
+        let btn = null;
+        for (let i = 0; i < 40 && !btn; i++) {{
+            await new Promise(r => setTimeout(r, 250));
+            btn = findSendButton();
+        }}
+        if (btn) {{
+            btn.click();
+            return "SENT_VIA_BUTTON";
+        }}
+        input.focus();
+        return "NEEDS_ENTER";
+    }})()
+    """
+    await ws.send_json({
+        "id": req_id_base + 50,
+        "method": "Runtime.evaluate",
+        "params": {"expression": post_script, "awaitPromise": True, "returnByValue": True},
+    })
+    post_res = ""
+    while True:
+        data = await recv_next(ws, log_file)
+        if data.get("id") == req_id_base + 50:
+            post_res = data.get("result", {}).get("result", {}).get("value", "")
+            log_file.write(f"Bestaetigungsnachricht-Ergebnis ({target_path}): {post_res}\n")
+            log_file.flush()
+            break
+    if post_res == "NEEDS_ENTER":
+        for offset, event_type in enumerate(("rawKeyDown", "keyUp")):
+            await ws.send_json({
+                "id": req_id_base + 51 + offset,
+                "method": "Input.dispatchKeyEvent",
+                "params": {
+                    "type": event_type,
+                    "key": "Enter",
+                    "code": "Enter",
+                    "windowsVirtualKeyCode": 13,
+                    "nativeVirtualKeyCode": 13,
+                    "text": "\r" if event_type == "rawKeyDown" else "",
+                },
+            })
+            while True:
+                data = await recv_next(ws, log_file)
+                if data.get("id") == req_id_base + 51 + offset:
+                    break
+        log_file.write(f"Bestaetigungsnachricht-Ergebnis ({target_path}): SENT_VIA_CDP_ENTER\n")
+        log_file.flush()
+    return True
+
+
+async def verify_runtime_after_restart(port_file_path, app_path, log_file, target_chat_id=None, active_path=None, interrupted_chat_ids=None):
     """Verify the restarted preload/UI through read-only CDP expressions."""
     log_file.write("Starte read-only Runtime-Verifikation...\n")
     log_file.flush()
@@ -543,185 +701,64 @@ async def verify_runtime_after_restart(port_file_path, app_path, log_file, targe
                 log_file.write("Preload-Skript und AMS-Injektion erfolgreich verifiziert.\n")
                 log_file.flush()
 
-                # Restore chat navigation and auto-post status message to the last active conversation
+                # Restore chat navigation and auto-wake all interrupted agents with "continue"
                 chat_to_restore = active_path
                 if not chat_to_restore and target_chat_id:
                     chat_to_restore = f"/c/{target_chat_id}"
 
+                primary_cid = target_chat_id
+                if chat_to_restore:
+                    m_primary = re.search(r"([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})", chat_to_restore, re.IGNORECASE)
+                    if m_primary:
+                        primary_cid = m_primary.group(1)
+
+                bg_interrupted = [
+                    cid for cid in (interrupted_chat_ids or [])
+                    if CHAT_ID_PATTERN.fullmatch(str(cid)) and str(cid).lower() != str(primary_cid or "").lower()
+                ][:4]
+
+                woken_bg_count = 0
+                for idx_bg, bg_cid in enumerate(bg_interrupted):
+                    try:
+                        log_file.write(f"Wecke unterbrochenen Hintergrund-Agenten automatisch mit 'continue': {bg_cid}...\n")
+                        log_file.flush()
+                        ok = await send_chat_message_on_ws(
+                            ws,
+                            log_file,
+                            f"/c/{bg_cid}",
+                            "continue",
+                            req_id_base=300 + idx_bg * 100,
+                        )
+                        if ok:
+                            woken_bg_count += 1
+                            await asyncio.sleep(1.0)
+                    except Exception as bg_err:
+                        log_file.write(f"Warnung beim Aufwecken von Hintergrund-Agent {bg_cid}: {bg_err}\n")
+                        log_file.flush()
+
                 if chat_to_restore:
                     log_file.write(f"Stelle letzten aktiven Chat wieder her: {chat_to_restore}...\n")
                     log_file.flush()
-                    nav_expr = f"""
-                    (() => {{
-                        const targetPath = {json.dumps(chat_to_restore)};
-                        const curPath = window.location.pathname + window.location.search;
-                        if (curPath !== targetPath && !curPath.includes(targetPath)) {{
-                            window.location.href = window.location.origin + targetPath;
-                            return "NAVIGATING";
-                        }}
-                        return "ALREADY_THERE";
-                    }})()
-                    """
                     try:
-                        await ws.send_json({
-                            "id": 200,
-                            "method": "Runtime.evaluate",
-                            "params": {
-                                "expression": nav_expr,
-                                "returnByValue": True
-                            }
-                        })
-                        while True:
-                            data = await recv_next(ws, log_file)
-                            if data.get("id") == 200:
-                                nav_status = data.get("result", {}).get("result", {}).get("value", "")
-                                log_file.write(f"Navigation-Status: {nav_status}\n")
-                                log_file.flush()
-                                break
-
-                        if nav_status == "NAVIGATING":
-                            await asyncio.sleep(2.0)
-
-                        # Wait for the chat input field to be available (up to 15 seconds)
-                        log_file.write("Warte auf Chat-Eingabefeld zur Bestaetigungsnachricht...\n")
-                        log_file.flush()
-                        find_input_expr = """
-                        (() => {
-                            const input = document.querySelector('[role="combobox"][aria-label="Message input"]')
-                                || document.querySelector('[role="combobox"]')
-                                || document.querySelector('[contenteditable="true"]');
-                            return Boolean(input);
-                        })()
-                        """
-                        input_found = False
-                        for attempt in range(30):
-                            await ws.send_json({
-                                "id": 210 + attempt,
-                                "method": "Runtime.evaluate",
-                                "params": {
-                                    "expression": find_input_expr,
-                                    "returnByValue": True
-                                }
-                            })
-                            while True:
-                                data = await recv_next(ws, log_file)
-                                if data.get("id") == 210 + attempt:
-                                    input_found = bool(data.get("result", {}).get("result", {}).get("value"))
-                                    break
-                            if input_found:
-                                break
-                            await asyncio.sleep(0.5)
-
-                        if input_found:
-                            log_file.write("Chat-Eingabefeld gefunden. Sende Bestaetigungsnachricht...\n")
-                            log_file.flush()
-                            post_msg = (
-                                f"✨ Anti-Gravity wurde erfolgreich für Version {supported_upstream_version()} "
-                                "gepatcht und neu gestartet. "
-                                "Dieser Chat wurde automatisch wiederhergestellt."
-                            )
-                            post_script = f"""
-                            (async () => {{
-                                const text = {json.dumps(post_msg)};
-                                if (window.__agBridge && typeof window.__agBridge.prepareAndSend === 'function') {{
-                                    const res = await window.__agBridge.prepareAndSend(text);
-                                    if (res && res.success) return "SENT_VIA_BRIDGE";
-                                }}
-                                const input = document.querySelector('[role="combobox"][aria-label="Message input"]')
-                                    || document.querySelector('[role="combobox"]')
-                                    || document.querySelector('[contenteditable="true"]');
-                                if (!input) return "NO_INPUT";
-                                input.focus();
-                                const selection = window.getSelection();
-                                const range = document.createRange();
-                                range.selectNodeContents(input);
-                                selection.removeAllRanges();
-                                selection.addRange(range);
-                                const deleteEvent = new InputEvent('beforeinput', {{
-                                    inputType: 'deleteContentBackward',
-                                    bubbles: true,
-                                    cancelable: true,
-                                    composed: true
-                                }});
-                                input.dispatchEvent(deleteEvent);
-                                selection.collapseToStart();
-                                try {{
-                                    const dt = new DataTransfer();
-                                    dt.setData('text/plain', text);
-                                    const pasteEvent = new ClipboardEvent('paste', {{
-                                        clipboardData: dt,
-                                        bubbles: true,
-                                        cancelable: true,
-                                        composed: true
-                                    }});
-                                    input.dispatchEvent(pasteEvent);
-                                }} catch (e) {{
-                                    const insertEvent = new InputEvent('beforeinput', {{
-                                        inputType: 'insertText',
-                                        data: text,
-                                        bubbles: true,
-                                        cancelable: true,
-                                        composed: true
-                                    }});
-                                    input.dispatchEvent(insertEvent);
-                                }}
-                                const findSendButton = () => Array.from(document.querySelectorAll('button')).find(b => {{
-                                    const label = (b.getAttribute('aria-label') || '').toLowerCase();
-                                    return label.includes('send') && b.offsetParent !== null && !b.disabled && b.getAttribute('aria-disabled') !== 'true';
-                                }});
-                                let btn = null;
-                                for (let i = 0; i < 40 && !btn; i++) {{
-                                    await new Promise(r => setTimeout(r, 250));
-                                    btn = findSendButton();
-                                }}
-                                if (btn) {{
-                                    btn.click();
-                                    return "SENT_VIA_BUTTON";
-                                }}
-                                input.focus();
-                                return "NEEDS_ENTER";
-                            }})()
-                            """
-                            await ws.send_json({
-                                "id": 250,
-                                "method": "Runtime.evaluate",
-                                "params": {
-                                    "expression": post_script,
-                                    "awaitPromise": True,
-                                    "returnByValue": True
-                                }
-                            })
-                            while True:
-                                data = await recv_next(ws, log_file)
-                                if data.get("id") == 250:
-                                    post_res = data.get("result", {}).get("result", {}).get("value", "")
-                                    log_file.write(f"Bestaetigungsnachricht-Ergebnis: {post_res}\n")
-                                    log_file.flush()
-                                    break
-                            if post_res == "NEEDS_ENTER":
-                                for offset, event_type in enumerate(("rawKeyDown", "keyUp")):
-                                    await ws.send_json({
-                                        "id": 251 + offset,
-                                        "method": "Input.dispatchKeyEvent",
-                                        "params": {
-                                            "type": event_type, "key": "Enter", "code": "Enter",
-                                            "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13,
-                                            "text": "\r" if event_type == "rawKeyDown" else "",
-                                        },
-                                    })
-                                    while True:
-                                        data = await recv_next(ws, log_file)
-                                        if data.get("id") == 251 + offset:
-                                            break
-                                log_file.write("Bestaetigungsnachricht-Ergebnis: SENT_VIA_CDP_ENTER\n")
-                                log_file.flush()
-                        else:
-                            log_file.write("Warnung: Chat-Eingabefeld innerhalb des Zeitlimits nicht gefunden.\n")
-                            log_file.flush()
+                        extra_note = (
+                            f" (+ {woken_bg_count} weiterer aktiver Agent automatisch mit 'continue' geweckt)"
+                            if woken_bg_count > 0 else ""
+                        )
+                        post_msg = (
+                            f"continue\n\n"
+                            f"*(✨ Anti-Gravity wurde erfolgreich für Version {supported_upstream_version()} "
+                            f"gepatcht und neu gestartet. Dieser Chat wurde automatisch wiederhergestellt{extra_note}.)*"
+                        )
+                        await send_chat_message_on_ws(
+                            ws,
+                            log_file,
+                            chat_to_restore,
+                            post_msg,
+                            req_id_base=200,
+                        )
                     except Exception as chat_restore_err:
                         log_file.write(f"Warnung bei Chat-Wiederherstellung: {chat_restore_err}\n")
                         log_file.flush()
-
                 log_file.write("Runtime-Verifikation abgeschlossen.\n")
                 log_file.flush()
                 return {"injection_verified": True, "target_url": backend_url}
@@ -732,8 +769,73 @@ async def verify_runtime_after_restart(port_file_path, app_path, log_file, targe
         log_file.flush()
         raise e
 
+def detect_interrupted_conversations_from_db(log_file=None, now_ts=None):
+    """Return (newest_db_chat_id, interrupted_chat_ids) by inspecting recent conversation SQLite DBs."""
+    import sqlite3
+    now_ts = time.time() if now_ts is None else float(now_ts)
+    newest_cid = None
+    newest_mtime = 0.0
+    interrupted = []
+    try:
+        conv_dir = Path.home() / ".gemini" / "antigravity" / "conversations"
+        if not conv_dir.exists():
+            return None, []
+        db_files = [
+            f for f in conv_dir.glob("*.db")
+            if CHAT_ID_PATTERN.fullmatch(f.stem)
+        ]
+        db_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        for idx, db_file in enumerate(db_files[:16]):
+            cid = db_file.stem
+            mtime = db_file.stat().st_mtime
+            age = max(0.0, now_ts - mtime)
+            if idx == 0 and age < 1800:
+                newest_cid = cid
+                newest_mtime = mtime
+            if age > 600:
+                continue
+            try:
+                uri = f"file:{db_file.resolve().as_posix()}?mode=ro"
+                conn = sqlite3.connect(uri, uri=True, timeout=0.6)
+                try:
+                    conn.execute("PRAGMA query_only = ON")
+                    status2_row = conn.execute(
+                        "SELECT idx, step_type FROM steps WHERE status = 2 ORDER BY idx DESC LIMIT 1"
+                    ).fetchone()
+                    last_row = conn.execute(
+                        "SELECT idx, step_type, status FROM steps ORDER BY idx DESC LIMIT 1"
+                    ).fetchone()
+                finally:
+                    conn.close()
+                is_working = False
+                if status2_row is not None:
+                    is_working = True
+                elif last_row is not None and age < 120:
+                    _, l_type, l_status = last_row
+                    # If the very last step was not a completed final planner response (type 15, status 3),
+                    # e.g. user input (14), tool call (132), thinking, etc., it was mid-turn!
+                    if not (int(l_type) == 15 and int(l_status) == 3):
+                        is_working = True
+                if is_working and cid not in interrupted:
+                    interrupted.append(cid)
+            except Exception:
+                pass
+        if log_file is not None:
+            log_file.write(
+                f"DB-Aktivitaetsanalyse: newest_cid={newest_cid} (age={round(now_ts - newest_mtime, 1) if newest_cid else -1}s), "
+                f"interrupted_agents={interrupted}\n"
+            )
+            log_file.flush()
+    except Exception as err:
+        if log_file is not None:
+            log_file.write(f"Warnung bei DB-Aktivitaetsanalyse: {err}\n")
+            log_file.flush()
+    return newest_cid, interrupted
+
+
 def get_last_active_session_id():
-    # 1. Read the app-owned last path without mutating corrupt user data.
+    # 1. Check explicit recent repack trigger chat in app_storage.json
+    storage_last_cid = None
     try:
         storage_path = resolve_user_data_dir() / "app_storage.json"
         if storage_path.exists():
@@ -742,66 +844,197 @@ def get_last_active_session_id():
                 storage_data = json.loads(content)
             except Exception:
                 storage_data = {}
+            trig_cid = str(storage_data.get("antigravity_repack_trigger_chat_id") or "").strip()
+            trig_ts = float(storage_data.get("antigravity_repack_trigger_ts") or 0)
+            if CHAT_ID_PATTERN.fullmatch(trig_cid) and (time.time() * 1000.0 - trig_ts < 180_000):
+                return trig_cid
             last_path = storage_data.get("antigravity_last_chat_path", "")
             if last_path:
                 match = re.search(r"([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})", last_path, re.IGNORECASE)
                 if match:
-                    return match.group(1)
+                    storage_last_cid = match.group(1)
     except Exception:
         pass
 
-    # 2. Fallback: Juengste modifizierte .db-Datei im conversations-Ordner ermitteln
+    # 2. Check most recently modified conversation .db file: if a conversation was active in the last 3 minutes,
+    # prefer it over a potentially stale app_storage.json path from an older window.
     try:
         conv_dir = Path.home() / ".gemini" / "antigravity" / "conversations"
         if conv_dir.exists():
-            db_files = list(conv_dir.glob("*.db"))
+            db_files = [
+                f for f in conv_dir.glob("*.db")
+                if CHAT_ID_PATTERN.fullmatch(f.stem)
+            ]
             if db_files:
-                # Sortiere nach modification time (juengste zuerst)
                 db_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-                for db_file in db_files:
-                    name_without_ext = db_file.stem
-                    # Pruefen ob es eine gueltige UUID ist (Chat-Datenbank)
-                    match = re.match(r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", name_without_ext, re.IGNORECASE)
-                    if match:
-                        return name_without_ext
+                newest_db = db_files[0]
+                if time.time() - newest_db.stat().st_mtime < 180:
+                    return newest_db.stem
+                if not storage_last_cid:
+                    return newest_db.stem
     except Exception:
         pass
-    return None
 
-def get_current_active_path(port_file, log_file):
+    return storage_last_cid
+
+
+async def _inspect_page_targets_async(page_targets):
+    import aiohttp
+    results = []
+    running_ids = []
+    probe_expr = """
+    (() => {
+        const path = window.location.pathname + window.location.search;
+        const m = path.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+        const activeCid = (typeof window.amsGetActiveCascadeId === 'function' ? window.amsGetActiveCascadeId() : null) || (m ? m[1] : null);
+        const hasFocus = Boolean(document.hasFocus());
+        const visible = Boolean(!document.hidden && document.visibilityState === 'visible');
+        const lastInteraction = Number(window.__ams_last_user_interaction_ts || 0);
+        const running = [];
+        if (window.amsTelemetryState && window.amsTelemetryState.liveTrajectoriesMap) {
+            for (const [cid, info] of window.amsTelemetryState.liveTrajectoriesMap.entries()) {
+                if (info && (info.isRunning || String(info.status || '').includes('RUNNING') || String(info.status || '').includes('WORKING'))) {
+                    running.push(cid);
+                }
+            }
+        }
+        const stopBtn = Array.from(document.querySelectorAll('button')).find(b => {
+            const l = (b.getAttribute('aria-label') || b.textContent || '').toLowerCase();
+            return (l.includes('stop') || l.includes('cancel')) && b.offsetParent !== null && !b.disabled;
+        });
+        if (stopBtn && activeCid && !running.includes(activeCid)) {
+            running.push(activeCid);
+        }
+        return {
+            path: activeCid ? ('/c/' + activeCid) : path,
+            chatId: activeCid,
+            hasFocus,
+            visible,
+            lastInteraction,
+            running,
+        };
+    })()
+    """
+    timeout = aiohttp.ClientTimeout(total=1.5)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for t in page_targets:
+            ws_url = t.get("webSocketDebuggerUrl")
+            if not ws_url:
+                continue
+            try:
+                async with session.ws_connect(ws_url, timeout=1.0) as ws:
+                    await ws.send_json({
+                        "id": 1,
+                        "method": "Runtime.evaluate",
+                        "params": {"expression": probe_expr, "returnByValue": True},
+                    })
+                    async for msg in ws:
+                        if msg.type == aiohttp.WSMsgType.TEXT:
+                            data = json.loads(msg.data)
+                            if data.get("id") == 1:
+                                val = data.get("result", {}).get("result", {}).get("value")
+                                if isinstance(val, dict):
+                                    results.append(val)
+                                    for r_cid in val.get("running") or []:
+                                        if CHAT_ID_PATTERN.fullmatch(str(r_cid)) and r_cid not in running_ids:
+                                            running_ids.append(r_cid)
+                                break
+            except Exception:
+                pass
+    return results, running_ids
+
+
+def get_current_active_path(port_file, log_file, app_path=None, preferred_chat_id=None, interrupted_out=None):
     try:
-        if not port_file.exists():
-            log_file.write("No active DevTools port file found before shutdown.\n")
+        port = None
+        if port_file.exists():
+            try:
+                lines = port_file.read_text(encoding="utf-8").splitlines()
+                port = int(lines[0].strip())
+            except Exception:
+                port = None
+        if port is None and app_path is not None:
+            port = find_devtools_port(port_file, app_path, log_file)
+        if port is None:
+            log_file.write("No active DevTools port found before shutdown.\n")
             log_file.flush()
             return None
 
-        lines = port_file.read_text(encoding="utf-8").splitlines()
-        port = int(lines[0].strip())
-
-        # Query DevTools targets
         url = f"http://127.0.0.1:{port}/json"
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=1.5) as resp:
             targets = json.loads(resp.read().decode())
 
-        # Find active page target
+        page_targets = []
+        fallback_paths = []
         for t in targets:
             if t.get("type") == "page":
                 target_url = t.get("url", "")
                 if target_url.startswith("devtools://") or target_url.startswith("data:"):
                     continue
                 if target_url.startswith("https://127.0.0.1:") or target_url.startswith("http://localhost:"):
+                    page_targets.append(t)
                     parsed = urllib.parse.urlparse(target_url)
                     path = parsed.path
                     if parsed.query:
                         path += "?" + parsed.query
                     if path and path != "/" and path != "":
-                        return path
+                        fallback_paths.append(path)
+
+        if page_targets:
+            try:
+                win_infos, cdp_running = asyncio.run(_inspect_page_targets_async(page_targets))
+                if cdp_running:
+                    log_file.write(f"CDP meldet laufende Trajectories vor Shutdown: {cdp_running}\n")
+                    log_file.flush()
+                    if isinstance(interrupted_out, list):
+                        for r_cid in cdp_running:
+                            if r_cid not in interrupted_out:
+                                interrupted_out.append(r_cid)
+                if win_infos:
+                    # 1. Focused window
+                    focused = [w for w in win_infos if w.get("hasFocus") and w.get("path") and w.get("path") != "/"]
+                    if focused:
+                        chosen = focused[0]["path"]
+                        log_file.write(f"Aktiver Pfad aus fokussiertem Fenster ermittelt: {chosen}\n")
+                        log_file.flush()
+                        return chosen
+                    # 2. Window with most recent user interaction
+                    interacted = sorted(
+                        [w for w in win_infos if w.get("lastInteraction", 0) > 0 and w.get("path") and w.get("path") != "/"],
+                        key=lambda w: w.get("lastInteraction", 0),
+                        reverse=True,
+                    )
+                    if interacted:
+                        chosen = interacted[0]["path"]
+                        log_file.write(f"Aktiver Pfad aus zuletzt bedientem Fenster ermittelt: {chosen}\n")
+                        log_file.flush()
+                        return chosen
+                    # 3. Window matching preferred_chat_id (newest DB or trigger)
+                    if preferred_chat_id:
+                        matching = [
+                            w for w in win_infos
+                            if str(w.get("chatId") or "").lower() == str(preferred_chat_id).lower()
+                        ]
+                        if matching and matching[0].get("path"):
+                            chosen = matching[0]["path"]
+                            log_file.write(f"Aktiver Pfad aus offenem Fenster fuer {preferred_chat_id} ermittelt: {chosen}\n")
+                            log_file.flush()
+                            return chosen
+            except Exception as probe_err:
+                log_file.write(f"CDP-Fenster-Probe Hinweis: {probe_err}\n")
+                log_file.flush()
+
+        if preferred_chat_id:
+            for fp in fallback_paths:
+                if preferred_chat_id.lower() in fp.lower():
+                    return fp
+        if fallback_paths:
+            return fallback_paths[0]
     except Exception as e:
         log_file.write(f"Warning during get_current_active_path: {e}\n")
         log_file.flush()
     return None
-
 def write_active_path_to_storage(path, log_file):
     try:
         if not path:
@@ -1506,11 +1739,29 @@ def run_repack():
                 log_file.write(f"Warnung beim Sichern des Drafts in das Clipboard: {clipboard_err}\n")
                 log_file.flush()
 
-            # 3c. Aktuellen Pfad (Chat/Einstellungen etc.) via DevTools ermitteln und sichern
-            active_path = get_current_active_path(port_file, log_file)
-            if not active_path and (repack_trigger_id or target_chat_id):
-                active_path = f"/c/{repack_trigger_id or target_chat_id}"
-                log_file.write(f"Aktiver Pfad auf Chat-ID zurueckgefallen: {active_path}\n")
+            # 3c. Aktive/unterbrochene Agenten in SQLite & DevTools vor dem Beenden erfassen
+            newest_db_cid, interrupted_chat_ids = detect_interrupted_conversations_from_db(log_file)
+            preferred_cid = repack_trigger_id or newest_db_cid or target_chat_id
+            active_path = get_current_active_path(
+                port_file,
+                log_file,
+                app_path=app_path,
+                preferred_chat_id=preferred_cid,
+                interrupted_out=interrupted_chat_ids,
+            )
+            if repack_trigger_id:
+                active_path = f"/c/{repack_trigger_id}"
+                target_chat_id = repack_trigger_id
+                log_file.write(f"Nutze expliziten Trigger-Chat als Hauptziel: {active_path}\n")
+                log_file.flush()
+            elif active_path:
+                m_act = re.search(r"([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})", active_path, re.IGNORECASE)
+                if m_act:
+                    target_chat_id = m_act.group(1)
+            elif preferred_cid:
+                active_path = f"/c/{preferred_cid}"
+                target_chat_id = preferred_cid
+                log_file.write(f"Aktiver Pfad auf bevorzugte Chat-ID gesetzt: {active_path}\n")
                 log_file.flush()
 
             # 4. Stop only the exact selected Antigravity installation tree.
@@ -1678,6 +1929,7 @@ def run_repack():
                         log_file,
                         verification_chat_id,
                         active_path=active_path,
+                        interrupted_chat_ids=interrupted_chat_ids,
                     )
                 )
                 log_file.write("App-Start und Preload-Pruefung erfolgreich abgeschlossen.\n")

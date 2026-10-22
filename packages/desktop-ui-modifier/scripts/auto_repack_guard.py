@@ -294,7 +294,7 @@ def user_approved_repack(observed: dict[str, object]) -> bool:
         data = json.loads(_approval_file().read_text(encoding="utf-8"))
         if not isinstance(data, dict) or not data.get("approved"):
             return False
-        approved_at = float(data.get("approved_at", 0))
+        approved_at = float(data.get("approved_at") or data.get("timestamp") or 0)
         if time.time() - approved_at > 600:
             return False
         return True
@@ -452,24 +452,6 @@ def run_guard(poll_seconds: float) -> int:
                 time.sleep(poll_seconds)
                 continue
 
-            reason = hold_reason()
-            if reason != last_hold_reason:
-                if reason:
-                    log(f"Repack postponed ({reason}); sources may still be changing.")
-                elif last_hold_reason:
-                    log(f"Repack hold released ({last_hold_reason}).")
-                last_hold_reason = reason
-            if reason or not ready_to_repack(installed, observed, stable_count, stable_since, time.time()):
-                time.sleep(poll_seconds)
-                continue
-
-            if not needs_repack(read_state(), current_state()):
-                # Another repack stored the verified signature in the meantime.
-                stable_candidate = None
-                stable_count = 0
-                time.sleep(poll_seconds)
-                continue
-
             if source_only_change(installed, observed) and not user_approved_repack(observed):
                 notice_path = _pending_notice_file()
                 if not notice_path.is_file():
@@ -488,6 +470,24 @@ def run_guard(poll_seconds: float) -> int:
                         encoding="utf-8",
                     )
                     log("Source-only change detected; waiting for user click on in-app Repack button.")
+                time.sleep(poll_seconds)
+                continue
+
+            reason = hold_reason()
+            if reason != last_hold_reason:
+                if reason:
+                    log(f"Repack postponed ({reason}); sources may still be changing.")
+                elif last_hold_reason:
+                    log(f"Repack hold released ({last_hold_reason}).")
+                last_hold_reason = reason
+            if reason or not ready_to_repack(installed, observed, stable_count, stable_since, time.time()):
+                time.sleep(poll_seconds)
+                continue
+
+            if not needs_repack(read_state(), current_state()):
+                # Another repack stored the verified signature in the meantime.
+                stable_candidate = None
+                stable_count = 0
                 time.sleep(poll_seconds)
                 continue
 
