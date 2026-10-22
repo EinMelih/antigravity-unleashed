@@ -9,7 +9,7 @@ Dieses Skill-Paket patcht die lokal installierte Antigravity-Desktop-App. Es ist
 inoffizieller Windows-Workflow und macht weder Antigravity noch enthaltenen
 Google-Code automatisch zu Open Source.
 
-Der aktuelle Modifier ist ausschließlich für **Upstream v2.24.0** freigegeben. Die
+Der aktuelle Modifier ist ausschließlich für **Upstream v2.25.0** freigegeben. Die
 maschinenlesbare Quelle dafür ist `SUPPORTED_UPSTREAM_VERSION`. Eine andere
 installierte Version muss vor dem Repack hart abgewiesen werden.
 
@@ -78,6 +78,14 @@ python -m py_compile .\scripts\repack_and_restart.py .\scripts\auto_repack_guard
 python .\scripts\auto_repack_guard.py --status-json
 ```
 
+> [!IMPORTANT]
+> **PFLICHTREGEL FÜR AGENTEN (Kein automatischer Neustart während andere Agenten arbeiten):**
+> Starte `repack_and_restart.py` oder `start_repack_task.ps1` **niemals automatisch**, nachdem du Änderungen an `src/ui/*` oder `src/*` vorgenommen hast, es sei denn der User fordert den sofortigen Neustart ausdrücklich an!
+> Stattdessen:
+> 1. Kompiliere `preload.js` mit `python .\scripts\build_preload.py`.
+> 2. Schreibe `~/.gemini/antigravity/scratch/repack_pending_notice.json` mit `{"title": "<Kurztitel der Änderung>", "details": "<Was das Update bringt>", "await_user_click": true, "updated_at": <epoch>}`.
+> 3. Dadurch erscheint in der Antigravity-Leiste automatisch der auffällige gelbe Button **`↻ Neustart für: [Titel]`** (`#antigravity-repack-ready-btn`) sowie die Info-Karte im `UNLEASHED`-Menü. Der User entscheidet selbst per Klick (`window.amsTriggerRepackNow()`), wann seine anderen laufenden Agenten fertig sind und der 3-Sekunden-Repack starten soll.
+
 ## Sicherer Repack-Ablauf
 
 `scripts/repack_and_restart.py` muss folgende Reihenfolge einhalten:
@@ -90,7 +98,7 @@ python .\scripts\auto_repack_guard.py --status-json
    extrahieren und die Mindeststruktur validieren.
 6. `package.json` und die Hashes der überschriebenen Basisdateien gegen
    `SUPPORTED_UPSTREAM_VERSION` und `UPSTREAM_COMPATIBILITY.json` prüfen. Für
-   v2.24.0 muss exakt `2.24.0` mit dem freigegebenen Upstream-Build installiert sein.
+   v2.25.0 muss exakt `2.25.0` mit dem freigegebenen Upstream-Build installiert sein.
 7. Alle JavaScript-Quellen prüfen und das komplette Overlay in Staging kopieren.
    Ein einzelner `mkdir`-/`copy2`-/Pfadfehler beendet den Lauf mit Nonzero,
    bevor die App beendet oder ein Archiv gepackt wird.

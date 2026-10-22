@@ -156,6 +156,7 @@ def mark_current_verified() -> None:
     write_state({"app_asar": stat_signature(APP_ASAR), "source": captured_source})
     clear_failure_latch()
     clear_notification(SCRATCH_DIR)
+    clear_user_approval_and_notice()
 
 
 def read_failure_latch() -> dict[str, object] | None:
@@ -256,6 +257,8 @@ def needs_repack(installed: dict[str, object], observed: dict[str, object]) -> b
 
 
 PAUSE_FILE = SCRATCH_DIR / "auto_repack_guard_pause.json"
+PENDING_NOTICE_FILE = SCRATCH_DIR / "repack_pending_notice.json"
+APPROVAL_FILE = SCRATCH_DIR / "repack_user_approved.json"
 # Skill edits arrive in bursts (several files, rebuilds, tests). A source-only change
 # must stay untouched this long before the guard repacks; app updates keep the short
 # three-poll stability check.
@@ -268,6 +271,43 @@ def _pause_file() -> Path:
     if PAUSE_FILE != default_pause:
         return PAUSE_FILE
     return SCRATCH_DIR / "auto_repack_guard_pause.json"
+
+
+def _pending_notice_file() -> Path:
+    return SCRATCH_DIR / "repack_pending_notice.json"
+
+
+def _approval_file() -> Path:
+    return SCRATCH_DIR / "repack_user_approved.json"
+
+
+def pending_notice_awaiting_user() -> bool:
+    try:
+        data = json.loads(_pending_notice_file().read_text(encoding="utf-8"))
+        return bool(isinstance(data, dict) and data.get("await_user_click") is True)
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def user_approved_repack(observed: dict[str, object]) -> bool:
+    try:
+        data = json.loads(_approval_file().read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or not data.get("approved"):
+            return False
+        approved_at = float(data.get("approved_at", 0))
+        if time.time() - approved_at > 600:
+            return False
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def clear_user_approval_and_notice() -> None:
+    for path in (_approval_file(), _pending_notice_file()):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def read_pause_until(now: float | None = None) -> float | None:
@@ -311,6 +351,8 @@ def hold_reason(now: float | None = None) -> str | None:
         return "paused"
     if agent_repair_active():
         return "agent_repair"
+    if pending_notice_awaiting_user():
+        return "awaiting_user_click"
     return None
 
 
@@ -425,6 +467,27 @@ def run_guard(poll_seconds: float) -> int:
                 # Another repack stored the verified signature in the meantime.
                 stable_candidate = None
                 stable_count = 0
+                time.sleep(poll_seconds)
+                continue
+
+            if source_only_change(installed, observed) and not user_approved_repack(observed):
+                notice_path = _pending_notice_file()
+                if not notice_path.is_file():
+                    notice_path.parent.mkdir(parents=True, exist_ok=True)
+                    notice_path.write_text(
+                        json.dumps(
+                            {
+                                "title": "Unleashed UI-Update bereit",
+                                "details": "Neue Funktionen/Änderungen im Desktop-Modifier warten auf deinen Neustart-Klick.",
+                                "await_user_click": True,
+                                "updated_at": int(time.time()),
+                            },
+                            indent=2,
+                            ensure_ascii=False,
+                        ),
+                        encoding="utf-8",
+                    )
+                    log("Source-only change detected; waiting for user click on in-app Repack button.")
                 time.sleep(poll_seconds)
                 continue
 

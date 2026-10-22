@@ -1546,7 +1546,9 @@
         overlay.style.position = 'fixed';
         overlay.style.bottom = '80px';
         overlay.style.right = '20px';
-        overlay.style.width = '320px';
+        overlay.style.width = '335px';
+        overlay.style.maxHeight = '82vh';
+        overlay.style.overflowY = 'auto';
         overlay.dataset.amsQuickMenu = 'true';
         overlay.style.background = 'rgba(20, 20, 23, 0.85)';
         overlay.style.backdropFilter = 'blur(16px)';
@@ -1651,6 +1653,83 @@
         }
 
         overlay.appendChild(statusSection);
+
+        // Repack Ready Card inside UNLEASHED (if ASAR changes are waiting for user click)
+        const rInfo = window.amsTelemetryState && window.amsTelemetryState.repackInfo;
+        if (rInfo && (rInfo.pending || rInfo.repacking)) {
+            const repackCard = document.createElement('div');
+            repackCard.style.cssText =
+                'display:flex;flex-direction:column;gap:6px;padding:10px 11px;border-radius:8px;' +
+                'background:rgba(245,158,11,0.12);border:1px solid rgba(251,191,36,0.42);font-size:11px;line-height:1.35;';
+            const titleText = escapeHtml(rInfo.title || 'UI-Update bereit');
+            const detailText = escapeHtml(rInfo.details || 'Änderungen warten auf Repack & Neustart.');
+            repackCard.innerHTML =
+                `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
+                    `<strong style="color:#fde68a;font-size:11.5px;">↻ Neustart bereit: ${titleText}</strong>` +
+                `</div>` +
+                `<div style="color:rgba(255,255,255,0.75);font-size:10.5px;">${detailText}</div>` +
+                `<button type="button" id="ams-quickmenu-repack-btn" style="margin-top:2px;padding:6px 10px;border-radius:6px;border:1px solid rgba(251,191,36,0.55);background:rgba(245,158,11,0.22);color:#fef08a;font-size:11px;font-weight:600;cursor:pointer;text-align:center;">` +
+                    (rInfo.repacking ? '⏳ Repack & Neustart läuft (ca. 3s)...' : '↻ Jetzt Repack ausführen & neu starten') +
+                `</button>`;
+            overlay.appendChild(repackCard);
+            const rBtn = repackCard.querySelector('#ams-quickmenu-repack-btn');
+            if (rBtn) {
+                rBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    rBtn.textContent = '⏳ Repack & Neustart läuft (ca. 3s)...';
+                    if (typeof window.amsTriggerRepackNow === 'function') {
+                        window.amsTriggerRepackNow();
+                    }
+                });
+            }
+        }
+
+        // UI & Toolbar Icon Checkboxes Section
+        const uiPrefsSection = document.createElement('div');
+        uiPrefsSection.style.cssText =
+            'display:flex;flex-direction:column;gap:5px;padding:9px 11px;border-radius:8px;' +
+            'background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);font-size:11.5px;';
+
+        const prefsHeader = document.createElement('div');
+        prefsHeader.style.cssText =
+            'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.45);margin-bottom:2px;';
+        prefsHeader.textContent = 'Anzeige & Leisten-Icons';
+        uiPrefsSection.appendChild(prefsHeader);
+
+        const curPrefs = typeof window.amsGetUiPrefs === 'function'
+            ? window.amsGetUiPrefs()
+            : { show5hLimit: false, showBrainIcon: false, showPlanIcon: false, showDuplicateIcon: false, showSidebarPct: false };
+
+        const prefItems = [
+            { key: 'show5hLimit', label: '5-Stunden-Limit anzeigen (Leiste & Models)' },
+            { key: 'showBrainIcon', label: 'Brain-Ordner Icon in Leiste anzeigen' },
+            { key: 'showPlanIcon', label: 'Task & Plan Icon in Leiste anzeigen' },
+            { key: 'showDuplicateIcon', label: 'Fenster-Duplizieren Icon in Leiste anzeigen' },
+            { key: 'showSidebarPct', label: 'Chat-Prozente in Sidebar anzeigen' },
+        ];
+
+        prefItems.forEach(({ key, label }) => {
+            const row = document.createElement('label');
+            row.style.cssText =
+                'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 2px;cursor:pointer;color:rgba(255,255,255,0.82);user-select:none;';
+            const textSpan = document.createElement('span');
+            textSpan.textContent = label;
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = !!curPrefs[key];
+            cb.style.cssText = 'accent-color:#38bdf8;cursor:pointer;width:13px;height:13px;margin:0;flex-shrink:0;';
+            cb.addEventListener('change', (e) => {
+                e.stopPropagation();
+                if (typeof window.amsSetUiPref === 'function') {
+                    window.amsSetUiPref(key, !!cb.checked);
+                }
+            });
+            row.appendChild(textSpan);
+            row.appendChild(cb);
+            uiPrefsSection.appendChild(row);
+        });
+
+        overlay.appendChild(uiPrefsSection);
 
         // Actions Section
         const actionsSection = document.createElement('div');

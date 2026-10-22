@@ -30,6 +30,25 @@
         lastUpdatedTs: 0,
     };
 
+    const DEFAULT_AMS_UI_PREFS = {
+        show5hLimit: false,
+        showBrainIcon: false,
+        showPlanIcon: false,
+        showDuplicateIcon: false,
+        showSidebarPct: false,
+    };
+
+    function loadAmsUiPrefs() {
+        try {
+            const raw = localStorage.getItem('ams_ui_prefs_v1');
+            if (!raw) return { ...DEFAULT_AMS_UI_PREFS };
+            const parsed = JSON.parse(raw);
+            return { ...DEFAULT_AMS_UI_PREFS, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+        } catch (_) {
+            return { ...DEFAULT_AMS_UI_PREFS };
+        }
+    }
+
     const amsTelemetryState = {
         activeConvStats: null,
         weeklySummary: null,
@@ -39,6 +58,8 @@
         lastObservedStepByConv: new Map(),
         lastCacheHitFlashTs: 0,
         logFilePath: '~/.gemini/config/quota_usage_log.json',
+        repackInfo: { pending: false, repacking: false, title: '', details: '', runningChatsCount: 0 },
+        uiPrefs: loadAmsUiPrefs(),
         soundEnabled: (() => {
             try {
                 return localStorage.getItem('ams_cache_sound_enabled') !== '0';
@@ -49,6 +70,46 @@
     };
 
     window.amsTelemetryState = amsTelemetryState;
+
+    window.amsGetUiPrefs = function() {
+        return amsTelemetryState.uiPrefs || DEFAULT_AMS_UI_PREFS;
+    };
+
+    window.amsSetUiPref = function(key, val) {
+        if (!amsTelemetryState.uiPrefs) {
+            amsTelemetryState.uiPrefs = loadAmsUiPrefs();
+        }
+        amsTelemetryState.uiPrefs[key] = !!val;
+        try {
+            localStorage.setItem('ams_ui_prefs_v1', JSON.stringify(amsTelemetryState.uiPrefs));
+        } catch (_) {}
+        ensureCleanUiStyles();
+        refreshQuotaDisplay();
+        decorateSidebarConversations();
+        patchModelsAndUsagePage();
+        return amsTelemetryState.uiPrefs[key];
+    };
+
+    window.amsToggleUiPref = function(key) {
+        const cur = !!(amsTelemetryState.uiPrefs && amsTelemetryState.uiPrefs[key]);
+        return window.amsSetUiPref(key, !cur);
+    };
+
+    window.amsTriggerRepackNow = async function() {
+        if (!amsTelemetryState.repackInfo) {
+            amsTelemetryState.repackInfo = {};
+        }
+        amsTelemetryState.repackInfo.repacking = true;
+        amsTelemetryState.repackInfo.pending = false;
+        refreshQuotaDisplay();
+        try {
+            if (window.electronNative && typeof window.electronNative.getTokenStats === 'function') {
+                await window.electronNative.getTokenStats('__AMS_REPACK_TRIGGER__');
+            }
+        } catch (err) {
+            console.error('[AMS Repack] Failed to trigger repack:', err);
+        }
+    };
 
     // ----------------------------------------------------------------------------
     // 0. Crisp Lucide SVG Icon Helper (Replaces Unicode Emojis)
@@ -75,6 +136,7 @@
         cpu: '<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>',
         info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
         close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+        refresh: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
     };
 
     function amsIcon(name, size = 11, color = 'currentColor') {
@@ -108,25 +170,40 @@
             st.id = 'ams-clean-ui-override';
             (document.head || document.documentElement).appendChild(st);
         }
+        const prefs = window.amsGetUiPrefs ? window.amsGetUiPrefs() : DEFAULT_AMS_UI_PREFS;
+        const hiddenToolbarSelectors = [];
+        if (!prefs.showBrainIcon) hiddenToolbarSelectors.push('.antigravity-brain-btn');
+        if (!prefs.showPlanIcon) hiddenToolbarSelectors.push('.antigravity-plan-btn', '.antigravity-plan-toggle-btn');
+        if (!prefs.showDuplicateIcon) hiddenToolbarSelectors.push('.antigravity-duplicate-btn');
+
+        const toolbarHideCss = hiddenToolbarSelectors.length > 0
+            ? hiddenToolbarSelectors.join(',') + ' { display: none !important; }'
+            : '';
+
         const css =
             '.antigravity-cache-hit-toast,' +
             '.antigravity-ultra-badge,' +
             '.ams-models-ultra-pill,' +
             '.antigravity-quota-display,' +
             '#antigravity-quota-display-v2,' +
+            '#antigravity-quota-display-v3,' +
             '#antigravity-composer-status-strip,' +
+            '#antigravity-composer-status-strip-v3,' +
             '.antigravity-turn-cost-badge,' +
             '.antigravity-turn-cost-badge-v2,' +
+            '.antigravity-turn-cost-badge-v3,' +
             '#antigravity-chat-token-counter,' +
             '#antigravity-live-send-estimator,' +
             '#antigravity-model-trigger-loss-pill,' +
             '#antigravity-model-switch-popover,' +
             '.antigravity-sidebar-chat-meta,' +
             '.antigravity-sidebar-chat-meta-v2,' +
+            '.antigravity-sidebar-chat-meta-v3,' +
             '#antigravity-models-usage-intelligence,' +
             '#antigravity-models-usage-intelligence-v2 {' +
             '  display: none !important;' +
             '}' +
+            toolbarHideCss +
             '.antigravity-quickmenu-btn {' +
             '  background: rgba(255, 255, 255, 0.03) !important;' +
             '  border: 1px solid rgba(255, 255, 255, 0.07) !important;' +
@@ -258,7 +335,26 @@
     // ----------------------------------------------------------------------------
     // 2. ConnectRPC Helpers & Interceptors
     // ----------------------------------------------------------------------------
-    const originalFetch = window.fetch;
+    if (!window.__ams_native_fetch) {
+        try {
+            const fnStr = Function.prototype.toString.call(window.fetch || '');
+            if (fnStr.includes('[native code]')) {
+                window.__ams_native_fetch = window.fetch.bind(window);
+            } else if (document.body) {
+                const ifr = document.createElement('iframe');
+                ifr.style.display = 'none';
+                document.body.appendChild(ifr);
+                if (ifr.contentWindow && ifr.contentWindow.fetch) {
+                    window.__ams_native_fetch = ifr.contentWindow.fetch.bind(window);
+                }
+                ifr.remove();
+            }
+        } catch (_) {}
+        if (!window.__ams_native_fetch && window.fetch) {
+            window.__ams_native_fetch = window.fetch.bind(window);
+        }
+    }
+    const originalFetch = window.__ams_native_fetch || window.fetch;
 
     function buildGrpcWebJsonFrame(obj) {
         const bodyStr = JSON.stringify(obj || {});
@@ -331,6 +427,7 @@
     }
 
     function handleGetAllCascadeTrajectoriesText(text) {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         const data = parseGrpcWebJsonText(text);
         if (!data || !data.trajectorySummaries) return;
         const summaries = data.trajectorySummaries;
@@ -358,11 +455,24 @@
         }
     }
 
+    if (!window.__ams_orig_setTimeout) {
+        window.__ams_orig_setTimeout = window.setTimeout.bind(window);
+    }
+    window.setTimeout = function(fn, delay, ...rest) {
+        if (typeof fn === 'function' && delay === 2000) {
+            const s = Function.prototype.toString.call(fn);
+            if (s.includes('liveTrajectoriesMap') && fn.__ams_instance_id !== window.__ams_active_instance_id) {
+                return 0;
+            }
+        }
+        return window.__ams_orig_setTimeout(fn, delay, ...rest);
+    };
+
     let runningPollTimer = null;
     function scheduleRunningConvPoll() {
         if (window.__ams_active_instance_id !== myInstanceId) return;
         if (runningPollTimer) return;
-        runningPollTimer = setTimeout(async () => {
+        const pollCb = async () => {
             runningPollTimer = null;
             if (window.__ams_active_instance_id !== myInstanceId) return;
             let stillRunning = false;
@@ -381,7 +491,9 @@
             if (stillRunning) {
                 fetchAllCascadeTrajectories();
             }
-        }, 2000);
+        };
+        pollCb.__ams_instance_id = myInstanceId;
+        runningPollTimer = setTimeout(pollCb, 2000);
     }
 
     function cleanResetTime(desc) {
@@ -411,6 +523,7 @@
     }
 
     function handleRetrieveUserQuotaSummaryText(text) {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         const data = parseGrpcWebJsonText(text);
         if (!data || !data.response || !data.response.groups) return;
         try {
@@ -460,6 +573,7 @@
     }
 
     function handleGetUserStatusText(text) {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         const data = parseGrpcWebJsonText(text);
         if (!data || !data.userStatus) return;
         try {
@@ -513,14 +627,34 @@
     };
 
     // Hook XMLHttpRequest in Main World
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const originalSend = XMLHttpRequest.prototype.send;
+    if (!window.__ams_native_xhr_open || !window.__ams_native_xhr_send) {
+        try {
+            const openStr = Function.prototype.toString.call(XMLHttpRequest.prototype.open || '');
+            const sendStr = Function.prototype.toString.call(XMLHttpRequest.prototype.send || '');
+            if (openStr.includes('[native code]') && sendStr.includes('[native code]')) {
+                window.__ams_native_xhr_open = XMLHttpRequest.prototype.open;
+                window.__ams_native_xhr_send = XMLHttpRequest.prototype.send;
+            } else if (document.body) {
+                const ifr = document.createElement('iframe');
+                ifr.style.display = 'none';
+                document.body.appendChild(ifr);
+                if (ifr.contentWindow && ifr.contentWindow.XMLHttpRequest) {
+                    window.__ams_native_xhr_open = ifr.contentWindow.XMLHttpRequest.prototype.open;
+                    window.__ams_native_xhr_send = ifr.contentWindow.XMLHttpRequest.prototype.send;
+                }
+                ifr.remove();
+            }
+        } catch (_) {}
+    }
+    const originalOpen = window.__ams_native_xhr_open || XMLHttpRequest.prototype.open;
+    const originalSend = window.__ams_native_xhr_send || XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function(method, url, ...args) {
         this._url = url;
         return originalOpen.call(this, method, url, ...args);
     };
     XMLHttpRequest.prototype.send = function(...args) {
         this.addEventListener('load', function() {
+            if (window.__ams_active_instance_id !== myInstanceId) return;
             try {
                 if (this._url) {
                     if (this._url.includes('GetUserStatus')) {
@@ -542,6 +676,11 @@
     window.amsIngestTokenStatsResult = function(res, isActiveConv = true) {
         if (!res || res.status !== 'success') return;
 
+        if (res.repackInfo && typeof res.repackInfo === 'object') {
+            if (!amsTelemetryState.repackInfo || !amsTelemetryState.repackInfo.repacking) {
+                amsTelemetryState.repackInfo = res.repackInfo;
+            }
+        }
         if (res.weeklySummary) {
             amsTelemetryState.weeklySummary = res.weeklySummary;
         }
@@ -554,6 +693,14 @@
         if (Array.isArray(res.recentChats)) {
             for (const c of res.recentChats) {
                 if (c && c.cascadeId) {
+                    const existing = amsTelemetryState.recentChatsMap.get(c.cascadeId);
+                    if (
+                        existing &&
+                        Number(existing.stepCount || 0) >= Number(c.stepCount || 0) &&
+                        Number(existing.totalInput || 0) > Number(c.totalInput || 0)
+                    ) {
+                        continue;
+                    }
                     amsTelemetryState.recentChatsMap.set(c.cascadeId, c);
                 }
             }
@@ -829,14 +976,15 @@
     }
 
     function refreshQuotaDisplay() {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         const addContextBtn = document.querySelector('button[aria-label="Add context"]');
         const flexContainer = addContextBtn ? addContextBtn.parentElement : null;
         if (!flexContainer) return;
 
-        let quotaEl = document.getElementById('antigravity-quota-display-v3');
+        let quotaEl = document.getElementById('antigravity-quota-display-v4');
         if (!quotaEl) {
             quotaEl = document.createElement('div');
-            quotaEl.id = 'antigravity-quota-display-v3';
+            quotaEl.id = 'antigravity-quota-display-v4';
             quotaEl.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -910,23 +1058,82 @@
             'white-space:nowrap;flex-shrink:0;user-select:none;cursor:pointer;';
         quotaEl.title = tooltipText;
 
+        const prefs = window.amsGetUiPrefs ? window.amsGetUiPrefs() : DEFAULT_AMS_UI_PREFS;
         const unifiedQuotaPill = document.createElement('span');
         unifiedQuotaPill.className = 'antigravity-quota-pill-v3';
         unifiedQuotaPill.style.cssText =
             `display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:6px;` +
             `background:${AMS_THEME.surfacePill};border:1px solid ${AMS_THEME.borderSubtle};font-size:11px;white-space:nowrap;`;
-        unifiedQuotaPill.innerHTML =
-            `<span style="display:inline-flex;align-items:center;gap:3.5px;">` +
-                `<span style="color:${AMS_THEME.textMuted};font-weight:400;">W</span>` +
-                `<span style="color:${getToneColor(gWExact)};font-weight:500;">${gWExact.toFixed(2)}%</span>` +
-            `</span>` +
-            `<span style="color:${AMS_THEME.textFaint};">·</span>` +
-            `<span style="display:inline-flex;align-items:center;gap:3.5px;">` +
-                `<span style="color:${AMS_THEME.textMuted};font-weight:400;">5h</span>` +
-                `<span style="color:${getToneColor(g5hExact)};font-weight:500;">${g5hExact.toFixed(1)}%</span>` +
-            `</span>`;
+
+        if (prefs.show5hLimit) {
+            unifiedQuotaPill.innerHTML =
+                `<span style="display:inline-flex;align-items:center;gap:3.5px;">` +
+                    `<span style="color:${AMS_THEME.textMuted};font-weight:400;">Weekly</span>` +
+                    `<span style="color:${getToneColor(gWExact)};font-weight:500;">${gWExact.toFixed(2)}%</span>` +
+                `</span>` +
+                `<span style="color:${AMS_THEME.textFaint};">·</span>` +
+                `<span style="display:inline-flex;align-items:center;gap:3.5px;">` +
+                    `<span style="color:${AMS_THEME.textMuted};font-weight:400;">5h</span>` +
+                    `<span style="color:${getToneColor(g5hExact)};font-weight:500;">${g5hExact.toFixed(1)}%</span>` +
+                `</span>`;
+        } else {
+            unifiedQuotaPill.innerHTML =
+                `<span style="display:inline-flex;align-items:center;gap:4px;">` +
+                    `<span style="color:${AMS_THEME.textMuted};font-weight:400;">Weekly</span>` +
+                    `<span style="color:${getToneColor(gWExact)};font-weight:500;">${gWExact.toFixed(2)}%</span>` +
+                `</span>`;
+        }
 
         quotaEl.replaceChildren(unifiedQuotaPill);
+
+        // Noticeable In-App Repack Ready Button (Never auto-restarts while agents run; waits for user click)
+        const rInfo = amsTelemetryState.repackInfo;
+        let repackBtn = document.getElementById('antigravity-repack-ready-btn');
+        if (rInfo && (rInfo.pending || rInfo.repacking)) {
+            if (!repackBtn) {
+                repackBtn = document.createElement('button');
+                repackBtn.type = 'button';
+                repackBtn.id = 'antigravity-repack-ready-btn';
+                repackBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (typeof window.amsTriggerRepackNow === 'function') {
+                        window.amsTriggerRepackNow();
+                    }
+                });
+                flexContainer.appendChild(repackBtn);
+            } else if (repackBtn.parentElement !== flexContainer) {
+                flexContainer.appendChild(repackBtn);
+            }
+
+            repackBtn.style.cssText =
+                'display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;margin-left:4px;border-radius:6px;' +
+                'border:1px solid rgba(251,191,36,0.48);background:rgba(245,158,11,0.14);color:#fde68a;' +
+                'font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:11px;font-weight:600;' +
+                'white-space:nowrap;cursor:pointer;flex-shrink:0;transition:all 0.15s ease;box-shadow:0 0 12px rgba(245,158,11,0.12);';
+
+            const shortTitle = rInfo.title || (isDe ? 'UI-Update' : 'UI Update');
+            const labelHtml = rInfo.repacking
+                ? `${amsIcon('refresh', 11, '#fde68a')}<span>${isDe ? 'Repack & Neustart läuft (ca. 3s)...' : 'Repacking & restarting (3s)...'}</span>`
+                : `${amsIcon('refresh', 11, '#fbbf24')}<span>${isDe ? `Neustart für: ${shortTitle}` : `Restart for: ${shortTitle}`}</span>`;
+
+            if (repackBtn.getAttribute('data-sig') !== labelHtml) {
+                repackBtn.setAttribute('data-sig', labelHtml);
+                repackBtn.innerHTML = labelHtml;
+            }
+            const runningNote = rInfo.runningChatsCount > 0
+                ? (isDe
+                    ? `\n⚠️ Hinweis: Aktuell arbeiten ${rInfo.runningChatsCount} Chat(s). Klicke erst, wenn deine Agenten fertig sind.`
+                    : `\n⚠️ Note: ${rInfo.runningChatsCount} chat(s) currently active. Click when ready to restart.`)
+                : (isDe ? '\n✓ Kein automatischer Neustart ohne deinen Klick.' : '\n✓ Will only restart when you click.');
+            repackBtn.title =
+                (isDe ? `Repack bereit: ${shortTitle}\n` : `Repack ready: ${shortTitle}\n`) +
+                (rInfo.details || '') +
+                runningNote +
+                (isDe ? '\n\nKlicken, um app.asar jetzt neu zu packen und Antigravity in ~3s neu zu starten.' : '\n\nClick to repack app.asar and restart Antigravity in ~3s.');
+        } else if (repackBtn) {
+            repackBtn.remove();
+        }
 
         // Update the clean full-width Composer Status Strip below the button row
         updateComposerStatusStrip();
@@ -977,6 +1184,7 @@
     }
 
     function updateComposerStatusStrip() {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         const addContextBtn = document.querySelector('button[aria-label="Add context"]');
         if (!addContextBtn || !addContextBtn.parentElement) return;
         const buttonRow = addContextBtn.parentElement;
@@ -984,10 +1192,10 @@
         const composerCard = toolbarFooter ? toolbarFooter.parentElement : null;
         if (!composerCard) return;
 
-        let stripEl = document.getElementById('antigravity-composer-status-strip-v3');
+        let stripEl = document.getElementById('antigravity-composer-status-strip-v4');
         if (!stripEl) {
             stripEl = document.createElement('div');
-            stripEl.id = 'antigravity-composer-status-strip-v3';
+            stripEl.id = 'antigravity-composer-status-strip-v4';
             stripEl.style.cssText =
                 `display:none;align-items:center;justify-content:space-between;gap:12px;width:100%;` +
                 `padding:5px 6px 2px 6px;margin-top:4px;border-top:1px solid rgba(255,255,255,0.045);` +
@@ -998,7 +1206,6 @@
             composerCard.appendChild(stripEl);
         }
 
-        const rawText = getComposerInputText().trim();
         const activeId = getActiveCascadeId();
 
         // If user switched chats in the sidebar, fetch active chat stats immediately so UI never lags or shows another chat
@@ -1016,12 +1223,9 @@
         }
 
         const cacheInfo = activeId ? getChatCacheState(activeId) : null;
-        const stats = (amsTelemetryState.activeConvStats && amsTelemetryState.activeConvStats.cascadeId === activeId)
-            ? amsTelemetryState.activeConvStats
-            : (activeId ? amsTelemetryState.recentChatsMap.get(activeId) : null);
         const hasHistory = !!(cacheInfo && cacheInfo.stepCount > 0);
 
-        if (!hasHistory && !rawText) {
+        if (!hasHistory) {
             stripEl.style.display = 'none';
             return;
         }
@@ -1029,75 +1233,49 @@
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
         stripEl.style.display = 'flex';
 
-        // Left Side: Quiet, Native-styled Status + Total Chat Usage (No loud colored boxes!)
+        const ctxCompact = formatTokensCompact(cacheInfo.contextTokens);
         let leftHtml = '';
-        if (!hasHistory) {
-            leftHtml =
-                `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textPrimary};">` +
-                    `${amsIcon('sparkles', 10, AMS_THEME.sage)}<span>${isDe ? 'Neuer Chat' : 'New chat'}</span>` +
-                `</span>`;
-        } else {
-            let statusLabel = '';
-            if (cacheInfo.isRunning) {
-                statusLabel =
-                    `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textPrimary};font-weight:500;">` +
-                        `${amsIcon('zap', 10, AMS_THEME.sage)}<span>${isDe ? `Aktiv · Step #${cacheInfo.stepCount}` : `Active · Step #${cacheInfo.stepCount}`}</span>` +
-                    `</span>`;
-            } else if (cacheInfo.state === 'warm') {
-                statusLabel =
-                    `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textPrimary};font-weight:500;">` +
-                        `${amsIcon('flame', 10, AMS_THEME.sage)}<span>${isDe ? `Warm (${formatDurationShort(cacheInfo.remainingGuaranteedSec)})` : `Warm (${formatDurationShort(cacheInfo.remainingGuaranteedSec)})`}</span>` +
-                    `</span>`;
-            } else {
-                statusLabel =
-                    `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textPrimary};font-weight:500;">` +
-                        `${amsIcon('snowflake', 10, AMS_THEME.sand)}<span>${isDe ? `Kalt (${formatDurationShort(cacheInfo.idleSec)} Pause)` : `Cold (${formatDurationShort(cacheInfo.idleSec)} idle)`}</span>` +
-                    `</span>`;
-            }
-
-            const wUsedStr = cacheInfo.weeklyPctUsed.toFixed(4);
-            const ratioStr = Math.round((stats && stats.cacheRatio) || cacheInfo.cacheRatio || 0);
-            leftHtml =
-                `<div style="display:inline-flex;align-items:center;gap:8px;min-width:0;overflow:hidden;">` +
-                    statusLabel +
-                    `<span style="color:${AMS_THEME.textFaint};">·</span>` +
-                    `<span style="color:${AMS_THEME.textMuted};">` +
-                        `Chat <span style="color:${AMS_THEME.textPrimary};font-weight:500;">-${wUsedStr}% W</span> ` +
-                        `<span style="opacity:0.75;">(${ratioStr}% Cache)</span>` +
-                    `</span>` +
-                `</div>`;
-        }
-
-        // Right Side: Next message estimate (Calm monochrome + subtle ghost button when cold)
-        const typedTokens = rawText ? Math.max(1, Math.round(rawText.length / 3.6)) : 120;
-        const ctxTokens = hasHistory ? cacheInfo.contextTokens : 24500;
-        const estOutTokens = 850;
-        const isWarm = !hasHistory || cacheInfo.state === 'warm' || cacheInfo.isRunning;
-        const weightedWarm = Math.round(0.1 * ctxTokens + 1.0 * typedTokens + 6.0 * estOutTokens);
-        const weightedCold = Math.round(1.0 * ctxTokens + 1.0 * typedTokens + 6.0 * estOutTokens);
-        const activeWeighted = isWarm ? weightedWarm : weightedCold;
-
-        const estWeeklyPct = (activeWeighted * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
-        const est5hPct = (activeWeighted * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(2);
-        const extraLossWeeklyPct = Math.max(0, (weightedCold - weightedWarm) * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4);
-
         let rightHtml = '';
-        if (isWarm) {
+
+        if (cacheInfo.isRunning) {
+            leftHtml =
+                `<div style="display:inline-flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">` +
+                    `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textPrimary};font-weight:500;">` +
+                        `${amsIcon('zap', 10, AMS_THEME.sage)}<span>${isDe ? `Aktiv (Step #${cacheInfo.stepCount})` : `Active (Step #${cacheInfo.stepCount})`}</span>` +
+                    `</span>` +
+                    `<span style="color:${AMS_THEME.textFaint};">·</span>` +
+                    `<span style="color:${AMS_THEME.textMuted};">${isDe ? '90% Cache-Rabatt aktiv' : '90% cache discount active'}</span>` +
+                `</div>`;
             rightHtml =
-                `<div style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textMuted};flex-shrink:0;">` +
-                    `<span>${rawText ? (isDe ? 'Senden' : 'Send') : (isDe ? 'Nächste Nachricht' : 'Next msg')}</span>` +
-                    `<span style="color:${AMS_THEME.textPrimary};font-weight:500;">~ -${estWeeklyPct}% W</span>` +
-                    `<span style="opacity:0.65;">(-${est5hPct}% 5h)</span>` +
+                `<div style="display:inline-flex;align-items:center;gap:6px;color:${AMS_THEME.textMuted};flex-shrink:0;">` +
+                    `<span>${ctxCompact} ${isDe ? 'Kontext' : 'context'}</span>` +
+                `</div>`;
+        } else if (cacheInfo.state === 'warm') {
+            leftHtml =
+                `<div style="display:inline-flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">` +
+                    `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textPrimary};font-weight:500;">` +
+                        `${amsIcon('flame', 10, AMS_THEME.sage)}<span>${isDe ? `Cache warm (noch ${formatDurationShort(cacheInfo.remainingGuaranteedSec)})` : `Cache warm (${formatDurationShort(cacheInfo.remainingGuaranteedSec)} left)`}</span>` +
+                    `</span>` +
+                    `<span style="color:${AMS_THEME.textFaint};">·</span>` +
+                    `<span style="color:${AMS_THEME.textPrimary};font-weight:500;">${isDe ? 'Du sparst 90%' : 'You save 90%'}</span>` +
+                `</div>`;
+            rightHtml =
+                `<div style="display:inline-flex;align-items:center;gap:6px;color:${AMS_THEME.textMuted};flex-shrink:0;">` +
+                    `<span>${ctxCompact} ${isDe ? 'Kontext' : 'context'} · ${cacheInfo.stepCount} ${cacheInfo.stepCount === 1 ? 'Step' : 'Steps'}</span>` +
                 `</div>`;
         } else {
+            leftHtml =
+                `<div style="display:inline-flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">` +
+                    `<span id="ams-composer-cache-pill" style="display:inline-flex;align-items:center;gap:5px;color:${AMS_THEME.textPrimary};font-weight:500;">` +
+                        `${amsIcon('snowflake', 10, AMS_THEME.sand)}<span>${isDe ? `Cache kalt (${formatDurationShort(cacheInfo.idleSec)} Pause)` : `Cache cold (${formatDurationShort(cacheInfo.idleSec)} idle)`}</span>` +
+                    `</span>` +
+                    `<span style="color:${AMS_THEME.textFaint};">·</span>` +
+                    `<span style="color:${AMS_THEME.sand};">${isDe ? `Weiterchatten kostet 10× (${ctxCompact} Tok neu laden)` : `Continuing costs 10× (reloads ${ctxCompact} tok)`}</span>` +
+                `</div>`;
             rightHtml =
                 `<div style="display:inline-flex;align-items:center;gap:8px;flex-shrink:0;">` +
-                    `<span style="color:${AMS_THEME.textMuted};">` +
-                        `${isDe ? 'Kalt-Senden' : 'Cold send'} <span style="color:${AMS_THEME.sand};font-weight:500;">-${estWeeklyPct}% W</span> ` +
-                        `<span style="opacity:0.75;">(-${extraLossWeeklyPct}% ${isDe ? 'Verlust' : 'loss'})</span>` +
-                    `</span>` +
                     `<button type="button" class="antigravity-inline-newchat-btn" style="display:inline-flex;align-items:center;gap:3.5px;height:20px;padding:0 7px;border-radius:5px;border:1px solid ${AMS_THEME.borderHover};background:${AMS_THEME.surfaceHover};color:${AMS_THEME.textBright};font-size:10.5px;font-weight:500;cursor:pointer;transition:background 0.15s ease;">` +
-                        `${amsIcon('plus', 9, AMS_THEME.textPrimary)}<span>${isDe ? 'Neuer Chat' : 'New Chat'}</span>` +
+                        `${amsIcon('plus', 9, AMS_THEME.textPrimary)}<span>${isDe ? 'Neuer Chat (spart 90%)' : 'New Chat (saves 90%)'}</span>` +
                     `</button>` +
                 `</div>`;
         }
@@ -1117,17 +1295,15 @@
             }
         }
 
-        if (hasHistory) {
-            stripEl.title = isDe
-                ? `Details zu diesem Chat (${cacheInfo.stepCount} Steps · ${(cacheInfo.contextTokens || 0).toLocaleString('de-DE')} Kontext-Tokens):\n` +
-                  `• Bisher verbraucht: -${cacheInfo.weeklyPctUsed.toFixed(4)}% Weekly (-${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)\n` +
-                  `• Nächste Nachricht im warmen Cache (0.1x): -${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)\n` +
-                  `• Nächste Nachricht kalt ohne Cache (1.0x): -${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.coldSend5hPct.toFixed(4)}% 5h)`
-                : `Chat Details (${cacheInfo.stepCount} steps · ${(cacheInfo.contextTokens || 0).toLocaleString('en-US')} context tokens):\n` +
-                  `• Used so far: -${cacheInfo.weeklyPctUsed.toFixed(4)}% Weekly (-${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)\n` +
-                  `• Next message Warm (0.1x): -${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)\n` +
-                  `• Next message Cold (1.0x): -${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.coldSend5hPct.toFixed(4)}% 5h)`;
-        }
+        stripEl.title = isDe
+            ? `Prompt-Cache Status (${cacheInfo.stepCount} Steps · ${(cacheInfo.contextTokens || 0).toLocaleString('de-DE')} Kontext-Tokens):\n` +
+              `• Im warmen Cache (< 5 Min. Pause) zahlst du nur 10% (du sparst 90% Quota).\n` +
+              `• Bei kaltem Cache (> 5 Min. Pause) muss der gesamte Kontext (${ctxCompact} Tokens) 10× teurer neu geladen werden.\n` +
+              `• Bisheriger Chat-Verbrauch: -${cacheInfo.weeklyPctUsed.toFixed(4)}% Weekly`
+            : `Prompt-Cache Status (${cacheInfo.stepCount} steps · ${(cacheInfo.contextTokens || 0).toLocaleString('en-US')} context tokens):\n` +
+              `• While warm (< 5m idle), cached context tokens get a 90% discount (0.1×).\n` +
+              `• When cold (> 5m idle), continuing reloads all ${ctxCompact} tokens at 10× cost.\n` +
+              `• Chat Weekly used so far: -${cacheInfo.weeklyPctUsed.toFixed(4)}%`;
     }
 
     function updateComposerChatBadge() {
@@ -1140,6 +1316,7 @@
 
     // Attach input listeners for instant pre-send estimation while typing
     document.addEventListener('input', (e) => {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         if (e.target && (e.target.getAttribute('role') === 'combobox' || e.target.isContentEditable || e.target.tagName === 'TEXTAREA')) {
             updateComposerStatusStrip();
         }
@@ -1149,6 +1326,7 @@
     // 7. Per-Message Post-Turn Cost Line (Quiet Native Inline Metadata)
     // ----------------------------------------------------------------------------
     function renderPerMessageTurnBadges() {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         const activeId = getActiveCascadeId();
         const stats = amsTelemetryState.activeConvStats;
         if (!stats || (activeId && stats.cascadeId && stats.cascadeId !== activeId)) return;
@@ -1164,14 +1342,14 @@
             const turn = turns[idx] || (idx === agentArticles.length - 1 ? turns[turns.length - 1] : null);
             if (!turn || !turn.steps) return;
 
-            let badge = article.querySelector('.antigravity-turn-cost-badge-v3');
+            let badge = article.querySelector('.antigravity-turn-cost-badge-v4');
             if (!badge) {
                 badge = document.createElement('div');
-                badge.className = 'antigravity-turn-cost-badge-v3';
+                badge.className = 'antigravity-turn-cost-badge-v4';
                 article.appendChild(badge);
             }
             badge.style.cssText =
-                `display:inline-flex;align-items:center;gap:8px;margin-top:6px;padding:3px 9px;border-radius:6px;` +
+                `display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:3px 9px;border-radius:6px;` +
                 `background:${AMS_THEME.surfacePill};border:1px solid ${AMS_THEME.borderSubtle};` +
                 `font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:11px;` +
                 `font-variant-numeric:tabular-nums;white-space:nowrap;max-width:100%;overflow-x:auto;` +
@@ -1179,39 +1357,34 @@
 
             const cachePct = turn.totalInput > 0 ? Math.round((turn.cached / turn.totalInput) * 100) : 0;
             const wPct = Number(turn.weeklyPct || 0).toFixed(4);
-            const hPct = Number(turn.fiveHourPct || 0).toFixed(2);
             const eurStr = Number(turn.apiCostEur || 0).toFixed(2);
             const savedEurStr = Number(turn.apiSavedEur || 0).toFixed(2);
-            const savedTurnTokens = Math.round(Number(turn.cached || 0) * 0.9);
-            const savedTurnW = (savedTurnTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(2);
-            const savedTurn5h = (savedTurnTokens * ULTRA_5H_PCT_PER_WEIGHTED_TOKEN).toFixed(2);
-
-            const quotaSegment =
-                `<span style="display:inline-flex;align-items:center;gap:4px;">` +
-                    `<span style="color:${AMS_THEME.textPrimary};font-weight:500;">-${wPct}% W</span>` +
-                    `<span style="opacity:0.7;">(-${hPct}% 5h)</span>` +
-                `</span>`;
-
-            const cacheSegment = turn.cacheMiss
-                ? `<span style="display:inline-flex;align-items:center;gap:4px;color:${AMS_THEME.sand};">` +
-                      `${amsIcon('snowflake', 10, AMS_THEME.sand)}` +
-                      `<span>Cache-Miss (-${Number(turn.wastedWeeklyPct || 0).toFixed(3)}% W)</span>` +
-                  `</span>`
-                : `<span style="display:inline-flex;align-items:center;gap:4px;">` +
-                      `${amsIcon('flame', 10, AMS_THEME.sage)}` +
-                      `<span style="color:${AMS_THEME.textPrimary};">${cachePct}% Cache</span>` +
-                      `<span style="opacity:0.75;">(+${savedTurnW}% W ${isDe ? 'gespart' : 'saved'})</span>` +
-                  `</span>`;
-
-            const metaSegment =
-                `<span style="display:inline-flex;align-items:center;gap:6px;">` +
-                    `<span>${turn.steps} ${turn.steps === 1 ? 'Step' : 'Steps'}</span>` +
-                    `<span style="color:${AMS_THEME.textFaint};">·</span>` +
-                    `<span style="color:${AMS_THEME.textPrimary};">~${eurStr} €</span>` +
-                `</span>`;
-
+            const stepsLabel = `${turn.steps} ${turn.steps === 1 ? 'Step' : 'Steps'}`;
             const dot = `<span style="color:${AMS_THEME.textFaint};">·</span>`;
-            const html = quotaSegment + dot + cacheSegment + dot + metaSegment;
+
+            let mainSegment = '';
+            if (turn.cacheMiss) {
+                mainSegment =
+                    `<span style="display:inline-flex;align-items:center;gap:4px;color:${AMS_THEME.sand};">` +
+                        `${amsIcon('snowflake', 10, AMS_THEME.sand)}` +
+                        `<span>${isDe ? `Cache-Miss (${formatTokensCompact(turn.uncached)} Tok neu geladen)` : `Cache miss (${formatTokensCompact(turn.uncached)} tok reloaded)`}</span>` +
+                    `</span>`;
+            } else if (cachePct > 0) {
+                mainSegment =
+                    `<span style="display:inline-flex;align-items:center;gap:4px;">` +
+                        `${amsIcon('flame', 10, AMS_THEME.sage)}` +
+                        `<span style="color:${AMS_THEME.textPrimary};font-weight:500;">${isDe ? `${cachePct}% aus Cache` : `${cachePct}% cached`}</span>` +
+                        `<span style="opacity:0.8;">(${isDe ? '90% gespart' : '90% saved'})</span>` +
+                    `</span>`;
+            } else {
+                mainSegment =
+                    `<span style="display:inline-flex;align-items:center;gap:4px;">` +
+                        `${amsIcon('check', 10, AMS_THEME.sage)}` +
+                        `<span style="color:${AMS_THEME.textPrimary};">${formatTokensCompact(turn.totalInput + turn.out)} Tokens</span>` +
+                    `</span>`;
+            }
+
+            const html = `${mainSegment}${dot}<span>${stepsLabel}</span>`;
             if (badge.getAttribute('data-sig') !== html) {
                 badge.setAttribute('data-sig', html);
                 badge.innerHTML = html;
@@ -1219,15 +1392,13 @@
 
             badge.title = isDe
                 ? `Details zu dieser KI-Antwort (${turn.steps} Steps):\n` +
-                  `• Abzug: -${wPct}% Weekly / -${Number(turn.fiveHourPct || 0).toFixed(4)}% 5-Stunden-Limit\n` +
-                  `• Durch Cache gespart: +${(savedTurnTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4)}% Weekly (+${savedTurn5h}% 5h)\n` +
                   `• Tokens: ${formatTokensCompact(turn.cached)} aus Cache (${cachePct}%) · ${formatTokensCompact(turn.uncached)} neu · ${formatTokensCompact(turn.out)} Output\n` +
-                  `• API-Wert: ~${eurStr} € (+${savedEurStr} € durch Cache gespart)`
+                  `• Weekly-Abzug: -${wPct}% Weekly\n` +
+                  `• API-Gegenwert: ~${eurStr} € (+${savedEurStr} € durch Cache gespart)`
                 : `AI Response Breakdown (${turn.steps} steps):\n` +
-                  `• Quota used: -${wPct}% Weekly / -${Number(turn.fiveHourPct || 0).toFixed(4)}% 5h\n` +
-                  `• Saved by cache: +${(savedTurnTokens * ULTRA_WEEKLY_PCT_PER_WEIGHTED_TOKEN).toFixed(4)}% Weekly (+${savedTurn5h}% 5h)\n` +
                   `• Tokens: ${formatTokensCompact(turn.cached)} cached (${cachePct}%) · ${formatTokensCompact(turn.uncached)} new · ${formatTokensCompact(turn.out)} out\n` +
-                  `• API value: ~€${eurStr} (+€${savedEurStr} saved)`;
+                  `• Weekly used: -${wPct}% Weekly\n` +
+                  `• API value: ~€${eurStr} (+€${savedEurStr} saved by cache)`;
         });
     }
 
@@ -1280,19 +1451,14 @@
                 `<button type="button" class="ams-cold-pop-close" style="display:inline-flex;align-items:center;background:transparent;border:none;color:${AMS_THEME.textMuted};cursor:pointer;padding:2px;">${amsIcon('close', 12, AMS_THEME.textMuted)}</button>` +
             `</div>` +
             `<div style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:${AMS_THEME.textMuted};">` +
-                `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Bisheriger Chat-Verbrauch:' : 'Chat Quota Used:'}</span><span style="color:${AMS_THEME.textBright};font-weight:500;">-${cacheInfo.weeklyPctUsed.toFixed(4)}% W (-${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)</span></div>` +
                 `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Kontextfenster-Größe:' : 'Context Window Size:'}</span><span style="color:${AMS_THEME.textBright};font-weight:500;">${cacheInfo.contextTokens.toLocaleString(isDe ? 'de-DE' : 'en-US')} Tokens (${cacheInfo.stepCount} Steps)</span></div>` +
-                `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Schreiben im warmen Chat (0.1x):' : 'Sending in warm chat (0.1x):'}</span><span style="color:${AMS_THEME.sage};font-weight:500;">-${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.warmSend5hPct.toFixed(4)}% 5h)</span></div>` +
-                `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Schreiben im kalten Chat (1.0x):' : 'Sending in cold chat (1.0x):'}</span><span style="color:${AMS_THEME.sand};font-weight:500;">-${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W (-${cacheInfo.coldSend5hPct.toFixed(4)}% 5h)</span></div>` +
-                `<div style="margin-top:4px;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);color:${AMS_THEME.textPrimary};font-size:10.5px;">` +
-                    (isDe
-                        ? `${amsIcon('info', 11, AMS_THEME.sand)} <span>Aufpreis bei kaltem Chat: <strong style="color:${AMS_THEME.textBright};">+${cacheInfo.extraColdLossWeeklyPct.toFixed(4)}% Weekly</strong> (+${cacheInfo.extraColdLoss5hPct.toFixed(4)}% 5h) durch uncached Nachladen.</span>`
-                        : `${amsIcon('info', 11, AMS_THEME.sand)} <span>Cold reload penalty: <strong style="color:${AMS_THEME.textBright};">+${cacheInfo.extraColdLossWeeklyPct.toFixed(4)}% Weekly</strong> (+${cacheInfo.extraColdLoss5hPct.toFixed(4)}% 5h) uncached reload.</span>`) +
-                `</div>` +
+                `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Im warmen Cache (< 5m):' : 'While warm (< 5m):'}</span><span style="color:${AMS_THEME.sage};font-weight:500;">${isDe ? '90% Rabatt (0.1× Kosten)' : '90% discount (0.1× cost)'}</span></div>` +
+                `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Bei kaltem Cache (> 5m):' : 'When cold (> 5m):'}</span><span style="color:${AMS_THEME.sand};font-weight:500;">${isDe ? '10× teurer (100% Nachladen)' : '10× cost (full reload)'}</span></div>` +
+                `<div style="display:flex;justify-content:space-between;"><span>${isDe ? 'Bisheriger Chat-Verbrauch:' : 'Chat Weekly Used:'}</span><span style="color:${AMS_THEME.textBright};font-weight:500;">-${cacheInfo.weeklyPctUsed.toFixed(4)}% Weekly</span></div>` +
             `</div>` +
             `<div style="display:flex;gap:8px;margin-top:10px;">` +
                 `<button type="button" class="ams-cold-pop-newchat" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:${AMS_THEME.textBright};font-size:11px;font-weight:500;cursor:pointer;">` +
-                    `${amsIcon('plus', 11, AMS_THEME.textBright)}<span>${isDe ? 'Direkt in neuen Chat springen' : 'Jump to New Chat'}</span>` +
+                    `${amsIcon('plus', 11, AMS_THEME.textBright)}<span>${isDe ? 'Direkt in neuen Chat springen (spart 90%)' : 'Start New Chat (saves 90%)'}</span>` +
                 `</button>` +
             `</div>`;
 
@@ -1312,7 +1478,8 @@
     }
 
     document.addEventListener('click', (e) => {
-        if (activeColdPopover && !activeColdPopover.contains(e.target) && !e.target.closest('.antigravity-sidebar-chat-meta-v3')) {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
+        if (activeColdPopover && !activeColdPopover.contains(e.target) && !e.target.closest('.antigravity-sidebar-chat-meta-v4')) {
             closeColdChatPopover();
         }
         if (activeModelSwitchPopover && !activeModelSwitchPopover.contains(e.target) && !e.target.closest('[data-testid="model-selector-trigger"]') && !e.target.closest('[data-testid="model-selector-panel"]')) {
@@ -1321,27 +1488,32 @@
     });
 
     function decorateSidebarConversations() {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         const rows = document.querySelectorAll('[data-testid="conversation-row-sidebar"][data-cascade-id]');
         if (!rows || rows.length === 0) return;
 
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
-        const activeId = getActiveCascadeId();
+        const prefs = window.amsGetUiPrefs ? window.amsGetUiPrefs() : DEFAULT_AMS_UI_PREFS;
+        const showPct = !!prefs.showSidebarPct;
 
         rows.forEach((row) => {
             const cascadeId = row.getAttribute('data-cascade-id');
             if (!cascadeId) return;
 
             const cacheInfo = getChatCacheState(cascadeId);
-            if (cacheInfo.stepCount === 0 && !cacheInfo.isRunning) return;
+            let badge = row.querySelector('.antigravity-sidebar-chat-meta-v4');
+            if (cacheInfo.stepCount === 0 && !cacheInfo.isRunning) {
+                if (badge) badge.style.display = 'none';
+                return;
+            }
 
             const rightContainer = row.querySelector('.shrink-0.ml-2 .flex.items-center.gap-1\\.5') ||
                                    row.querySelector('.shrink-0.ml-2');
             if (!rightContainer) return;
 
-            let badge = row.querySelector('.antigravity-sidebar-chat-meta-v3');
             if (!badge) {
                 badge = document.createElement('span');
-                badge.className = 'antigravity-sidebar-chat-meta-v3';
+                badge.className = 'antigravity-sidebar-chat-meta-v4';
                 badge.style.cssText =
                     'display:inline-flex;align-items:center;gap:3px;padding:1px 5px;border-radius:4px;' +
                     'font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-size:10.5px;font-weight:500;' +
@@ -1355,52 +1527,61 @@
                 rightContainer.insertBefore(badge, rightContainer.firstChild);
             }
 
-            const isSelected = row.getAttribute('data-selected') === 'true' || cascadeId === activeId;
+            const fixedWeeklyStr = cacheInfo.weeklyPctUsed.toFixed(2);
 
             if (cacheInfo.isRunning) {
-                // LIVE Running Chat: Subtle neutral pill + soft sage icon
+                badge.style.display = 'inline-flex';
                 badge.style.background = 'rgba(255, 255, 255, 0.045)';
                 badge.style.border = '1px solid rgba(255, 255, 255, 0.08)';
                 badge.style.color = AMS_THEME.textBright;
                 badge.style.padding = '1px 5px';
                 badge.style.opacity = '1';
-                badge.innerHTML = `${amsIcon('zap', 9, AMS_THEME.sage)}<span>-${cacheInfo.weeklyPctUsed.toFixed(isSelected ? 4 : 2)}%</span>`;
+                const html = showPct
+                    ? `${amsIcon('zap', 9, AMS_THEME.sage)}<span>-${fixedWeeklyStr}%</span>`
+                    : `${amsIcon('zap', 9, AMS_THEME.sage)}<span>Live</span>`;
+                if (badge.getAttribute('data-sig') !== html) {
+                    badge.setAttribute('data-sig', html);
+                    badge.innerHTML = html;
+                }
             } else if (cacheInfo.state === 'warm') {
-                // WARM Chat (< 5m): Subtle neutral pill + soft sage flame + countdown
+                badge.style.display = 'inline-flex';
                 badge.style.background = 'rgba(255, 255, 255, 0.035)';
                 badge.style.border = '1px solid rgba(255, 255, 255, 0.065)';
                 badge.style.color = AMS_THEME.textPrimary;
                 badge.style.padding = '1px 5px';
                 badge.style.opacity = '0.95';
                 const remM = Math.ceil(cacheInfo.remainingGuaranteedSec / 60);
-                badge.innerHTML = `${amsIcon('flame', 9, AMS_THEME.sage)}<span>${remM}m · -${cacheInfo.weeklyPctUsed.toFixed(2)}%</span>`;
-            } else if (cacheInfo.state === 'lukewarm' || (cacheInfo.idleSec < 1800 && cacheInfo.contextTokens > 25000)) {
-                // Recently cooled down (5m - 30m): Borderless quiet label with tiny soft sand snowflake
+                const html = showPct
+                    ? `${amsIcon('flame', 9, AMS_THEME.sage)}<span>${remM}m · -${fixedWeeklyStr}%</span>`
+                    : `${amsIcon('flame', 9, AMS_THEME.sage)}<span>${remM}m</span>`;
+                if (badge.getAttribute('data-sig') !== html) {
+                    badge.setAttribute('data-sig', html);
+                    badge.innerHTML = html;
+                }
+            } else if (showPct) {
+                badge.style.display = 'inline-flex';
                 badge.style.background = 'transparent';
                 badge.style.border = '1px solid transparent';
                 badge.style.color = AMS_THEME.textMuted;
                 badge.style.padding = '0 2px';
-                badge.style.opacity = '0.85';
-                badge.innerHTML = `${amsIcon('snowflake', 9, AMS_THEME.sand)}<span>-${cacheInfo.weeklyPctUsed.toFixed(2)}%</span>`;
+                badge.style.opacity = '0.65';
+                const html = `<span>-${fixedWeeklyStr}%</span>`;
+                if (badge.getAttribute('data-sig') !== html) {
+                    badge.setAttribute('data-sig', html);
+                    badge.innerHTML = html;
+                }
             } else {
-                // Older Cold Chats (> 30m ago): Quiet borderless muted text
-                badge.style.background = 'transparent';
-                badge.style.border = '1px solid transparent';
-                badge.style.color = AMS_THEME.textMuted;
-                badge.style.padding = '0 2px';
-                badge.style.opacity = isSelected ? '0.85' : '0.50';
-                badge.innerHTML = `<span>-${cacheInfo.weeklyPctUsed.toFixed(2)}%</span>`;
+                // Default: keep cold/older chats completely clean in the sidebar!
+                badge.style.display = 'none';
             }
 
             badge.title = isDe
-                ? `Chat-Verbrauch: -${cacheInfo.weeklyPctUsed.toFixed(4)}% Weekly (-${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)\n` +
-                  `Kontext: ${formatTokensCompact(cacheInfo.contextTokens)} Tokens (${cacheInfo.stepCount} Steps)\n` +
-                  `Nächste Nachricht Warm (0.1x): -${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W | Kalt (1.0x): -${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W\n` +
-                  `(Klicken für Kalt/Warm-Vergleich & 1-Klick Neuer Chat)`
-                : `Chat Usage: -${cacheInfo.weeklyPctUsed.toFixed(4)}% Weekly (-${cacheInfo.fiveHourPctUsed.toFixed(4)}% 5h)\n` +
-                  `Context: ${formatTokensCompact(cacheInfo.contextTokens)} tokens (${cacheInfo.stepCount} steps)\n` +
-                  `Next message Warm (0.1x): -${cacheInfo.warmSendWeeklyPct.toFixed(4)}% W | Cold (1.0x): -${cacheInfo.coldSendWeeklyPct.toFixed(4)}% W\n` +
-                  `(Click for Cold/Warm comparison & 1-click New Chat)`;
+                ? `Kontext: ${formatTokensCompact(cacheInfo.contextTokens)} Tokens (${cacheInfo.stepCount} Steps)\n` +
+                  `Bisheriger Chat-Verbrauch: -${cacheInfo.weeklyPctUsed.toFixed(4)}% Weekly\n` +
+                  `(Klicken für Cache-Details)`
+                : `Context: ${formatTokensCompact(cacheInfo.contextTokens)} tokens (${cacheInfo.stepCount} steps)\n` +
+                  `Chat Weekly Used: -${cacheInfo.weeklyPctUsed.toFixed(4)}%\n` +
+                  `(Click for cache details)`;
         });
     }
 
@@ -1408,6 +1589,7 @@
     // 9. Settings -> "Models & Usage" Page Injection & Native Exact-Decimal Patch
     // ----------------------------------------------------------------------------
     function patchModelsAndUsagePage() {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
         const dialog = document.querySelector('.animate-modalScaleIn') || document.querySelector('[role="dialog"]');
         if (!dialog) return;
 
@@ -1417,6 +1599,8 @@
         if (!headerSpan) return;
 
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
+        const prefs = window.amsGetUiPrefs ? window.amsGetUiPrefs() : DEFAULT_AMS_UI_PREFS;
+        const show5h = !!prefs.show5hLimit;
 
         // 1. Patch Native "5-Hour Limit" and "Weekly Limit" Percentage Spans with Exact 4-Decimal Precision!
         const allSpans = Array.from(dialog.querySelectorAll('span'));
@@ -1439,6 +1623,10 @@
                 // First pair of 5-Hour / Weekly is Gemini Models, second pair is Claude/GPT
                 const isGemini = bucketIdx < 2;
                 bucketIdx++;
+
+                if (txt === '5-Hour Limit') {
+                    rowContainer.style.display = show5h ? '' : 'none';
+                }
 
                 let exactVal = 0;
                 if (txt === '5-Hour Limit') {
@@ -1581,9 +1769,9 @@
             return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">` +
                 `<td style="padding:7px 8px;font-weight:600;color:#f8fafc;"><span style="display:inline-flex;align-items:center;gap:6px;">${amsIcon(r.icon, 12, r.iconColor)}<span>${isDe ? r.nameDe : r.nameEn}</span></span> <span style="opacity:0.55;font-weight:400;font-size:10px;">(${r.steps})</span></td>` +
                 `<td style="padding:7px 8px;text-align:right;font-family:monospace;color:#38bdf8;font-weight:700;">-${r.wPct.toFixed(4)}% W</td>` +
-                `<td style="padding:7px 8px;text-align:right;font-family:monospace;color:#a78bfa;">-${r.hPct.toFixed(4)}% 5h</td>` +
+                (show5h ? `<td style="padding:7px 8px;text-align:right;font-family:monospace;color:#a78bfa;">-${r.hPct.toFixed(4)}% 5h</td>` : '') +
                 `<td style="padding:7px 8px;text-align:right;font-family:monospace;color:#cbd5e1;">${writtenThisWeek.toLocaleString(isDe ? 'de-DE' : 'en-US')}</td>` +
-                `<td style="padding:7px 8px;text-align:right;font-family:monospace;color:#34d399;font-weight:700;">${leftWeekly.toLocaleString(isDe ? 'de-DE' : 'en-US')} <span style="opacity:0.6;font-weight:400;font-size:10px;">(5h: ${left5h.toLocaleString(isDe ? 'de-DE' : 'en-US')})</span></td>` +
+                `<td style="padding:7px 8px;text-align:right;font-family:monospace;color:#34d399;font-weight:700;">${leftWeekly.toLocaleString(isDe ? 'de-DE' : 'en-US')}${show5h ? ` <span style="opacity:0.6;font-weight:400;font-size:10px;">(5h: ${left5h.toLocaleString(isDe ? 'de-DE' : 'en-US')})</span>` : ''}</td>` +
                 `<td style="padding:7px 8px;text-align:right;font-family:monospace;color:#fde68a;">${total100W.toLocaleString(isDe ? 'de-DE' : 'en-US')}</td>` +
             `</tr>`;
         }).join('');
@@ -1640,7 +1828,7 @@
                     `</div>` +
                     `<div style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);">` +
                         `<div style="font-size:9.5px;color:#94a3b8;text-transform:uppercase;">${isDe ? 'Verbrauch (Chat)' : 'Quota Used'}</div>` +
-                        `<div style="font-size:13px;font-weight:700;color:#38bdf8;margin-top:2px;">-${Number(c.weeklyPctUsed || 0).toFixed(4)}% W <span style="font-size:10.5px;color:#94a3b8;font-weight:400;">(-${Number(c.fiveHourPctUsed || 0).toFixed(2)}% 5h)</span></div>` +
+                        `<div style="font-size:13px;font-weight:700;color:#38bdf8;margin-top:2px;">-${Number(c.weeklyPctUsed || 0).toFixed(4)}% W${show5h ? ` <span style="font-size:10.5px;color:#94a3b8;font-weight:400;">(-${Number(c.fiveHourPctUsed || 0).toFixed(2)}% 5h)</span>` : ''}</div>` +
                     `</div>` +
                     `<div style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);">` +
                         `<div style="font-size:9.5px;color:#94a3b8;text-transform:uppercase;">${isDe ? 'Cache-Ersparnis' : 'Cache Saved'}</div>` +
@@ -1681,7 +1869,7 @@
             `</tr>`;
         }).join('');
 
-        const renderSig = `${gWExact.toFixed(4)}|${g5hExact.toFixed(4)}|${wSum.stepCount}|${runningChats.length}|${recentChatsList.map(x => x.stepCount).join(',')}|${amsTelemetryState.soundEnabled}|${isDe}`;
+        const renderSig = `${gWExact.toFixed(4)}|${g5hExact.toFixed(4)}|${show5h ? 1 : 0}|${wSum.stepCount}|${runningChats.length}|${recentChatsList.map(x => x.stepCount).join(',')}|${amsTelemetryState.soundEnabled}|${isDe}`;
         if (dossierEl.getAttribute('data-render-sig') === renderSig) return;
         dossierEl.setAttribute('data-render-sig', renderSig);
 
@@ -1695,11 +1883,15 @@
                     `</div>` +
                     `<span style="font-size:11.5px;color:var(--muted-foreground,#94a3b8);">` +
                         (isDe
-                            ? `Exakte 4-Nachkommastellen-Telemetrie · 100% Weekly = 4.0× 5h-Pool (~470 Mio. gewichtete Tokens / ~20.000 KI-Steps)`
-                            : `Exact 4-decimal telemetry · 100% Weekly = 4.0× 5h pool (~470M weighted tokens / ~20,000 AI steps)`) +
+                            ? `Exakte 4-Nachkommastellen-Telemetrie · 100% Weekly (~470 Mio. gewichtete Tokens / ~20.000 KI-Steps)`
+                            : `Exact 4-decimal telemetry · 100% Weekly (~470M weighted tokens / ~20,000 AI steps)`) +
                     `</span>` +
                 `</div>` +
-                `<div style="display:flex;align-items:center;gap:8px;">` +
+                `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;">` +
+                    `<label id="ams-dossier-5h-toggle" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:6px;border:1px solid ${show5h ? 'rgba(56,189,248,0.45)' : 'rgba(255,255,255,0.10)'};background:${show5h ? 'rgba(56,189,248,0.14)' : 'rgba(255,255,255,0.03)'};color:${show5h ? '#7dd3fc' : '#94a3b8'};font-size:11px;font-weight:500;cursor:pointer;user-select:none;">` +
+                        `<input type="checkbox" ${show5h ? 'checked' : ''} style="accent-color:#38bdf8;margin:0;cursor:pointer;" />` +
+                        `<span>${isDe ? '5-Stunden-Limit anzeigen' : 'Show 5-Hour Limit'}</span>` +
+                    `</label>` +
                     `<button type="button" id="ams-dossier-sound-btn" style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;border:1px solid ${amsTelemetryState.soundEnabled ? 'rgba(52,211,153,0.45)' : 'rgba(148,163,184,0.25)'};background:${amsTelemetryState.soundEnabled ? 'rgba(16,185,129,0.16)' : 'rgba(255,255,255,0.04)'};color:${amsTelemetryState.soundEnabled ? '#6ee7b7' : '#94a3b8'};font-size:11px;font-weight:600;cursor:pointer;">` +
                         (amsTelemetryState.soundEnabled
                             ? `${amsIcon('volumeOn', 12, '#6ee7b7')}<span>${isDe ? 'Cache-Hit Sound: AN (Testen)' : 'Cache-Hit Sound: ON (Test)'}</span>`
@@ -1752,7 +1944,7 @@
             `<div style="border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);overflow:hidden;">` +
                 `<div style="padding:10px 12px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.07);display:flex;justify-content:space-between;align-items:center;">` +
                     `<strong style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;">${amsIcon('chart', 13, '#38bdf8')}<span>${isDe ? 'Dossier-Umrechnungstabelle: Nachrichten & Tasks nach Aufwand (Argon High auf Ultra)' : 'Effort Conversion Table: Messages & Tasks by Complexity (Argon High on Ultra)'}</span></strong>` +
-                    `<span style="font-size:10.5px;color:#94a3b8;">1% Weekly = 4.0% 5h ≈ 200 Steps</span>` +
+                    `<span style="font-size:10.5px;color:#94a3b8;">1% Weekly ≈ 200 Steps</span>` +
                 `</div>` +
                 `<div style="overflow-x:auto;">` +
                     `<table style="width:100%;border-collapse:collapse;font-size:11.5px;">` +
@@ -1760,7 +1952,7 @@
                             `<tr style="border-bottom:1px solid rgba(255,255,255,0.08);color:#94a3b8;font-size:10.5px;text-transform:uppercase;">` +
                                 `<th style="padding:7px 8px;text-align:left;">${isDe ? 'Aufwands-Kategorie' : 'Task Effort Category'}</th>` +
                                 `<th style="padding:7px 8px;text-align:right;">% Weekly</th>` +
-                                `<th style="padding:7px 8px;text-align:right;">% 5-Hour</th>` +
+                                (show5h ? `<th style="padding:7px 8px;text-align:right;">% 5-Hour</th>` : '') +
                                 `<th style="padding:7px 8px;text-align:right;">${isDe ? 'Schon geschrieben (' + gWUsed.toFixed(1) + '%)' : 'Written (' + gWUsed.toFixed(1) + '%)'}</th>` +
                                 `<th style="padding:7px 8px;text-align:right;">${isDe ? 'Noch übrig (' + gWExact.toFixed(2) + '%)' : 'Remaining (' + gWExact.toFixed(2) + '%)'}</th>` +
                                 `<th style="padding:7px 8px;text-align:right;">${isDe ? '100% Voll-Woche' : '100% Full Week'}</th>` +
@@ -1819,6 +2011,16 @@
                 `</div>` +
             `</div>`;
 
+        const toggle5hEl = dossierEl.querySelector('#ams-dossier-5h-toggle input');
+        if (toggle5hEl) {
+            toggle5hEl.addEventListener('change', (e) => {
+                e.stopPropagation();
+                if (typeof window.amsSetUiPref === 'function') {
+                    window.amsSetUiPref('show5hLimit', !!e.target.checked);
+                }
+            });
+        }
+
         const soundBtn = dossierEl.querySelector('#ams-dossier-sound-btn');
         if (soundBtn) {
             soundBtn.addEventListener('click', (e) => {
@@ -1832,7 +2034,7 @@
     }
 
     // ----------------------------------------------------------------------------
-    // 9b. Model Picker Inline Cache-Loss Badges & Post-Switch Warning Popover
+    // 9b. Model Picker Inline Cache & Savings Badges (Human-Readable, No Cryptic 0.001%)
     // ----------------------------------------------------------------------------
     let lastKnownActiveModelLabel = null;
     let activeModelSwitchPopover = null;
@@ -1856,6 +2058,15 @@
         return 1.00; // Gemini 4 Argon / Pro default
     }
 
+    function getModelRelativeCostLabel(modelLabel, isDe) {
+        const lower = String(modelLabel || '').toLowerCase();
+        if (lower.includes('flash')) return isDe ? '2.5× sparsamer' : '2.5× lighter';
+        if (lower.includes('gpt-oss')) return isDe ? '1.5× sparsamer' : '1.5× lighter';
+        if (lower.includes('opus')) return isDe ? '1.4× Verbrauch' : '1.4× usage';
+        if (lower.includes('sonnet')) return isDe ? '1.1× Verbrauch' : '1.1× usage';
+        return 'Standard';
+    }
+
     function closeModelSwitchPopover() {
         if (activeModelSwitchPopover) {
             activeModelSwitchPopover.remove();
@@ -1863,84 +2074,7 @@
         }
     }
 
-    function showModelSwitchWarningPopover(oldModelLabel, newModelLabel, cacheInfo) {
-        closeModelSwitchPopover();
-        if (!cacheInfo || cacheInfo.stepCount === 0) return;
-
-        const btn = document.querySelector('[data-testid="model-selector-trigger"], button[aria-label^="Select model, current:"]');
-        if (!btn) return;
-
-        const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
-        const rect = btn.getBoundingClientRect();
-
-        const mult = getModelWeightMultiplier(newModelLabel);
-        const newColdWeeklyPct = Number((cacheInfo.coldSendWeeklyPct * mult).toFixed(4));
-        const newCold5hPct = Number((cacheInfo.coldSend5hPct * mult).toFixed(4));
-        const stayWarmWeeklyPct = cacheInfo.warmSendWeeklyPct;
-        const stayWarm5hPct = cacheInfo.warmSend5hPct;
-        const lossWeeklyPct = Number(Math.max(0.0001, newColdWeeklyPct - stayWarmWeeklyPct).toFixed(4));
-        const loss5hPct = Number(Math.max(0.0004, newCold5hPct - stayWarm5hPct).toFixed(4));
-
-        const pop = document.createElement('div');
-        pop.id = 'antigravity-model-switch-popover';
-        pop.style.cssText =
-            'position:fixed;z-index:999999;width:365px;padding:12px 14px;border-radius:11px;' +
-            'background:rgba(18,18,24,0.98);backdrop-filter:blur(16px);border:1px solid rgba(245,158,11,0.55);' +
-            'box-shadow:0 18px 42px rgba(0,0,0,0.72),0 0 18px rgba(245,158,11,0.14);color:#f8fafc;' +
-            'font-family:ui-sans-serif,system-ui,sans-serif;font-size:11.5px;line-height:1.45;font-variant-numeric:tabular-nums;';
-
-        const top = Math.max(12, rect.top - 235);
-        const left = Math.min(window.innerWidth - 380, Math.max(12, rect.left - 40));
-        pop.style.top = top + 'px';
-        pop.style.left = left + 'px';
-
-        pop.innerHTML =
-            `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.08);">` +
-                `<strong style="display:inline-flex;align-items:center;gap:5px;color:#fbbf24;font-size:12px;">${amsIcon('alert', 13, '#fbbf24')}<span>${isDe ? 'Modellwechsel im laufenden Chat (KV-Cache Verlust!)' : 'Mid-Chat Model Switch (KV-Cache Loss!)'}</span></strong>` +
-                `<button type="button" class="ams-ms-close" style="display:inline-flex;align-items:center;background:transparent;border:none;color:#94a3b8;cursor:pointer;padding:2px;">${amsIcon('close', 12, '#94a3b8')}</button>` +
-            `</div>` +
-            `<div style="font-size:11px;color:#cbd5e1;margin-bottom:7px;">` +
-                (isDe
-                    ? `Wechsel von <strong style="color:#38bdf8;">${oldModelLabel}</strong> zu <strong style="color:#fde68a;">${newModelLabel}</strong>:<br>Der bisherige Kontext (<strong>${cacheInfo.contextTokens.toLocaleString('de-DE')} Tokens</strong> · ${cacheInfo.stepCount} Steps) liegt nur im VRAM-Cache von <em>${oldModelLabel}</em> und muss beim nächsten Senden zu <strong>100% uncached (1.0x)</strong> neu eingelesen werden!`
-                    : `Switched from <strong style="color:#38bdf8;">${oldModelLabel}</strong> to <strong style="color:#fde68a;">${newModelLabel}</strong>:<br>Existing context (<strong>${cacheInfo.contextTokens.toLocaleString('en-US')} tokens</strong> · ${cacheInfo.stepCount} steps) must be reloaded <strong>100% uncached (1.0x)</strong> on the next message!`) +
-            `</div>` +
-            `<div style="display:flex;flex-direction:column;gap:4px;padding:7px 9px;border-radius:7px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);font-size:11px;">` +
-                `<div style="display:flex;justify-content:space-between;"><span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('flame', 11, '#34d399')}<span>${isDe ? `Auf ${oldModelLabel} bleiben (0.1x Cache):` : `Stay on ${oldModelLabel} (0.1x Cache):`}</span></span><strong style="color:#34d399;">-${stayWarmWeeklyPct.toFixed(4)}% W (-${stayWarm5hPct.toFixed(4)}% 5h)</strong></div>` +
-                `<div style="display:flex;justify-content:space-between;"><span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('snowflake', 11, '#f87171')}<span>${isDe ? `Hier mit ${newModelLabel} senden (1.0x):` : `Send here with ${newModelLabel} (1.0x):`}</span></span><strong style="color:#f87171;">-${newColdWeeklyPct.toFixed(4)}% W (-${newCold5hPct.toFixed(4)}% 5h)</strong></div>` +
-                `<div style="display:flex;justify-content:space-between;padding-top:3px;border-top:1px dashed rgba(255,255,255,0.1);color:#fde68a;"><span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('coins', 11, '#fbbf24')}<strong>${isDe ? 'Direkter Wechsel-Verlust:' : 'Direct Switch Penalty:'}</strong></span><strong style="color:#fbbf24;">-${lossWeeklyPct.toFixed(4)}% W (-${loss5hPct.toFixed(4)}% 5h)</strong></div>` +
-            `</div>` +
-            `<div style="display:flex;gap:6px;margin-top:9px;">` +
-                `<button type="button" class="ams-ms-newchat" style="flex:1.25;display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:6px 8px;border-radius:6px;border:1px solid rgba(52,211,153,0.5);background:linear-gradient(135deg,rgba(5,150,105,0.38),rgba(16,185,129,0.22));color:#6ee7b7;font-size:10.5px;font-weight:700;cursor:pointer;">` +
-                    `${amsIcon('plus', 11, '#6ee7b7')}<span>${isDe ? `Neuer Chat mit ${newModelLabel} (0% Verlust)` : `New Chat with ${newModelLabel} (0% Loss)`}</span>` +
-                `</button>` +
-                `<button type="button" class="ams-ms-revert" style="flex:0.85;display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:6px 8px;border-radius:6px;border:1px solid rgba(56,189,248,0.45);background:rgba(56,189,248,0.12);color:#7dd3fc;font-size:10.5px;font-weight:700;cursor:pointer;">` +
-                    `${amsIcon('undo', 11, '#7dd3fc')}<span>${isDe ? `Zurück (${oldModelLabel.split(' ').slice(0, 3).join(' ')})` : `Revert`}</span>` +
-                `</button>` +
-            `</div>`;
-
-        document.body.appendChild(pop);
-        activeModelSwitchPopover = pop;
-
-        pop.querySelector('.ams-ms-close').addEventListener('click', (e) => {
-            e.stopPropagation();
-            closeModelSwitchPopover();
-        });
-        pop.querySelector('.ams-ms-newchat').addEventListener('click', (e) => {
-            e.stopPropagation();
-            closeModelSwitchPopover();
-            triggerNewConversation();
-        });
-        pop.querySelector('.ams-ms-revert').addEventListener('click', async (e) => {
-            e.stopPropagation();
-            closeModelSwitchPopover();
-            suppressNextModelSwitchPopup = true;
-            await switchModel(oldModelLabel);
-            setTimeout(() => { suppressNextModelSwitchPopup = false; }, 800);
-        });
-    }
-
     function updateModelSelectorTriggerBadge() {
-        // Keep the narrow toolbar button row clean: remove any legacy trigger pill or floating switch popover
         const legacyTriggerPill = document.getElementById('antigravity-model-trigger-loss-pill');
         if (legacyTriggerPill) legacyTriggerPill.remove();
         closeModelSwitchPopover();
@@ -1965,7 +2099,7 @@
         const hasContext = !!(cacheInfo && cacheInfo.stepCount > 0);
         const menuItems = Array.from(panel.querySelectorAll('[role="menuitem"]'));
 
-        const panelSig = `${hasContext ? cacheInfo.stepCount : 0}|${hasContext ? cacheInfo.state : 'new'}|${hasContext ? cacheInfo.extraColdLossWeeklyPct.toFixed(4) : '0'}|${currentLabel}|${isDe}|${menuItems.length}`;
+        const panelSig = `v4|${hasContext ? cacheInfo.stepCount : 0}|${hasContext ? cacheInfo.state : 'new'}|${hasContext ? cacheInfo.contextTokens : 0}|${currentLabel}|${isDe}|${menuItems.length}`;
         if (panel.getAttribute('data-ams-panel-sig') === panelSig) return;
         panel.setAttribute('data-ams-panel-sig', panelSig);
 
@@ -1976,7 +2110,7 @@
         }
         panel.style.maxHeight = '440px';
 
-        // 1. Clean 1-line Context Header inside the Model Picker
+        // 1. Intuitive 1-line Context Header inside the Model Picker
         const headerEl = panel.querySelector('[data-testid="model-selector-header"]');
         let bannerEl = panel.querySelector('#antigravity-model-picker-banner');
         if (!bannerEl && headerEl && headerEl.parentElement) {
@@ -1989,23 +2123,30 @@
         }
 
         if (bannerEl) {
+            bannerEl.style.background = AMS_THEME.surfacePill;
+            bannerEl.style.border = `1px solid ${AMS_THEME.borderSubtle}`;
+            bannerEl.style.color = AMS_THEME.textPrimary;
+
             if (!hasContext) {
-                bannerEl.style.background = AMS_THEME.surfacePill;
-                bannerEl.style.border = `1px solid ${AMS_THEME.borderSubtle}`;
-                bannerEl.style.color = AMS_THEME.textPrimary;
                 bannerEl.innerHTML =
                     `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
-                        `<span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('check', 11, AMS_THEME.sage)}<strong>${isDe ? 'Neuer Chat' : 'New Chat'}</strong> · ${isDe ? 'Modellwechsel ohne Verlust (0%)' : 'Switch penalty: 0%'}</span>` +
+                        `<span style="display:inline-flex;align-items:center;gap:4px;">${amsIcon('check', 11, AMS_THEME.sage)}<strong>${isDe ? 'Neuer Chat' : 'New Chat'}</strong> · ${isDe ? 'Freie Modellwahl ohne Cache-Verlust' : 'Switch freely with no cache loss'}</span>` +
                     `</div>`;
             } else {
-                const lossW = cacheInfo.extraColdLossWeeklyPct.toFixed(4);
-                bannerEl.style.background = AMS_THEME.surfacePill;
-                bannerEl.style.border = `1px solid ${AMS_THEME.borderSubtle}`;
-                bannerEl.style.color = AMS_THEME.textPrimary;
+                const ctxCompact = formatTokensCompact(cacheInfo.contextTokens);
+                const isWarm = cacheInfo.state === 'warm' || cacheInfo.isRunning;
+                const statusText = isWarm
+                    ? (isDe
+                        ? `${amsIcon('flame', 11, AMS_THEME.sage)}<span><strong>Cache warm (du sparst 90%)</strong> · Wechsel lädt ${ctxCompact} Tok neu</span>`
+                        : `${amsIcon('flame', 11, AMS_THEME.sage)}<span><strong>Cache warm (saving 90%)</strong> · Switch reloads ${ctxCompact} tok</span>`)
+                    : (isDe
+                        ? `${amsIcon('snowflake', 11, AMS_THEME.sand)}<span><strong>Cache kalt (${ctxCompact} Tok)</strong> · Neuer Chat spart 90%</span>`
+                        : `${amsIcon('snowflake', 11, AMS_THEME.sand)}<span><strong>Cache cold (${ctxCompact} tok)</strong> · New Chat saves 90%</span>`);
+
                 bannerEl.innerHTML =
                     `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
-                        `<span style="display:inline-flex;align-items:center;gap:4px;color:${AMS_THEME.textPrimary};font-weight:500;">${amsIcon('info', 11, AMS_THEME.sand)}<span>${isDe ? `Wechsel verwirft Cache (-${lossW}% W)` : `Switch drops cache (-${lossW}% W)`}</span></span>` +
-                        `<button type="button" class="ams-mp-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;border:1px solid ${AMS_THEME.borderHover};background:${AMS_THEME.surfaceHover};color:${AMS_THEME.textBright};font-size:9.5px;font-weight:500;cursor:pointer;">${amsIcon('plus', 9, AMS_THEME.textPrimary)}<span>${isDe ? 'Neuer Chat' : 'New Chat'}</span></button>` +
+                        `<span style="display:inline-flex;align-items:center;gap:4px;color:${AMS_THEME.textPrimary};">${statusText}</span>` +
+                        `<button type="button" class="ams-mp-newchat-btn" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;border:1px solid ${AMS_THEME.borderHover};background:${AMS_THEME.surfaceHover};color:${AMS_THEME.textBright};font-size:9.5px;font-weight:500;cursor:pointer;flex-shrink:0;">${amsIcon('plus', 9, AMS_THEME.textPrimary)}<span>${isDe ? 'Neuer Chat' : 'New Chat'}</span></button>` +
                     `</div>`;
                 const ncBtn = bannerEl.querySelector('.ams-mp-newchat-btn');
                 if (ncBtn) {
@@ -2020,7 +2161,7 @@
             }
         }
 
-        // 2. Clean 1-number badge on each model row ([role="menuitem"])
+        // 2. Intuitive Human-Readable Badge on each model row ([role="menuitem"])
         menuItems.forEach((item) => {
             const rawText = (item.textContent || '').trim();
             if (!rawText || /View Usage/i.test(rawText)) return;
@@ -2044,9 +2185,11 @@
                 item.appendChild(badge);
             }
 
-            const itemSig = `${baseModelName}|${isCurrentModel ? 1 : 0}|${hasContext ? cacheInfo.state : 'new'}|${hasContext ? cacheInfo.coldSendWeeklyPct : 0}|${isDe}`;
+            const itemSig = `v4|${baseModelName}|${isCurrentModel ? 1 : 0}|${hasContext ? cacheInfo.state : 'new'}|${hasContext ? cacheInfo.contextTokens : 0}|${isDe}`;
             if (badge.getAttribute('data-sig') === itemSig) return;
             badge.setAttribute('data-sig', itemSig);
+
+            const relLabel = getModelRelativeCostLabel(baseModelName, isDe);
 
             if (!hasContext) {
                 if (isCurrentModel) {
@@ -2058,37 +2201,34 @@
                     badge.style.background = 'transparent';
                     badge.style.border = 'none';
                     badge.style.color = AMS_THEME.textMuted;
-                    badge.textContent = '0% W';
+                    badge.textContent = relLabel;
                 }
                 return;
             }
 
-            const mult = getModelWeightMultiplier(baseModelName);
-            const switchColdW = Number((cacheInfo.coldSendWeeklyPct * mult).toFixed(4));
-            const switchCold5h = Number((cacheInfo.coldSend5hPct * mult).toFixed(4));
-            const stayWarmW = cacheInfo.warmSendWeeklyPct;
-            const lossW = Number(Math.max(0.0001, switchColdW - stayWarmW).toFixed(4));
-            const loss5h = Number(Math.max(0.0004, switchCold5h - cacheInfo.warmSend5hPct).toFixed(4));
+            const isWarm = cacheInfo.state === 'warm' || cacheInfo.isRunning;
+            const ctxCompact = formatTokensCompact(cacheInfo.contextTokens);
 
             if (isCurrentModel) {
-                const isWarm = cacheInfo.state === 'warm' || cacheInfo.isRunning;
                 badge.style.background = AMS_THEME.surfacePill;
                 badge.style.border = `1px solid ${AMS_THEME.borderSubtle}`;
                 badge.style.color = AMS_THEME.textPrimary;
                 badge.innerHTML = isWarm
-                    ? `${amsIcon('flame', 10, AMS_THEME.sage)}<span>Warm</span>`
-                    : `${amsIcon('snowflake', 10, AMS_THEME.sand)}<span>Kalt</span>`;
+                    ? `${amsIcon('flame', 10, AMS_THEME.sage)}<span>${isDe ? 'Warm · 90% gespart' : 'Warm · 90% saved'}</span>`
+                    : `${amsIcon('snowflake', 10, AMS_THEME.sand)}<span>${isDe ? `Kalt · ${ctxCompact} Tok` : `Cold · ${ctxCompact} tok`}</span>`;
                 badge.title = isDe
-                    ? `Aktuelles Modell (${baseModelName}) · Nächster Send: -${stayWarmW.toFixed(4)}% W`
-                    : `Current Model (${baseModelName}) · Next send: -${stayWarmW.toFixed(4)}% W`;
+                    ? `Aktuelles Modell (${baseModelName}) · ${isWarm ? 'Der Prompt-Cache ist warm: Du sparst 90% auf den bisherigen Kontext.' : 'Der Prompt-Cache ist abgelaufen.'}`
+                    : `Current Model (${baseModelName}) · ${isWarm ? 'Prompt cache is warm: saving 90% on context tokens.' : 'Prompt cache has expired.'}`;
             } else {
                 badge.style.background = 'transparent';
                 badge.style.border = 'none';
-                badge.style.color = AMS_THEME.textMuted;
-                badge.innerHTML = `<span>-${lossW.toFixed(4)}% W</span>`;
+                badge.style.color = isWarm ? AMS_THEME.sand : AMS_THEME.textMuted;
+                badge.innerHTML = isWarm
+                    ? `<span>${isDe ? 'Cache weg · 10× teurer' : 'Drops cache · 10× cost'}</span>`
+                    : `<span>${relLabel}</span>`;
                 badge.title = isDe
-                    ? `Wechsel zu ${baseModelName} verwirft den KV-Cache:\n• Verlust beim nächsten Senden: -${lossW.toFixed(4)}% Weekly (-${loss5h.toFixed(4)}% 5h)`
-                    : `Switching to ${baseModelName} drops KV-Cache:\n• Next send loss: -${lossW.toFixed(4)}% Weekly (-${loss5h.toFixed(4)}% 5h)`;
+                    ? `Wechsel zu ${baseModelName} im laufenden Chat verwirft den warmen Cache (${ctxCompact} Tokens müssen 10× teurer neu geladen werden). Tipp: Für Modellwechsel einen neuen Chat starten!`
+                    : `Switching to ${baseModelName} mid-chat drops the warm cache (${ctxCompact} tokens reload at 10× cost). Tip: Start a New Chat when switching models!`;
             }
         });
     }
@@ -2157,9 +2297,7 @@
         if (window.__ams_active_instance_id !== myInstanceId) return;
         if (document.hidden) return;
         ensureCleanUiStyles();
-        if (!document.getElementById('antigravity-quota-display-v3')) {
-            refreshQuotaDisplay();
-        }
+        refreshQuotaDisplay();
         updateComposerChatBadge();
         updateLiveSendEstimator();
         renderPerMessageTurnBadges();

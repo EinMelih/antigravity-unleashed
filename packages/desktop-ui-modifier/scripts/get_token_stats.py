@@ -1,8 +1,10 @@
+import hashlib
 import json
 import os
 import re
 import socket
 import sqlite3
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -354,10 +356,169 @@ def finalize_turn(t):
     }
 
 
+def get_repack_info(conv_dir: Path) -> dict:
+    scratch_dir = Path.home() / ".gemini" / "antigravity" / "scratch"
+    skill_root = Path(__file__).resolve().parent.parent
+    notice_file = scratch_dir / "repack_pending_notice.json"
+    state_file = scratch_dir / "auto_repack_guard_state.json"
+    status_file = scratch_dir / "injector_status.json"
+
+    if status_file.exists():
+        try:
+            st_obj = json.loads(status_file.read_text("utf-8"))
+            if isinstance(st_obj, dict) and st_obj.get("state") == "running":
+                return {
+                    "pending": False,
+                    "repacking": True,
+                    "title": "",
+                    "details": "",
+                    "runningChatsCount": 0,
+                }
+        except Exception:
+            pass
+
+    notice = {}
+    if notice_file.exists():
+        try:
+            loaded = json.loads(notice_file.read_text("utf-8"))
+            if isinstance(loaded, dict):
+                notice = loaded
+        except Exception:
+            pass
+
+    pending = bool(notice.get("pending") or notice.get("await_user_click"))
+    title = str(notice.get("title") or "").strip()
+    details = str(notice.get("details") or "").strip()
+
+    try:
+        src_files = sorted(
+            list((skill_root / "src").rglob("*.js"))
+            + [skill_root / "scripts" / "build_preload.py", skill_root / "scripts" / "patch_asar.py"]
+        )
+        digest = hashlib.sha256()
+        for item in src_files:
+            if item.exists():
+                rel = item.relative_to(skill_root).as_posix()
+                digest.update(rel.encode("utf-8"))
+                digest.update(b"\0")
+                digest.update(item.read_bytes())
+                digest.update(b"\0")
+        current_hash = digest.hexdigest()
+        last_hash = ""
+        if state_file.exists():
+            st_data = json.loads(state_file.read_text("utf-8"))
+            if isinstance(st_data, dict):
+                last_hash = str(st_data.get("lastSourceHash") or "")
+        if last_hash and current_hash != last_hash:
+            pending = True
+            if not title:
+                title = "UI-Modifier Update bereit"
+            if not details:
+                details = "Änderungen in Unleashed warten auf Repack & Neustart"
+        elif last_hash and current_hash == last_hash and not notice.get("force_notice"):
+            pending = False
+    except Exception:
+        pass
+
+    running_chats = 0
+    now_ts = time.time()
+    try:
+        for db_f in conv_dir.glob("*.db"):
+            if db_f.stem.startswith("__"):
+                continue
+            if (now_ts - db_f.stat().st_mtime) < 25:
+                running_chats += 1
+    except Exception:
+        pass
+
+    return {
+        "pending": pending,
+        "repacking": False,
+        "title": title or ("UI-Modifier Update bereit" if pending else ""),
+        "details": details or ("Jetzt neu starten, um die Änderungen dauerhaft in app.asar zu übernehmen." if pending else ""),
+        "runningChatsCount": running_chats,
+        "updatedAt": str(notice.get("updated_at") or ""),
+    }
+
+
+def trigger_repack_from_ui(conv_dir: Path) -> dict:
+    scratch_dir = Path.home() / ".gemini" / "antigravity" / "scratch"
+    skill_root = Path(__file__).resolve().parent.parent
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+
+    last_chat_file = scratch_dir / "last_active_chat_id.txt"
+    trigger_chat_file = scratch_dir / "repack_trigger_chat.txt"
+    approved_file = scratch_dir / "repack_user_approved.json"
+    pause_file = scratch_dir / "auto_repack_guard_pause.json"
+    notice_file = scratch_dir / "repack_pending_notice.json"
+
+    chat_id = ""
+    if last_chat_file.exists():
+        try:
+            chat_id = last_chat_file.read_text("utf-8").strip()
+        except Exception:
+            pass
+    if not chat_id:
+        try:
+            candidates = [f for f in conv_dir.glob("*.db") if not f.stem.startswith("__")]
+            if candidates:
+                candidates.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+                chat_id = candidates[0].stem
+        except Exception:
+            pass
+
+    if chat_id:
+        try:
+            trigger_chat_file.write_text(chat_id, encoding="utf-8")
+        except Exception:
+            pass
+
+    try:
+        approved_file.write_text(
+            json.dumps({"approved": True, "timestamp": time.time(), "chatId": chat_id}),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+    for f in (pause_file, notice_file):
+        try:
+            f.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    ps_script = skill_root / "scripts" / "start_repack_task.ps1"
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+    subprocess.Popen(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-WindowStyle",
+            "Hidden",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(ps_script),
+        ],
+        cwd=str(skill_root),
+        close_fds=True,
+        creationflags=flags,
+    )
+    return {"triggered": True, "chatId": chat_id}
+
+
 def update_and_load_global_ledger(conv_dir: Path, active_stats: dict):
     config_dir = Path.home() / ".gemini" / "config"
+    scratch_dir = Path.home() / ".gemini" / "antigravity" / "scratch"
     ledger_path = config_dir / "quota_usage_log.json"
     now_ts = time.time()
+
+    try:
+        trigger_db = conv_dir / "__AMS_REPACK_TRIGGER__.db"
+        if not trigger_db.exists():
+            trigger_db.write_bytes(b"")
+    except Exception:
+        pass
 
     ledger = {"version": 2, "lastFullScan": 0, "chats": {}}
     if ledger_path.exists():
@@ -369,26 +530,38 @@ def update_and_load_global_ledger(conv_dir: Path, active_stats: dict):
             pass
 
     chats_cache = ledger.setdefault("chats", {})
+    for k in list(chats_cache.keys()):
+        if str(k).startswith("__"):
+            chats_cache.pop(k, None)
 
-    # Always update active conversation in cache
+    need_write = False
+
+    # Always update active conversation in cache and persist immediately so concurrent polls never read stale data
     cid = active_stats.get("cascadeId")
-    if cid:
+    if cid and not str(cid).startswith("__"):
+        try:
+            scratch_dir.mkdir(parents=True, exist_ok=True)
+            (scratch_dir / "last_active_chat_id.txt").write_text(str(cid), encoding="utf-8")
+        except Exception:
+            pass
         try:
             st = (conv_dir / f"{cid}.db").stat()
             entry = {k: v for k, v in active_stats.items() if k != "turns"}
             entry["_mtime"] = round(st.st_mtime, 2)
             entry["_size"] = st.st_size
             chats_cache[cid] = entry
+            need_write = True
         except Exception:
             pass
 
     # Incremental mtime-cached scan of all conversations if last scan > 12s ago
-    need_write = False
     if now_ts - ledger.get("lastFullScan", 0) > 12 or not chats_cache:
         need_write = True
         try:
             for db_file in conv_dir.glob("*.db"):
                 stem = db_file.stem
+                if stem.startswith("__"):
+                    continue
                 try:
                     st = db_file.stat()
                     mtime = round(st.st_mtime, 2)
@@ -413,7 +586,11 @@ def update_and_load_global_ledger(conv_dir: Path, active_stats: dict):
             pass
 
     # Build compact chatMap (all chats with stepCount > 0, sorted by lastStepTimestamp desc)
-    valid_chats = [v for v in chats_cache.values() if v.get("stepCount", 0) > 0]
+    valid_chats = [
+        v
+        for k, v in chats_cache.items()
+        if not str(k).startswith("__") and isinstance(v, dict) and v.get("stepCount", 0) > 0
+    ]
     valid_chats.sort(key=lambda x: x.get("lastStepTimestamp", 0), reverse=True)
 
     # Default weekly window: last 7 days (renderer can refine with exact reset Time from RetrieveUserQuotaSummary)
@@ -504,6 +681,7 @@ def update_and_load_global_ledger(conv_dir: Path, active_stats: dict):
         "weeklySummary": weekly_summary,
         "allTimeSummary": all_time_summary,
         "recentChats": compact_chats,
+        "repackInfo": get_repack_info(conv_dir),
     }
 
 
@@ -513,6 +691,11 @@ def main():
         return
 
     db_path = Path(sys.argv[1])
+    if db_path.stem == "__AMS_REPACK_TRIGGER__":
+        res = trigger_repack_from_ui(db_path.parent)
+        print(json.dumps(res))
+        return
+
     if not db_path.exists():
         print(json.dumps({"error": "not_found"}))
         return
