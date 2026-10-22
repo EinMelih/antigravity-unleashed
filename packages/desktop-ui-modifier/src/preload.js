@@ -1217,6 +1217,18 @@ const amsScriptContent = `(async function() {
         }
     }
 
+    const amsLiveOdometer = {
+        initialized: false,
+        serverWeeklyAnchor: 100.0,
+        displayWeekly: 100.0,
+        server5hAnchor: 100.0,
+        display5h: 100.0,
+        unsettledLocalDrainWeekly: 0.0,
+        intraStepStreamDrainWeekly: 0.0,
+        lastForceRefreshTs: 0,
+        isActivelyDraining: false,
+    };
+
     const amsTelemetryState = {
         activeConvStats: null,
         weeklySummary: null,
@@ -1227,6 +1239,7 @@ const amsScriptContent = `(async function() {
         lastCacheHitFlashTs: 0,
         logFilePath: '~/.gemini/config/quota_usage_log.json',
         repackInfo: { pending: false, repacking: false, title: '', details: '', runningChatsCount: 0 },
+        liveOdometer: amsLiveOdometer,
         uiPrefs: loadAmsUiPrefs(),
         soundEnabled: (() => {
             try {
@@ -1550,10 +1563,16 @@ const amsScriptContent = `(async function() {
         }
     }
 
-    async function fetchUserQuotaSummary() {
+    async function fetchUserQuotaSummary(forceRefresh = false) {
         try {
             const csrfToken = window.__APP_CONFIG__ ? window.__APP_CONFIG__.csrfToken : '';
             if (!csrfToken) return;
+
+            const now = Date.now();
+            const useForce = !!forceRefresh && (now - amsLiveOdometer.lastForceRefreshTs > 3200);
+            if (useForce) {
+                amsLiveOdometer.lastForceRefreshTs = now;
+            }
 
             const response = await originalFetch('/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary', {
                 method: 'POST',
@@ -1563,7 +1582,7 @@ const amsScriptContent = `(async function() {
                     'x-grpc-web': '1',
                     'x-user-agent': 'CONNECT_ES_USER_AGENT',
                 },
-                body: buildGrpcWebJsonFrame({ forceRefresh: false }),
+                body: buildGrpcWebJsonFrame({ forceRefresh: useForce }),
             });
 
             const text = await response.text();
@@ -1704,16 +1723,31 @@ const amsScriptContent = `(async function() {
                 const fiveHourBucket = geminiGroup.buckets.find(b => b.window === '5h');
 
                 if (weeklyBucket && typeof weeklyBucket.remainingFraction === 'number') {
+                    const exactW6 = Number((weeklyBucket.remainingFraction * 100).toFixed(6));
                     currentQuotaData.geminiWeeklyFraction = weeklyBucket.remainingFraction;
-                    currentQuotaData.geminiWeeklyExact = Number((weeklyBucket.remainingFraction * 100).toFixed(4));
+                    currentQuotaData.geminiWeeklyExact = exactW6;
                     currentQuotaData.geminiWeekly = Math.round(weeklyBucket.remainingFraction * 100);
                     currentQuotaData.geminiWeeklyDesc = weeklyBucket.description || '';
+                    if (!amsLiveOdometer.initialized) {
+                        amsLiveOdometer.initialized = true;
+                        amsLiveOdometer.serverWeeklyAnchor = exactW6;
+                        amsLiveOdometer.displayWeekly = exactW6;
+                    } else if (Math.abs(exactW6 - amsLiveOdometer.serverWeeklyAnchor) > 0.000001) {
+                        amsLiveOdometer.serverWeeklyAnchor = exactW6;
+                        amsLiveOdometer.unsettledLocalDrainWeekly = 0;
+                        amsLiveOdometer.intraStepStreamDrainWeekly = 0;
+                    }
                 }
                 if (fiveHourBucket && typeof fiveHourBucket.remainingFraction === 'number') {
+                    const exact5h6 = Number((fiveHourBucket.remainingFraction * 100).toFixed(6));
                     currentQuotaData.gemini5hFraction = fiveHourBucket.remainingFraction;
-                    currentQuotaData.gemini5hExact = Number((fiveHourBucket.remainingFraction * 100).toFixed(4));
+                    currentQuotaData.gemini5hExact = exact5h6;
                     currentQuotaData.gemini5h = Math.round(fiveHourBucket.remainingFraction * 100);
                     currentQuotaData.gemini5hDesc = fiveHourBucket.description || '';
+                    amsLiveOdometer.server5hAnchor = exact5h6;
+                    if (amsLiveOdometer.display5h === 100.0) {
+                        amsLiveOdometer.display5h = exact5h6;
+                    }
                 }
             }
 
@@ -1904,6 +1938,9 @@ const amsScriptContent = `(async function() {
                     lastDelta5hPct: dW * 4.0,
                     lastPulseTs: Date.now(),
                 });
+                amsLiveOdometer.unsettledLocalDrainWeekly = Math.min(0.15, amsLiveOdometer.unsettledLocalDrainWeekly + dW);
+                amsLiveOdometer.intraStepStreamDrainWeekly = 0;
+                fetchUserQuotaSummary(true);
             }
 
             const prevStepIdx = amsTelemetryState.lastObservedStepByConv.get(cid);
@@ -2183,7 +2220,8 @@ const amsScriptContent = `(async function() {
 
         const isDe = (typeof window.amsGetLang === 'function' ? window.amsGetLang() : 'de') === 'de';
         const g5hExact = currentQuotaData.gemini5hExact;
-        const gWExact = currentQuotaData.geminiWeeklyExact;
+        const gWExact = amsLiveOdometer.initialized ? amsLiveOdometer.displayWeekly : currentQuotaData.geminiWeeklyExact;
+        const gWServerExact = currentQuotaData.geminiWeeklyExact;
         const g5hReset = cleanResetTime(currentQuotaData.gemini5hDesc);
         const gWReset = cleanResetTime(currentQuotaData.geminiWeeklyDesc);
 
@@ -2194,20 +2232,20 @@ const amsScriptContent = `(async function() {
         const remPromptsXL = Math.round(gWExact / 0.400);
 
         const tooltipText = isDe
-            ? \`Gemini Quota (Exakt):\\n\` +
-              \`• Weekly-Limit: \${gWExact.toFixed(4)}% übrig (-\${(100 - gWExact).toFixed(4)}% verbraucht · Reset: \${gWReset})\\n\` +
+            ? \`Gemini Quota (Exakt · Live-Odometer):\\n\` +
+              \`• Weekly-Limit (Live): \${gWExact.toFixed(4)}% übrig (Server-Float: \${gWServerExact.toFixed(6)}% · Reset: \${gWReset})\\n\` +
               \`• 5-Stunden-Limit: \${g5hExact.toFixed(4)}% übrig (-\${(100 - g5hExact).toFixed(4)}% verbraucht · Reset: \${g5hReset})\\n\\n\` +
-              \`Verbleibendes Kontingent (aus \${gWExact.toFixed(2)}% Weekly):\\n\` +
+              \`Verbleibendes Kontingent (aus \${gWExact.toFixed(4)}% Weekly):\\n\` +
               \`• ~\${remStepsW.toLocaleString('de-DE')} Agent-Steps\\n\` +
               \`• ~\${remPromptsS.toLocaleString('de-DE')} Kurze Prompts (Typ S · 1–2 Steps)\\n\` +
               \`• ~\${remPromptsM.toLocaleString('de-DE')} Kleine Tasks (Typ M · ~8 Steps)\\n\` +
               \`• ~\${remPromptsL.toLocaleString('de-DE')} Komplexe Coding-Tasks (Typ L · ~25 Steps)\\n\` +
               \`• ~\${remPromptsXL.toLocaleString('de-DE')} Große Deep-Dives (Typ XL · ~80 Steps)\\n\` +
               \`(Klicken für Models & Usage)\`
-            : \`Gemini Quota (Exact):\\n\` +
-              \`• Weekly Limit: \${gWExact.toFixed(4)}% left (-\${(100 - gWExact).toFixed(4)}% used · Reset: \${gWReset})\\n\` +
+            : \`Gemini Quota (Exact · Live Odometer):\\n\` +
+              \`• Weekly Limit (Live): \${gWExact.toFixed(4)}% left (Server float: \${gWServerExact.toFixed(6)}% · Reset: \${gWReset})\\n\` +
               \`• 5-Hour Limit: \${g5hExact.toFixed(4)}% left (-\${(100 - g5hExact).toFixed(4)}% used · Reset: \${g5hReset})\\n\\n\` +
-              \`Remaining Capacity (from \${gWExact.toFixed(2)}% Weekly):\\n\` +
+              \`Remaining Capacity (from \${gWExact.toFixed(4)}% Weekly):\\n\` +
               \`• ~\${remStepsW.toLocaleString('en-US')} Agent Steps\\n\` +
               \`• ~\${remPromptsS.toLocaleString('en-US')} Quick Prompts (Type S · 1–2 steps)\\n\` +
               \`• ~\${remPromptsM.toLocaleString('en-US')} Small Tasks (Type M · ~8 steps)\\n\` +
@@ -2220,6 +2258,18 @@ const amsScriptContent = `(async function() {
             return AMS_THEME.textBright;
         }
 
+        function format4DecSplitHtml(pct, isDraining) {
+            const s4 = Math.max(0, Number(pct || 0)).toFixed(4);
+            const main2 = s4.slice(0, -2); // e.g. "11.96"
+            const micro2 = s4.slice(-2);   // e.g. "24"
+            const mainColor = getToneColor(pct);
+            const microColor = isDraining ? AMS_THEME.sage : 'rgba(255, 255, 255, 0.64)';
+            return \`<span style="display:inline-flex;align-items:baseline;font-variant-numeric:tabular-nums;">\` +
+                \`<span style="color:\${mainColor};font-weight:600;">\${main2}</span>\` +
+                \`<span style="color:\${microColor};font-weight:500;transition:color 0.2s ease;">\${micro2}%</span>\` +
+            \`</span>\`;
+        }
+
         quotaEl.style.cssText =
             'display:inline-flex;align-items:center;margin-left:6px;margin-right:4px;' +
             'font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;' +
@@ -2227,32 +2277,37 @@ const amsScriptContent = `(async function() {
         quotaEl.title = tooltipText;
 
         const prefs = window.amsGetUiPrefs ? window.amsGetUiPrefs() : DEFAULT_AMS_UI_PREFS;
-        const unifiedQuotaPill = document.createElement('span');
-        unifiedQuotaPill.className = 'antigravity-quota-pill-v3';
+        let unifiedQuotaPill = quotaEl.querySelector('.antigravity-quota-pill-v3');
+        if (!unifiedQuotaPill) {
+            unifiedQuotaPill = document.createElement('span');
+            unifiedQuotaPill.className = 'antigravity-quota-pill-v3';
+            quotaEl.replaceChildren(unifiedQuotaPill);
+        }
+        const isDraining = !!amsLiveOdometer.isActivelyDraining;
         unifiedQuotaPill.style.cssText =
             \`display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:6px;\` +
-            \`background:\${AMS_THEME.surfacePill};border:1px solid \${AMS_THEME.borderSubtle};font-size:11px;white-space:nowrap;\`;
+            \`background:\${AMS_THEME.surfacePill};border:1px solid \${isDraining ? 'rgba(117,176,146,0.28)' : AMS_THEME.borderSubtle};\` +
+            \`font-size:11px;white-space:nowrap;transition:border-color 0.25s ease;\`;
 
-        if (prefs.show5hLimit) {
-            unifiedQuotaPill.innerHTML =
-                \`<span style="display:inline-flex;align-items:center;gap:3.5px;">\` +
-                    \`<span style="color:\${AMS_THEME.textMuted};font-weight:400;">Weekly</span>\` +
-                    \`<span style="color:\${getToneColor(gWExact)};font-weight:500;">\${gWExact.toFixed(2)}%</span>\` +
-                \`</span>\` +
-                \`<span style="color:\${AMS_THEME.textFaint};">·</span>\` +
-                \`<span style="display:inline-flex;align-items:center;gap:3.5px;">\` +
-                    \`<span style="color:\${AMS_THEME.textMuted};font-weight:400;">5h</span>\` +
-                    \`<span style="color:\${getToneColor(g5hExact)};font-weight:500;">\${g5hExact.toFixed(1)}%</span>\` +
-                \`</span>\`;
-        } else {
-            unifiedQuotaPill.innerHTML =
-                \`<span style="display:inline-flex;align-items:center;gap:4px;">\` +
-                    \`<span style="color:\${AMS_THEME.textMuted};font-weight:400;">Weekly</span>\` +
-                    \`<span style="color:\${getToneColor(gWExact)};font-weight:500;">\${gWExact.toFixed(2)}%</span>\` +
-                \`</span>\`;
+        const pillHtml = prefs.show5hLimit
+            ? \`<span style="display:inline-flex;align-items:center;gap:4px;">\` +
+                  \`<span style="color:\${AMS_THEME.textMuted};font-weight:400;">Weekly</span>\` +
+                  \`\${format4DecSplitHtml(gWExact, isDraining)}\` +
+              \`</span>\` +
+              \`<span style="color:\${AMS_THEME.textFaint};">·</span>\` +
+              \`<span style="display:inline-flex;align-items:center;gap:3.5px;">\` +
+                  \`<span style="color:\${AMS_THEME.textMuted};font-weight:400;">5h</span>\` +
+                  \`\${format4DecSplitHtml(g5hExact, false)}\` +
+              \`</span>\`
+            : \`<span style="display:inline-flex;align-items:center;gap:4.5px;">\` +
+                  \`<span style="color:\${AMS_THEME.textMuted};font-weight:400;">Weekly</span>\` +
+                  \`\${format4DecSplitHtml(gWExact, isDraining)}\` +
+              \`</span>\`;
+
+        if (unifiedQuotaPill.getAttribute('data-sig') !== pillHtml) {
+            unifiedQuotaPill.setAttribute('data-sig', pillHtml);
+            unifiedQuotaPill.innerHTML = pillHtml;
         }
-
-        quotaEl.replaceChildren(unifiedQuotaPill);
 
         // Noticeable In-App Repack Ready Button (Never auto-restarts while agents run; waits for user click)
         const rInfo = amsTelemetryState.repackInfo;
@@ -2438,7 +2493,7 @@ const amsScriptContent = `(async function() {
                         \`\${amsIcon('snowflake', 10, AMS_THEME.sand)}<span>\${isDe ? \`Cache kalt (\${formatDurationShort(cacheInfo.idleSec)} Pause)\` : \`Cache cold (\${formatDurationShort(cacheInfo.idleSec)} idle)\`}</span>\` +
                     \`</span>\` +
                     \`<span style="color:\${AMS_THEME.textFaint};">·</span>\` +
-                    \`<span style="color:\${AMS_THEME.sand};">\${isDe ? \`Weiterchatten kostet 10× (\${ctxCompact} Tok neu laden)\` : \`Continuing costs 10× (reloads \${ctxCompact} tok)\`}</span>\` +
+                    \`<span style="color:\${AMS_THEME.sand};">\${isDe ? \`\${ctxCompact} Kontext ohne 90%-Rabatt (10× Input)\` : \`\${ctxCompact} context loses 90% discount (10× input)\`}</span>\` +
                 \`</div>\`;
             rightHtml =
                 \`<div style="display:inline-flex;align-items:center;gap:8px;flex-shrink:0;">\` +
@@ -2800,7 +2855,8 @@ const amsScriptContent = `(async function() {
                 if (txt === '5-Hour Limit') {
                     exactVal = isGemini ? currentQuotaData.gemini5hExact : currentQuotaData.claude5hExact;
                 } else {
-                    exactVal = isGemini ? currentQuotaData.geminiWeeklyExact : currentQuotaData.claudeWeeklyExact;
+                    const liveGemW = amsLiveOdometer.initialized ? amsLiveOdometer.displayWeekly : currentQuotaData.geminiWeeklyExact;
+                    exactVal = isGemini ? liveGemW : currentQuotaData.claudeWeeklyExact;
                 }
 
                 const usedVal = Math.max(0, 100 - exactVal);
@@ -2847,7 +2903,7 @@ const amsScriptContent = `(async function() {
             scrollRoot.appendChild(dossierEl);
         }
 
-        const gWExact = currentQuotaData.geminiWeeklyExact;
+        const gWExact = amsLiveOdometer.initialized ? amsLiveOdometer.displayWeekly : currentQuotaData.geminiWeeklyExact;
         const gWUsed = Math.max(0, 100 - gWExact);
         const g5hExact = currentQuotaData.gemini5hExact;
         const g5hUsed = Math.max(0, 100 - g5hExact);
@@ -3092,7 +3148,7 @@ const amsScriptContent = `(async function() {
                     \`<div style="font-size:11px;color:#cbd5e1;margin-top:2px;">\${wSum.stepCount.toLocaleString(isDe ? 'de-DE' : 'en-US')} KI-Steps in \${wSum.chatCount} Chats</div>\` +
                 \`</div>\` +
                 \`<div style="padding:11px 13px;border-radius:8px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);">\` +
-                    \`<div style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:#94a3b8;">\${isDe ? 'Noch Übrig (aus ' + gWExact.toFixed(2) + '% W)' : 'Remaining Now (' + gWExact.toFixed(2) + '% W)'}</div>\` +
+                    \`<div style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:#94a3b8;">\${isDe ? 'Noch Übrig (aus ' + gWExact.toFixed(4) + '% W)' : 'Remaining Now (' + gWExact.toFixed(4) + '% W)'}</div>\` +
                     \`<div style="font-size:18px;font-weight:700;color:#34d399;margin-top:3px;">~\${Math.round(gWExact / 0.125).toLocaleString(isDe ? 'de-DE' : 'en-US')} L-Prompts</div>\` +
                     \`<div style="font-size:11px;color:#cbd5e1;margin-top:2px;">~\${Math.round(gWExact * 200).toLocaleString(isDe ? 'de-DE' : 'en-US')} Steps · ~\${Math.round(gWExact / 0.04).toLocaleString(isDe ? 'de-DE' : 'en-US')} M-Prompts</div>\` +
                 \`</div>\` +
@@ -3459,6 +3515,81 @@ const amsScriptContent = `(async function() {
         if (typeof updateTokenStats === 'function') updateTokenStats();
         if (typeof updateCompactionCounter === 'function') updateCompactionCounter();
     }, 8000));
+
+    // 250ms High-Precision Live Odometer Ticker (rolls 4th decimal 0.0001% live during active chats)
+    function countActiveRunningChats() {
+        let trajCount = 0;
+        if (amsTelemetryState.liveTrajectoriesMap && amsTelemetryState.liveTrajectoriesMap.size > 0) {
+            for (const info of amsTelemetryState.liveTrajectoriesMap.values()) {
+                if (info && info.status === 'CASCADE_RUN_STATUS_RUNNING') trajCount++;
+            }
+        }
+        if (trajCount > 0) return trajCount;
+        // Fallback DOM detection for immediate responsiveness on first streaming frame
+        const stopBtn = document.querySelector(
+            'button[aria-label*="Stop" i], button[aria-label*="Cancel" i], button[data-tooltip-id*="stop" i], [data-tooltip-id*="cancel" i]'
+        );
+        if (stopBtn && stopBtn.offsetParent !== null) return 1;
+        return 0;
+    }
+
+    window.__ams_v2_intervals.push(setInterval(() => {
+        if (window.__ams_active_instance_id !== myInstanceId) return;
+        if (document.hidden) return;
+        if (!amsLiveOdometer.initialized || amsLiveOdometer.serverWeeklyAnchor === null) return;
+
+        const now = Date.now();
+        const activeChats = countActiveRunningChats();
+
+        if (activeChats > 0) {
+            // Smoothly accumulate intra-step streaming token drain (~0.0001% per 250ms = 0.0004%/s per active chat)
+            // Capped at 0.0065% per in-flight step until the step completes and settles against steps.db / server float
+            const stepIncrement = 0.0001 * Math.min(activeChats, 3);
+            amsLiveOdometer.intraStepStreamDrainWeekly = Math.min(
+                0.0065 * Math.max(1, activeChats),
+                amsLiveOdometer.intraStepStreamDrainWeekly + stepIncrement
+            );
+            // Poll server with forceRefresh every ~4s while actively running so 8-decimal server float stays live
+            if (now - amsLiveOdometer.lastServerFetchMs > 4000) {
+                fetchUserQuotaSummary(true);
+            }
+        } else if (amsLiveOdometer.intraStepStreamDrainWeekly > 0 && (now - amsLiveOdometer.lastStepAtMs > 6000)) {
+            // Once chat stops and server has refreshed, gently clear residual intra-step estimate
+            amsLiveOdometer.intraStepStreamDrainWeekly = Math.max(0, amsLiveOdometer.intraStepStreamDrainWeekly - 0.0001);
+        }
+
+        const rawTarget = Math.max(
+            0,
+            amsLiveOdometer.serverWeeklyAnchor -
+                amsLiveOdometer.unsettledLocalDrainWeekly -
+                amsLiveOdometer.intraStepStreamDrainWeekly
+        );
+
+        const diff = amsLiveOdometer.displayWeekly - rawTarget;
+        let changed = false;
+
+        if (diff >= 0.00008) {
+            // Step down smoothly: 0.0001% per tick for normal streaming, or faster proportional step if catching up a big turn
+            const stepDown = diff > 0.0025 ? Math.max(0.0002, diff * 0.22) : 0.0001;
+            amsLiveOdometer.displayWeekly = Math.max(rawTarget, Number((amsLiveOdometer.displayWeekly - stepDown).toFixed(6)));
+            amsLiveOdometer.isActivelyDraining = true;
+            amsLiveOdometer.lastDrainTickMs = now;
+            changed = true;
+        } else if (diff < -0.0005 && activeChats === 0) {
+            // Re-align upward only when idle (e.g. after server reconciliation or weekly reset)
+            amsLiveOdometer.displayWeekly = Number(rawTarget.toFixed(6));
+            changed = true;
+        }
+
+        if (amsLiveOdometer.isActivelyDraining && activeChats === 0 && (now - amsLiveOdometer.lastDrainTickMs > 1200)) {
+            amsLiveOdometer.isActivelyDraining = false;
+            changed = true;
+        }
+
+        if (changed) {
+            refreshQuotaDisplay();
+        }
+    }, 250));
 
     // 1-second lightweight UI ticker so the 5-minute warm cache countdown ticks smoothly
     window.__ams_v2_intervals.push(setInterval(() => {
