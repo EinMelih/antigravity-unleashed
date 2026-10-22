@@ -79,6 +79,14 @@ def application_launch_environment():
 def claim_trigger_chat_id(log_file):
     """Atomically claim and validate the optional chat that requested this repack."""
     trigger_file = SCRATCH_DIR / "repack_trigger_chat.txt"
+    try:
+        if trigger_file.is_file() and (time.time() - trigger_file.stat().st_mtime > 120):
+            trigger_file.unlink(missing_ok=True)
+            log_file.write("Veraltete Trigger-Chat-Datei (>120s) ignoriert und geloescht.\n")
+            log_file.flush()
+            return None
+    except OSError:
+        pass
     claimed_file = trigger_file.with_name(f"{trigger_file.name}.{os.getpid()}.claimed")
     try:
         os.replace(trigger_file, claimed_file)
@@ -740,22 +748,52 @@ async def verify_runtime_after_restart(port_file_path, app_path, log_file, targe
                     log_file.write(f"Stelle letzten aktiven Chat wieder her: {chat_to_restore}...\n")
                     log_file.flush()
                     try:
-                        extra_note = (
-                            f" (+ {woken_bg_count} weiterer aktiver Agent automatisch mit 'continue' geweckt)"
-                            if woken_bg_count > 0 else ""
+                        interrupted_lower = {str(c).lower() for c in (interrupted_chat_ids or [])}
+                        should_wake_primary = (
+                            interrupted_chat_ids is None
+                            or (primary_cid and str(primary_cid).lower() in interrupted_lower)
                         )
-                        post_msg = (
-                            f"continue\n\n"
-                            f"*(✨ Anti-Gravity wurde erfolgreich für Version {supported_upstream_version()} "
-                            f"gepatcht und neu gestartet. Dieser Chat wurde automatisch wiederhergestellt{extra_note}.)*"
-                        )
-                        await send_chat_message_on_ws(
-                            ws,
-                            log_file,
-                            chat_to_restore,
-                            post_msg,
-                            req_id_base=200,
-                        )
+                        if should_wake_primary:
+                            extra_note = (
+                                f" (+ {woken_bg_count} weiterer aktiver Agent automatisch mit 'continue' geweckt)"
+                                if woken_bg_count > 0 else ""
+                            )
+                            post_msg = (
+                                f"continue\n\n"
+                                f"*(✨ Anti-Gravity wurde erfolgreich für Version {supported_upstream_version()} "
+                                f"gepatcht und neu gestartet. Dieser Chat wurde automatisch wiederhergestellt{extra_note}.)*"
+                            )
+                            await send_chat_message_on_ws(
+                                ws,
+                                log_file,
+                                chat_to_restore,
+                                post_msg,
+                                req_id_base=200,
+                            )
+                        else:
+                            # Simply navigate to the active chat without posting into an idle conversation
+                            nav_only_expr = f"""
+                            (() => {{
+                                const targetPath = {json.dumps(chat_to_restore)};
+                                const curPath = window.location.pathname + window.location.search;
+                                if (curPath !== targetPath && !curPath.includes(targetPath)) {{
+                                    window.location.href = window.location.origin + targetPath;
+                                    return "NAVIGATING";
+                                }}
+                                return "ALREADY_THERE";
+                            }})()
+                            """
+                            await ws.send_json({
+                                "id": 200,
+                                "method": "Runtime.evaluate",
+                                "params": {"expression": nav_only_expr, "returnByValue": True},
+                            })
+                            while True:
+                                data = await recv_next(ws, log_file)
+                                if data.get("id") == 200:
+                                    break
+                            log_file.write(f"Haupt-Chat {chat_to_restore} war vor dem Repack idle -> Ansicht wiederhergestellt ohne 'continue'-Post.\n")
+                            log_file.flush()
                     except Exception as chat_restore_err:
                         log_file.write(f"Warnung bei Chat-Wiederherstellung: {chat_restore_err}\n")
                         log_file.flush()
@@ -1749,15 +1787,17 @@ def run_repack():
                 preferred_chat_id=preferred_cid,
                 interrupted_out=interrupted_chat_ids,
             )
-            if repack_trigger_id:
+            if active_path:
+                m_act = re.search(r"([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})", active_path, re.IGNORECASE)
+                if m_act:
+                    target_chat_id = m_act.group(1)
+                log_file.write(f"Nutze aktiven Fenster-Pfad als Hauptziel: {active_path}\n")
+                log_file.flush()
+            elif repack_trigger_id:
                 active_path = f"/c/{repack_trigger_id}"
                 target_chat_id = repack_trigger_id
                 log_file.write(f"Nutze expliziten Trigger-Chat als Hauptziel: {active_path}\n")
                 log_file.flush()
-            elif active_path:
-                m_act = re.search(r"([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})", active_path, re.IGNORECASE)
-                if m_act:
-                    target_chat_id = m_act.group(1)
             elif preferred_cid:
                 active_path = f"/c/{preferred_cid}"
                 target_chat_id = preferred_cid
