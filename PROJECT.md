@@ -2,7 +2,7 @@
 
 ## Architecture
 Antigravity Unleashed is a unified, privacy-sanitized, high-impact open-source showcase monorepo bringing together two complementary systems:
-1. **Desktop UI Modifier (`packages/desktop-ui-modifier/`)**: Electron ASAR unpacker/patcher/repacker injecting advanced productivity HUDs into Antigravity desktop (v2.24.0 verified): Quota Watcher HUD (5h & weekly limits), Brain button with conflict detection, API Monitor status popup, Task/Plan Tracker panel, and Reviews Dashboard modal.
+1. **Desktop UI Modifier (`packages/desktop-ui-modifier/`)**: Electron ASAR unpacker/patcher/repacker injecting advanced productivity HUDs into Antigravity desktop (v2.26.0 verified): Quota Watcher HUD (5h & weekly limits), Brain button with conflict detection, API Monitor status popup, Task/Plan Tracker panel, and Reviews Dashboard modal.
 2. **Web Control Plane & API Bridge (`packages/web-hub/`)**: Multi-service local web hub (Port 8000), 36-tool FastMCP stdio server (`src/mcp_server.py`), and local OpenAI-compatible `/v1/chat/completions` API bridge (Port 8001) with CDP integration.
 3. **Core Governance & Branding (`docs/`, root)**: Dark-mode "Anti-Gravity Core / Orbital Prism" identity (`docs/assets/branding/`), 13 privacy-safe visual showcase screenshots (`docs/assets/screenshots/`), star-magnet `README.md`, candid vibe-coded post-mortem, creator CTAs (`@EinMelih`), launch kit (`docs/LAUNCH_KIT.md`), and governance files (`LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `.gitignore`, `*.example.*`).
 
@@ -10,7 +10,7 @@ Antigravity Unleashed is a unified, privacy-sanitized, high-impact open-source s
 ```
 antigravity-unleashed/
 ├── packages/
-│   ├── desktop-ui-modifier/      # Antigravity v2.24.0 Electron UI injection & repacker
+│   ├── desktop-ui-modifier/      # Antigravity v2.26.0 Electron UI injection & repacker
 │   │   ├── src/                  # Injector logic (ui/, ipcHandlers.js, main.js)
 │   │   ├── scripts/              # Repack, validate, and restore scripts
 │   │   └── tests/                # 14 isolated Node.js and Python test suites
@@ -74,7 +74,7 @@ antigravity-unleashed/
 
 ## Interface Contracts
 ### Desktop UI Modifier ↔ Antigravity Upstream
-- Target Version: Exactly pinned to v2.24.0 in `SUPPORTED_UPSTREAM_VERSION`.
+- Target Version: Exactly pinned to v2.26.0 in `SUPPORTED_UPSTREAM_VERSION`.
 - Patch boundary: `packages/desktop-ui-modifier/src/` overlays on extracted ASAR.
 - Path Resolution: Environment variables (`process.env.LOCALAPPDATA`, `process.env.APPDATA`) instead of hardcoded user profile paths.
 

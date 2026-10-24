@@ -1534,103 +1534,74 @@
         const existing = document.getElementById('antigravity-quick-menu-overlay');
         if (existing) {
             existing.style.opacity = '0';
-            existing.style.transform = 'translateY(10px) scale(0.95)';
-            setTimeout(() => existing.remove(), 200);
+            existing.style.transform = 'translateY(8px) scale(0.96)';
+            setTimeout(() => existing.remove(), 160);
             return;
         }
 
-        // Create overlay
+        // Compact, well-proportioned English popover
         const overlay = document.createElement('div');
         overlay.id = 'antigravity-quick-menu-overlay';
-
-        overlay.style.position = 'fixed';
-        overlay.style.bottom = '80px';
-        overlay.style.right = '20px';
-        overlay.style.width = '335px';
-        overlay.style.maxHeight = '82vh';
-        overlay.style.overflowY = 'auto';
         overlay.dataset.amsQuickMenu = 'true';
-        overlay.style.background = 'rgba(20, 20, 23, 0.85)';
-        overlay.style.backdropFilter = 'blur(16px)';
-        overlay.style.border = '1px solid rgba(255, 255, 255, 0.08)';
-        overlay.style.borderRadius = '12px';
-        overlay.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)';
-        overlay.style.zIndex = '999999';
-        overlay.style.padding = '16px';
-        overlay.style.color = '#fafafa';
-        overlay.style.fontFamily = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        overlay.style.display = 'flex';
-        overlay.style.flexDirection = 'column';
-        overlay.style.gap = '12px';
-        overlay.style.opacity = '0';
-        overlay.style.transform = 'translateY(10px) scale(0.95)';
-        overlay.style.transition = 'opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+        overlay.style.cssText =
+            'position:fixed;bottom:72px;right:16px;width:272px;max-height:80vh;overflow-y:auto;' +
+            'background:rgba(18, 18, 21, 0.94);backdrop-filter:blur(14px);' +
+            'border:1px solid rgba(255, 255, 255, 0.08);border-radius:10px;' +
+            'box-shadow:0 14px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);' +
+            'z-index:999999;padding:10px 12px;color:#fafafa;' +
+            'font-family:ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;' +
+            'display:flex;flex-direction:column;gap:8px;opacity:0;' +
+            'transform:translateY(8px) scale(0.96);' +
+            'transition:opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);';
 
         // Header
         const header = document.createElement('div');
-        header.style.display = 'flex';
-        header.style.alignItems = 'center';
-        header.style.justifyContent = 'space-between';
-        header.style.borderBottom = '1px solid rgba(255, 255, 255, 0.08)';
-        header.style.paddingBottom = '8px';
+        header.style.cssText =
+            'display:flex;align-items:center;justify-content:space-between;' +
+            'border-bottom:1px solid rgba(255, 255, 255, 0.07);padding-bottom:6px;';
 
         const title = document.createElement('span');
-        title.style.display = 'inline-flex';
-        title.style.alignItems = 'center';
-        title.style.gap = '7px';
-        title.style.fontSize = '13px';
-        title.style.fontWeight = '600';
-        title.style.letterSpacing = '0.3px';
-        title.style.color = '#f8fafc';
+        title.style.cssText =
+            'display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;letter-spacing:0.2px;color:#f8fafc;';
         title.innerHTML =
-            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">' +
+            '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">' +
             '<ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-28 12 12)" stroke="#38bdf8" stroke-width="1.8" stroke-opacity="0.9"/>' +
             '<polygon points="12,3 19.4,12 12,21 4.6,12" fill="rgba(139,92,246,0.28)" stroke="#a78bfa" stroke-width="1.8" stroke-linejoin="round"/>' +
             '<circle cx="12" cy="12" r="2.2" fill="#f8fafc"/>' +
             '</svg>' +
-            '<strong>Antigravity Unleashed</strong>' +
-            '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:rgba(139,92,246,0.18);border:1px solid rgba(139,92,246,0.35);color:#c4b5fd;letter-spacing:0.06em;">MOD</span>';
+            '<span>Unleashed</span>' +
+            '<span style="font-size:8.5px;font-weight:700;padding:1px 4px;border-radius:3px;background:rgba(139,92,246,0.16);border:1px solid rgba(139,92,246,0.32);color:#c4b5fd;letter-spacing:0.05em;">v2.26</span>';
 
         const closeBtn = document.createElement('button');
         closeBtn.textContent = '✕';
-        closeBtn.style.background = 'transparent';
-        closeBtn.style.border = 'none';
-        closeBtn.style.color = 'rgba(255, 255, 255, 0.4)';
-        closeBtn.style.cursor = 'pointer';
-        closeBtn.style.fontSize = '12px';
-        closeBtn.style.padding = '4px';
+        closeBtn.style.cssText =
+            'background:transparent;border:none;color:rgba(255,255,255,0.4);cursor:pointer;font-size:11px;padding:2px 4px;line-height:1;';
         closeBtn.addEventListener('click', () => window.toggleQuickMenu());
 
         header.appendChild(title);
         header.appendChild(closeBtn);
         overlay.appendChild(header);
 
-        // Status section
+        // Compact Status Section
         const statusSection = document.createElement('div');
-        statusSection.style.fontSize = '11px';
-        statusSection.style.display = 'flex';
-        statusSection.style.flexDirection = 'column';
-        statusSection.style.gap = '6px';
-        statusSection.style.background = 'rgba(255, 255, 255, 0.03)';
-        statusSection.style.padding = '10px';
-        statusSection.style.borderRadius = '8px';
-        statusSection.style.border = '1px solid rgba(255, 255, 255, 0.03)';
+        statusSection.style.cssText =
+            'font-size:11px;display:flex;flex-direction:column;gap:4px;' +
+            'background:rgba(255, 255, 255, 0.025);padding:7px 9px;border-radius:6px;' +
+            'border:1px solid rgba(255, 255, 255, 0.04);';
 
         const activeModel = getActiveModel ? getActiveModel() : 'Gemini 3.5 Flash';
         const modelRow = document.createElement('div');
-        modelRow.style.display = 'flex';
-        modelRow.style.justifyContent = 'space-between';
-        modelRow.innerHTML = '<span style="color: rgba(255,255,255,0.5)">Model:</span>';
+        modelRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;';
+        modelRow.innerHTML = '<span style="color:rgba(255,255,255,0.48)">Model</span>';
         const modelValue = document.createElement('span');
-        modelValue.style.fontWeight = '500';
+        modelValue.style.cssText = 'font-weight:500;color:rgba(255,255,255,0.88);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         modelValue.textContent = String(activeModel || 'Unknown');
         modelRow.appendChild(modelValue);
         statusSection.appendChild(modelRow);
 
         const syncRow = document.createElement('div');
-        syncRow.style.display = 'flex';
-        syncRow.style.justifyContent = 'space-between';
-        syncRow.innerHTML = `<span style="color: rgba(255,255,255,0.5)">Sync Status:</span><span id="ams-sync-indicator" style="font-weight: 500">Checking...</span>`;
+        syncRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;';
+        syncRow.innerHTML = '<span style="color:rgba(255,255,255,0.48)">Git Sync</span><span id="ams-sync-indicator" style="font-weight:500">Checking...</span>';
         statusSection.appendChild(syncRow);
 
         const localHubEnabled = (
@@ -1640,15 +1611,13 @@
 
         if (localHubEnabled) {
             const hubRow = document.createElement('div');
-            hubRow.style.display = 'flex';
-            hubRow.style.justifyContent = 'space-between';
-            hubRow.innerHTML = `<span style="color: rgba(255,255,255,0.5)">Anti-Gravity Hub:</span><span id="ams-antigravity-hub-indicator" style="font-weight:500;color:#fbbf24">● Checking…</span>`;
+            hubRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;';
+            hubRow.innerHTML = '<span style="color:rgba(255,255,255,0.48)">Local Hub</span><span id="ams-antigravity-hub-indicator" style="font-weight:500;color:#fbbf24">● Checking…</span>';
             statusSection.appendChild(hubRow);
 
             const bridgeRow = document.createElement('div');
-            bridgeRow.style.display = 'flex';
-            bridgeRow.style.justifyContent = 'space-between';
-            bridgeRow.innerHTML = `<span style="color: rgba(255,255,255,0.5)">Anti-Gravity API Bridge:</span><span id="ams-antigravity-bridge-indicator" style="font-weight:500;color:#fbbf24">● Checking…</span>`;
+            bridgeRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;';
+            bridgeRow.innerHTML = '<span style="color:rgba(255,255,255,0.48)">API Bridge</span><span id="ams-antigravity-bridge-indicator" style="font-weight:500;color:#fbbf24">● Checking…</span>';
             statusSection.appendChild(bridgeRow);
         }
 
@@ -1659,24 +1628,24 @@
         if (rInfo && (rInfo.pending || rInfo.repacking)) {
             const repackCard = document.createElement('div');
             repackCard.style.cssText =
-                'display:flex;flex-direction:column;gap:6px;padding:10px 11px;border-radius:8px;' +
-                'background:rgba(245,158,11,0.12);border:1px solid rgba(251,191,36,0.42);font-size:11px;line-height:1.35;';
-            const titleText = escapeHtml(rInfo.title || 'UI-Update bereit');
-            const detailText = escapeHtml(rInfo.details || 'Änderungen warten auf Repack & Neustart.');
+                'display:flex;flex-direction:column;gap:5px;padding:8px 9px;border-radius:6px;' +
+                'background:rgba(245,158,11,0.11);border:1px solid rgba(251,191,36,0.38);font-size:10.5px;line-height:1.3;';
+            const titleText = escapeHtml(rInfo.title || 'UI update ready');
+            const detailText = escapeHtml(rInfo.details || 'Changes are staged for repack & restart.');
             repackCard.innerHTML =
                 `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">` +
-                    `<strong style="color:#fde68a;font-size:11.5px;">↻ Neustart bereit: ${titleText}</strong>` +
+                    `<strong style="color:#fde68a;font-size:11px;">↻ Restart ready: ${titleText}</strong>` +
                 `</div>` +
-                `<div style="color:rgba(255,255,255,0.75);font-size:10.5px;">${detailText}</div>` +
-                `<button type="button" id="ams-quickmenu-repack-btn" style="margin-top:2px;padding:6px 10px;border-radius:6px;border:1px solid rgba(251,191,36,0.55);background:rgba(245,158,11,0.22);color:#fef08a;font-size:11px;font-weight:600;cursor:pointer;text-align:center;">` +
-                    (rInfo.repacking ? '⏳ Repack & Neustart läuft (ca. 3s)...' : '↻ Jetzt Repack ausführen & neu starten') +
+                `<div style="color:rgba(255,255,255,0.72);font-size:10px;">${detailText}</div>` +
+                `<button type="button" id="ams-quickmenu-repack-btn" style="margin-top:2px;padding:5px 8px;border-radius:5px;border:1px solid rgba(251,191,36,0.5);background:rgba(245,158,11,0.2);color:#fef08a;font-size:10.5px;font-weight:600;cursor:pointer;text-align:center;">` +
+                    (rInfo.repacking ? '⏳ Repacking & restarting (~3s)...' : '↻ Repack & Restart Now') +
                 `</button>`;
             overlay.appendChild(repackCard);
             const rBtn = repackCard.querySelector('#ams-quickmenu-repack-btn');
             if (rBtn) {
                 rBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    rBtn.textContent = '⏳ Repack & Neustart läuft (ca. 3s)...';
+                    rBtn.textContent = '⏳ Repacking & restarting (~3s)...';
                     if (typeof window.amsTriggerRepackNow === 'function') {
                         window.amsTriggerRepackNow();
                     }
@@ -1684,40 +1653,38 @@
             }
         }
 
-        // UI & Toolbar Icon Checkboxes Section
+        // Compact Display Preferences (only essential toggles)
         const uiPrefsSection = document.createElement('div');
         uiPrefsSection.style.cssText =
-            'display:flex;flex-direction:column;gap:5px;padding:9px 11px;border-radius:8px;' +
-            'background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);font-size:11.5px;';
+            'display:flex;flex-direction:column;gap:3px;padding:7px 9px;border-radius:6px;' +
+            'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.045);font-size:11px;';
 
         const prefsHeader = document.createElement('div');
         prefsHeader.style.cssText =
-            'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.45);margin-bottom:2px;';
-        prefsHeader.textContent = 'Anzeige & Leisten-Icons';
+            'font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:rgba(255,255,255,0.4);margin-bottom:1px;';
+        prefsHeader.textContent = 'Display';
         uiPrefsSection.appendChild(prefsHeader);
 
         const curPrefs = typeof window.amsGetUiPrefs === 'function'
             ? window.amsGetUiPrefs()
-            : { show5hLimit: false, showBrainIcon: false, showPlanIcon: false, showDuplicateIcon: false, showSidebarPct: false };
+            : { show5hLimit: false, showDuplicateIcon: false, showSidebarPct: false };
 
         const prefItems = [
-            { key: 'show5hLimit', label: '5-Stunden-Limit anzeigen (Leiste & Models)' },
-            { key: 'showBrainIcon', label: 'Brain-Ordner Icon in Leiste anzeigen' },
-            { key: 'showPlanIcon', label: 'Task & Plan Icon in Leiste anzeigen' },
-            { key: 'showDuplicateIcon', label: 'Fenster-Duplizieren Icon in Leiste anzeigen' },
-            { key: 'showSidebarPct', label: 'Chat-Prozente in Sidebar anzeigen' },
+            { key: 'show5hLimit', label: '5h Quota Limit' },
+            { key: 'showSidebarPct', label: 'Sidebar Chat %' },
+            { key: 'showDuplicateIcon', label: 'Duplicate Window Icon' },
         ];
 
         prefItems.forEach(({ key, label }) => {
             const row = document.createElement('label');
             row.style.cssText =
-                'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 2px;cursor:pointer;color:rgba(255,255,255,0.82);user-select:none;';
+                'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0;cursor:pointer;color:rgba(255,255,255,0.8);user-select:none;';
             const textSpan = document.createElement('span');
             textSpan.textContent = label;
             const cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.checked = !!curPrefs[key];
-            cb.style.cssText = 'accent-color:#38bdf8;cursor:pointer;width:13px;height:13px;margin:0;flex-shrink:0;';
+            cb.style.cssText = 'accent-color:#38bdf8;cursor:pointer;width:12px;height:12px;margin:0;flex-shrink:0;';
             cb.addEventListener('change', (e) => {
                 e.stopPropagation();
                 if (typeof window.amsSetUiPref === 'function') {
@@ -1731,27 +1698,247 @@
 
         overlay.appendChild(uiPrefsSection);
 
-        // Actions Section
+        // Compact Collapsible AI Engine & Commit API Section
+        const aiSection = document.createElement('div');
+        aiSection.id = 'ams-quickmenu-ai-section';
+        aiSection.style.cssText =
+            'display:flex;flex-direction:column;gap:5px;padding:7px 9px;border-radius:6px;' +
+            'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.045);font-size:11px;';
+
+        const aiHeaderRow = document.createElement('div');
+        aiHeaderRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px;';
+
+        const aiTitleWrap = document.createElement('div');
+        aiTitleWrap.style.cssText = 'display:inline-flex;align-items:center;gap:5px;';
+        const aiTitleSpan = document.createElement('span');
+        aiTitleSpan.style.cssText =
+            'font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:rgba(255,255,255,0.4);';
+        aiTitleSpan.textContent = 'Commit AI';
+
+        const aiBadge = document.createElement('span');
+        aiBadge.style.cssText =
+            'font-size:9px;font-weight:600;padding:1px 5px;border-radius:999px;' +
+            'background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.28);color:#38bdf8;';
+        aiBadge.textContent = 'Auto';
+
+        aiTitleWrap.appendChild(aiTitleSpan);
+        aiTitleWrap.appendChild(aiBadge);
+
+        const aiExpandBtn = document.createElement('button');
+        aiExpandBtn.type = 'button';
+        aiExpandBtn.style.cssText =
+            'background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:4px;' +
+            'padding:1px 6px;font-size:9.5px;color:rgba(255,255,255,0.68);cursor:pointer;';
+        aiExpandBtn.textContent = 'API Options ▾';
+
+        aiHeaderRow.appendChild(aiTitleWrap);
+        aiHeaderRow.appendChild(aiExpandBtn);
+        aiSection.appendChild(aiHeaderRow);
+
+        const aiModeSelect = document.createElement('select');
+        aiModeSelect.setAttribute('aria-label', 'Select AI Mode');
+        aiModeSelect.style.cssText =
+            'width:100%;padding:4px 6px;border-radius:5px;background:rgba(9,9,11,0.85);' +
+            'border:1px solid rgba(255,255,255,0.1);color:#fafafa;font-size:11px;outline:none;cursor:pointer;';
+        [
+            { value: 'auto', label: '⚡ Auto (API → Local UI)' },
+            { value: 'unleashed_api', label: '🌐 Unleashed API (/v1)' },
+            { value: 'local_ui', label: '🖥️ Direct Antigravity UI' },
+            { value: 'off', label: '📝 Rule-based (No AI)' },
+        ].forEach((opt) => {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            o.style.background = '#141417';
+            o.style.color = '#fafafa';
+            aiModeSelect.appendChild(o);
+        });
+        aiSection.appendChild(aiModeSelect);
+
+        const aiDrawer = document.createElement('div');
+        const shouldAutoOpenDrawer = Boolean(window.__ams_open_ai_settings);
+        window.__ams_open_ai_settings = false;
+        aiDrawer.style.cssText =
+            (shouldAutoOpenDrawer ? 'display:flex;' : 'display:none;') +
+            'flex-direction:column;gap:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.05);';
+        aiExpandBtn.textContent = shouldAutoOpenDrawer ? 'API Options ▴' : 'API Options ▾';
+
+        const urlLabel = document.createElement('label');
+        urlLabel.style.cssText = 'display:flex;flex-direction:column;gap:2px;font-size:10px;color:rgba(255,255,255,0.6);';
+        urlLabel.textContent = 'API Base URL (/v1):';
+        const urlInput = document.createElement('input');
+        urlInput.type = 'text';
+        urlInput.placeholder = 'http://127.0.0.1:8001/v1';
+        urlInput.style.cssText =
+            'width:100%;box-sizing:border-box;padding:4px 6px;border-radius:4px;background:rgba(9,9,11,0.9);' +
+            'border:1px solid rgba(255,255,255,0.1);color:#fafafa;font-size:10.5px;' +
+            'font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;outline:none;';
+        urlLabel.appendChild(urlInput);
+
+        const keyLabel = document.createElement('label');
+        keyLabel.style.cssText = 'display:flex;flex-direction:column;gap:2px;font-size:10px;color:rgba(255,255,255,0.6);';
+        keyLabel.textContent = 'API Key / Bearer Token:';
+        const keyInput = document.createElement('input');
+        keyInput.type = 'password';
+        keyInput.placeholder = 'ag-local-token';
+        keyInput.style.cssText =
+            'width:100%;box-sizing:border-box;padding:4px 6px;border-radius:4px;background:rgba(9,9,11,0.9);' +
+            'border:1px solid rgba(255,255,255,0.1);color:#fafafa;font-size:10.5px;' +
+            'font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;outline:none;';
+        keyLabel.appendChild(keyInput);
+
+        const modelLabel = document.createElement('label');
+        modelLabel.style.cssText = 'display:flex;flex-direction:column;gap:2px;font-size:10px;color:rgba(255,255,255,0.6);';
+        modelLabel.textContent = 'AI Model:';
+        const modelInput = document.createElement('input');
+        modelInput.type = 'text';
+        modelInput.placeholder = 'gemini-3.8-flash-medium';
+        modelInput.style.cssText =
+            'width:100%;box-sizing:border-box;padding:4px 6px;border-radius:4px;background:rgba(9,9,11,0.9);' +
+            'border:1px solid rgba(255,255,255,0.1);color:#fafafa;font-size:10.5px;' +
+            'font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;outline:none;';
+        modelLabel.appendChild(modelInput);
+
+        const aiBtnRow = document.createElement('div');
+        aiBtnRow.style.cssText = 'display:flex;gap:5px;margin-top:2px;';
+
+        const testAiBtn = document.createElement('button');
+        testAiBtn.type = 'button';
+        testAiBtn.textContent = '🔌 Test';
+        testAiBtn.style.cssText =
+            'flex:1;padding:4px 6px;border-radius:4px;border:1px solid rgba(56,189,248,0.35);' +
+            'background:rgba(56,189,248,0.12);color:#38bdf8;font-size:10.5px;font-weight:600;cursor:pointer;';
+
+        const saveAiBtn = document.createElement('button');
+        saveAiBtn.type = 'button';
+        saveAiBtn.textContent = '✓ Save';
+        saveAiBtn.style.cssText =
+            'flex:1;padding:4px 6px;border-radius:4px;border:1px solid rgba(34,197,94,0.4);' +
+            'background:rgba(34,197,94,0.15);color:#4ade80;font-size:10.5px;font-weight:600;cursor:pointer;';
+
+        aiBtnRow.appendChild(testAiBtn);
+        aiBtnRow.appendChild(saveAiBtn);
+
+        const aiStatusMsg = document.createElement('div');
+        aiStatusMsg.style.cssText = 'display:none;font-size:10px;line-height:1.3;padding:4px 6px;border-radius:4px;';
+
+        const showAiStatus = (msg, isErr = false) => {
+            aiStatusMsg.style.display = 'block';
+            aiStatusMsg.style.background = isErr ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.12)';
+            aiStatusMsg.style.border = isErr ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(34,197,94,0.3)';
+            aiStatusMsg.style.color = isErr ? '#fca5a5' : '#86efac';
+            aiStatusMsg.textContent = msg;
+        };
+
+        const updateBadgeFromConfig = (cfg) => {
+            if (!cfg) return;
+            if (cfg.mode === 'off') {
+                aiBadge.textContent = 'Off';
+                aiBadge.style.color = '#a1a1aa';
+            } else if (cfg.mode === 'local_ui') {
+                aiBadge.textContent = 'Local UI';
+                aiBadge.style.color = '#c4b5fd';
+            } else {
+                const shortHost = String(cfg.apiUrl || '').replace(/^https?:\/\//, '').replace(/\/v1.*$/, '');
+                aiBadge.textContent = (cfg.mode === 'auto' ? 'Auto · ' : 'API · ') + (shortHost || ':8001');
+                aiBadge.style.color = '#38bdf8';
+            }
+        };
+
+        const persistCurrentAiConfig = async (showNotice = false) => {
+            if (!window.electronNative || !window.electronNative.saveAiConfig) return;
+            const patch = {
+                mode: aiModeSelect.value,
+                apiUrl: urlInput.value.trim() || 'http://127.0.0.1:8001/v1',
+                apiKey: keyInput.value.trim(),
+                model: modelInput.value.trim() || 'gemini-3.8-flash-medium',
+            };
+            try {
+                const res = await window.electronNative.saveAiConfig(patch);
+                if (res && res.config) {
+                    window.__ams_cached_ai_config = res.config;
+                    updateBadgeFromConfig(res.config);
+                    if (showNotice) showAiStatus('✓ Saved (' + res.config.mode + ')');
+                }
+            } catch (err) {
+                if (showNotice) showAiStatus('✗ ' + err.message, true);
+            }
+        };
+
+        aiDrawer.appendChild(urlLabel);
+        aiDrawer.appendChild(keyLabel);
+        aiDrawer.appendChild(modelLabel);
+        aiDrawer.appendChild(aiBtnRow);
+        aiDrawer.appendChild(aiStatusMsg);
+        aiSection.appendChild(aiDrawer);
+
+        aiExpandBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isHidden = aiDrawer.style.display === 'none';
+            aiDrawer.style.display = isHidden ? 'flex' : 'none';
+            aiExpandBtn.textContent = isHidden ? 'API Options ▴' : 'API Options ▾';
+        });
+
+        aiModeSelect.addEventListener('change', (e) => {
+            e.stopPropagation();
+            persistCurrentAiConfig(true);
+        });
+        saveAiBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            persistCurrentAiConfig(true);
+        });
+        testAiBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!window.electronNative || !window.electronNative.testAiConnection) return;
+            testAiBtn.disabled = true;
+            testAiBtn.textContent = '⏳ Testing...';
+            try {
+                const csrfToken = window.__APP_CONFIG__ ? window.__APP_CONFIG__.csrfToken : '';
+                const res = await window.electronNative.testAiConnection({
+                    mode: aiModeSelect.value,
+                    apiUrl: urlInput.value.trim() || 'http://127.0.0.1:8001/v1',
+                    apiKey: keyInput.value.trim(),
+                    model: modelInput.value.trim() || 'gemini-3.8-flash-medium',
+                }, csrfToken);
+                if (res && res.status === 'success') {
+                    showAiStatus('✓ ' + (res.message || 'Connected!'));
+                } else {
+                    showAiStatus('✗ ' + ((res && res.message) || 'Connection failed'), true);
+                }
+            } catch (err) {
+                showAiStatus('✗ ' + err.message, true);
+            } finally {
+                testAiBtn.disabled = false;
+                testAiBtn.textContent = '🔌 Test';
+            }
+        });
+
+        if (window.electronNative && window.electronNative.getAiConfig) {
+            window.electronNative.getAiConfig().then((res) => {
+                if (res && res.config) {
+                    const cfg = res.config;
+                    window.__ams_cached_ai_config = cfg;
+                    aiModeSelect.value = cfg.mode || 'auto';
+                    urlInput.value = cfg.apiUrl || 'http://127.0.0.1:8001/v1';
+                    keyInput.value = cfg.apiKey || '';
+                    modelInput.value = cfg.model || 'gemini-3.8-flash-medium';
+                    updateBadgeFromConfig(cfg);
+                }
+            }).catch(() => {});
+        }
+
+        overlay.appendChild(aiSection);
+
+        // Essential Actions Section
         const actionsSection = document.createElement('div');
-        actionsSection.style.display = 'flex';
-        actionsSection.style.flexDirection = 'column';
-        actionsSection.style.gap = '6px';
+        actionsSection.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
 
         const createMenuItem = (label, iconSvg, onClick, closeOnClick = true) => {
             const item = document.createElement('button');
-            item.style.display = 'flex';
-            item.style.alignItems = 'center';
-            item.style.gap = '10px';
-            item.style.width = '100%';
-            item.style.padding = '8px 12px';
-            item.style.background = 'transparent';
-            item.style.border = 'none';
-            item.style.borderRadius = '6px';
-            item.style.color = 'rgba(255, 255, 255, 0.8)';
-            item.style.fontSize = '12px';
-            item.style.textAlign = 'left';
-            item.style.cursor = 'pointer';
-            item.style.transition = 'background 0.2s, color 0.2s';
+            item.style.cssText =
+                'display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;' +
+                'background:transparent;border:none;border-radius:5px;color:rgba(255,255,255,0.82);' +
+                'font-size:11.5px;text-align:left;cursor:pointer;transition:background 0.15s, color 0.15s;';
 
             item.innerHTML = iconSvg;
             const labelSpan = document.createElement('span');
@@ -1759,12 +1946,12 @@
             item.appendChild(labelSpan);
 
             item.addEventListener('mouseenter', () => {
-                item.style.background = 'rgba(255, 255, 255, 0.08)';
+                item.style.background = 'rgba(255, 255, 255, 0.07)';
                 item.style.color = '#ffffff';
             });
             item.addEventListener('mouseleave', () => {
                 item.style.background = 'transparent';
-                item.style.color = 'rgba(255, 255, 255, 0.8)';
+                item.style.color = 'rgba(255, 255, 255, 0.82)';
             });
             item.addEventListener('click', (e) => {
                 if (closeOnClick) {
@@ -1777,56 +1964,8 @@
             return item;
         };
 
-        const brainSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1 0-3.12 3 3 0 0 1 0-4.88 2.5 2.5 0 0 1 0-3.12A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 0-3.12 3 3 0 0 0 0-4.88 2.5 2.5 0 0 0 0-3.12A2.5 2.5 0 0 0 14.5 2Z"/></svg>`;
-        actionsSection.appendChild(createMenuItem('Brain-Ordner öffnen', brainSvg, () => {
-            if (window.electronNative && window.electronNative.openBrain) {
-                window.electronNative.openBrain();
-            }
-        }));
-
-        const restartSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>`;
-        if (localHubEnabled) {
-            const webSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg>`;
-            actionsSection.appendChild(createMenuItem('Anti-Gravity Hub öffnen', webSvg, () => {
-                if (window.amsAntigravityHub && window.amsAntigravityHub.openHub) {
-                    window.amsAntigravityHub.openHub();
-                }
-            }));
-
-            const startSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
-            const servicesItem = createMenuItem('Hub & API Bridge starten', startSvg, async () => {
-                const restart = servicesItem.dataset.restart === 'true';
-                try {
-                    if (window.amsAntigravityHub && window.amsAntigravityHub.startServices) {
-                        await window.amsAntigravityHub.startServices(restart);
-                    }
-                } catch (err) {
-                    console.error(`[AMS Services] ${restart ? 'Restart' : 'Start'} failed:`, err);
-                }
-            });
-            servicesItem.id = 'ams-services-menu-item';
-            servicesItem.dataset.restart = 'false';
-            actionsSection.appendChild(servicesItem);
-        }
-
-        const planSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M3 20h.01"/><path d="M3 14h.01"/><path d="M3 8h.01"/><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="m9 11 2 2 4-4"/></svg>`;
-        actionsSection.appendChild(createMenuItem('Task-Plan öffnen', planSvg, () => {
-            if (typeof togglePlanPanel === 'function') {
-                togglePlanPanel();
-            }
-        }));
-
-        const duplicateSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-        actionsSection.appendChild(createMenuItem('Fenster duplizieren', duplicateSvg, () => {
-            if (window.electronNative && window.electronNative.openDuplicateWindow) {
-                window.electronNative.openDuplicateWindow(amsToken);
-            } else {
-                window.open(window.location.href, '_blank');
-            }
-        }));
-
-        const syncSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
-        actionsSection.appendChild(createMenuItem('Manuelles Git Sync & Cloud-Backup', syncSvg, () => {
+        const syncSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
+        actionsSection.appendChild(createMenuItem('Git Sync & Cloud Backup', syncSvg, () => {
             const convoId = getSessionId ? getSessionId() : '';
             if (typeof showGitSyncModal === 'function') {
                 showGitSyncModal(convoId, async (commitMsg) => {
@@ -1837,12 +1976,12 @@
             }
         }));
 
-        const autoSyncSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>`;
+        const autoSyncSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>`;
         let currentAutoSyncMinutes = Number(window.__ams_config_auto_sync_minutes || 0);
         const autoSyncItem = createMenuItem(
             currentAutoSyncMinutes > 0
-                ? `Auto-Sync (Config): Alle ${currentAutoSyncMinutes} Min. ✓`
-                : 'Auto-Sync (Config): Aus (klicken für 15 Min.)',
+                ? `Auto-Sync: Every ${currentAutoSyncMinutes}m ✓`
+                : 'Auto-Sync: Off (click for 15m)',
             autoSyncSvg,
             async () => {
                 const nextMinutes = currentAutoSyncMinutes > 0 ? 0 : 15;
@@ -1869,15 +2008,24 @@
                 const label = autoSyncItem.querySelector('span');
                 if (label) {
                     label.textContent = currentAutoSyncMinutes > 0
-                        ? `Auto-Sync (Config): Alle ${currentAutoSyncMinutes} Min. ✓`
-                        : 'Auto-Sync (Config): Aus (klicken für 15 Min.)';
+                        ? `Auto-Sync: Every ${currentAutoSyncMinutes}m ✓`
+                        : 'Auto-Sync: Off (click for 15m)';
                     label.style.color = currentAutoSyncMinutes > 0 ? '#4ade80' : '';
                 }
             }).catch(() => {});
         }
 
-        const historySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>`;
-        actionsSection.appendChild(createMenuItem('Update- & Patch-Log', historySvg, () => {
+        const duplicateSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+        actionsSection.appendChild(createMenuItem('Duplicate Window', duplicateSvg, () => {
+            if (window.electronNative && window.electronNative.openDuplicateWindow) {
+                window.electronNative.openDuplicateWindow(amsToken);
+            } else {
+                window.open(window.location.href, '_blank');
+            }
+        }));
+
+        const historySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>`;
+        actionsSection.appendChild(createMenuItem('Update & Patch Log', historySvg, () => {
             if (typeof showUpdateHistoryModal === 'function') {
                 showUpdateHistoryModal();
             } else if (typeof window.showUpdateHistoryModal === 'function') {
@@ -1885,103 +2033,48 @@
             }
         }));
 
+        const restartSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>`;
         if (localHubEnabled) {
-            const apiWindowSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg>`;
-            let apiWindowVisible = false;
-            const apiWindowItem = createMenuItem('API-Fenster: wird geladen ...', apiWindowSvg, () => {
-                const bridge = window.electronNative;
-                if (bridge && bridge.setApiWindowVisible) {
-                    bridge.setApiWindowVisible(!apiWindowVisible);
+            const webSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg>`;
+            actionsSection.appendChild(createMenuItem('Open Anti-Gravity Hub', webSvg, () => {
+                if (window.amsAntigravityHub && window.amsAntigravityHub.openHub) {
+                    window.amsAntigravityHub.openHub();
+                }
+            }));
+
+            const startSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+            const servicesItem = createMenuItem('Start Hub & API Bridge', startSvg, async () => {
+                const restart = servicesItem.dataset.restart === 'true';
+                try {
+                    if (window.amsAntigravityHub && window.amsAntigravityHub.startServices) {
+                        await window.amsAntigravityHub.startServices(restart);
+                    }
+                } catch (err) {
+                    console.error(`[AMS Services] ${restart ? 'Restart' : 'Start'} failed:`, err);
                 }
             });
-            actionsSection.appendChild(apiWindowItem);
-            if (window.electronNative && window.electronNative.getApiWindowVisible) {
-                window.electronNative.getApiWindowVisible().then((result) => {
-                    apiWindowVisible = !!(result && result.visible);
-                    const label = apiWindowItem.querySelector('span');
-                    if (label) {
-                        label.textContent = apiWindowVisible
-                            ? 'API-Fenster: sichtbar (klicken zum Verstecken)'
-                            : 'API-Fenster: versteckt (klicken zum Anzeigen)';
-                        if (typeof window.amsApplyI18nToDom === 'function') {
-                            window.amsApplyI18nToDom(apiWindowItem);
-                        }
-                    }
-                }).catch(() => {});
-            }
+            servicesItem.id = 'ams-services-menu-item';
+            servicesItem.dataset.restart = 'false';
+            actionsSection.appendChild(servicesItem);
         }
-
-        const soundSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
-        const soundOnInit = !(window.amsTelemetryState && window.amsTelemetryState.soundEnabled === false);
-        const soundItem = createMenuItem(
-            soundOnInit
-                ? 'Cache-Hit Sound: Aktiv (Cha-Ching)'
-                : 'Cache-Hit Sound: Stumm',
-            soundSvg,
-            () => {
-                if (typeof window.amsToggleCacheHitSound === 'function') {
-                    const nextOn = window.amsToggleCacheHitSound();
-                    const lbl = soundItem.querySelector('span');
-                    if (lbl) {
-                        lbl.textContent = nextOn
-                            ? 'Cache-Hit Sound: Aktiv (Cha-Ching)'
-                            : 'Cache-Hit Sound: Stumm';
-                        if (typeof window.amsApplyI18nToDom === 'function') {
-                            window.amsApplyI18nToDom(soundItem);
-                        }
-                    }
-                }
-            },
-            false,
-        );
-        actionsSection.appendChild(soundItem);
-
-        const langSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
-        const activeLang = (typeof window.amsGetLang === 'function') ? window.amsGetLang() : 'en';
-        const langItem = createMenuItem(
-            activeLang === 'de'
-                ? '🌐 Sprache: Deutsch (klicken für English)'
-                : '🌐 Language: English (click for Deutsch)',
-            langSvg,
-            async () => {
-                if (typeof window.amsToggleLang === 'function') {
-                    await window.amsToggleLang();
-                }
-            },
-            false,
-        );
-        actionsSection.appendChild(langItem);
 
         overlay.appendChild(actionsSection);
-        if (typeof window.amsApplyI18nToDom === 'function') {
-            window.amsApplyI18nToDom(overlay);
-        }
 
-        // Signature Footer ("Markenzeichen")
+        // Compact Footer
         const signatureFooter = document.createElement('div');
-        signatureFooter.style.display = 'flex';
-        signatureFooter.style.alignItems = 'center';
-        signatureFooter.style.justifyContent = 'space-between';
-        signatureFooter.style.borderTop = '1px solid rgba(255, 255, 255, 0.07)';
-        signatureFooter.style.paddingTop = '8px';
-        signatureFooter.style.marginTop = '2px';
-        signatureFooter.style.fontSize = '10px';
-        signatureFooter.style.color = 'rgba(255, 255, 255, 0.45)';
+        signatureFooter.style.cssText =
+            'display:flex;align-items:center;justify-content:space-between;' +
+            'border-top:1px solid rgba(255, 255, 255, 0.06);padding-top:6px;font-size:9.5px;color:rgba(255, 255, 255, 0.4);';
 
         const brandTag = document.createElement('span');
-        brandTag.textContent = 'Antigravity Unleashed · v2.24';
+        brandTag.textContent = 'Antigravity Unleashed · v2.26';
         signatureFooter.appendChild(brandTag);
 
         const repoLink = document.createElement('button');
         repoLink.type = 'button';
         repoLink.textContent = 'GitHub @EinMelih ↗';
-        repoLink.style.background = 'transparent';
-        repoLink.style.border = 'none';
-        repoLink.style.padding = '0';
-        repoLink.style.color = '#38bdf8';
-        repoLink.style.fontSize = '10px';
-        repoLink.style.fontWeight = '500';
-        repoLink.style.cursor = 'pointer';
+        repoLink.style.cssText =
+            'background:transparent;border:none;padding:0;color:#38bdf8;font-size:9.5px;font-weight:500;cursor:pointer;';
         repoLink.addEventListener('click', (e) => {
             e.stopPropagation();
             if (window.electronNative && typeof window.electronNative.openExternal === 'function') {
@@ -2014,7 +2107,7 @@
                     const labelSpan = svcItem.querySelector('span');
                     const iconSlot = svcItem.querySelector('svg');
                     if (labelSpan) {
-                        labelSpan.textContent = isOnline ? 'Hub & API Bridge neustarten' : 'Hub & API Bridge starten';
+                        labelSpan.textContent = isOnline ? 'Restart Hub & API Bridge' : 'Start Hub & API Bridge';
                     }
                     if (iconSlot && isOnline) {
                         iconSlot.outerHTML = restartSvg;
@@ -2045,21 +2138,21 @@
                     const ind = document.getElementById('ams-sync-indicator');
                     if (ind) {
                         if (statusInfo.status === 'ok') {
-                            ind.textContent = 'Sync OK';
+                            ind.textContent = 'Synced ✓';
                             ind.style.color = '#10b981';
                         } else if (statusInfo.status === 'conflict') {
-                            ind.textContent = 'Konflikt ⚠️';
+                            ind.textContent = 'Conflict ⚠️';
                             ind.style.color = '#f59e0b';
-                            ind.title = 'Konfliktdateien: ' + statusInfo.conflictFiles.join(', ');
+                            ind.title = 'Conflict files: ' + statusInfo.conflictFiles.join(', ');
                         } else {
-                            ind.textContent = 'Fehler';
+                            ind.textContent = 'Error';
                             ind.style.color = '#ef4444';
                         }
                     }
                 })
                 .catch(() => {
                     const ind = document.getElementById('ams-sync-indicator');
-                    if (ind) ind.textContent = 'Fehler';
+                    if (ind) ind.textContent = 'Error';
                 });
         }
     };

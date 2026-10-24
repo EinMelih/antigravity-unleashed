@@ -267,6 +267,39 @@
         ['Erfolg', 'Success'],
         ['Schleife erkannt', 'Loop Detected'],
         ['Start fehlgeschlagen', 'Failed to launch'],
+        ['AI-Engine & Commit-API', 'AI Engine & Commit API'],
+        ['API-Optionen ▾', 'API Options ▾'],
+        ['API-Optionen ▴', 'API Options ▴'],
+        ['⚡ Auto: Unleashed API → Lokal UI (Empfohlen)', '⚡ Auto: Unleashed API → Local UI (Recommended)'],
+        ['🌐 Unleashed Server API (/v1 Endpoint)', '🌐 Unleashed Server API (/v1 Endpoint)'],
+        ['🖥️ Direkt über Antigravity UI (Ohne Server)', '🖥️ Direct via Antigravity UI (Serverless)'],
+        ['📝 Ohne AI (Regelbasiert aus Git-Diff)', '📝 No AI (Rule-based from Git Diff)'],
+        ['⚡ Auto (Unleashed API → Lokal UI)', '⚡ Auto (Unleashed API → Local UI)'],
+        ['🌐 Unleashed Server API (/v1)', '🌐 Unleashed Server API (/v1)'],
+        ['🖥️ Lokal (Antigravity UI direkt)', '🖥️ Local (Direct Antigravity UI)'],
+        ['📝 Ohne AI (Regelbasiert)', '📝 No AI (Rule-based)'],
+        ['📝 Regelbasiert', '📝 Rule-based'],
+        ['⚙️ API & Modell', '⚙️ API & Model'],
+        ['AI-Engine:', 'AI Engine:'],
+        ['API Base-URL (OpenAI / Unleashed /v1):', 'API Base URL (OpenAI / Unleashed /v1):'],
+        ['API-Key / Bearer Token:', 'API Key / Bearer Token:'],
+        ['AI-Modell:', 'AI Model:'],
+        ['Commit-Stil:', 'Commit Style:'],
+        ['Kompakt (1 Zeile)', 'Concise (1 Line)'],
+        ['Detailliert (Body)', 'Detailed (Body)'],
+        ['🔌 Verbindung testen', '🔌 Test Connection'],
+        ['⏳ Teste...', '⏳ Testing...'],
+        ['✓ Speichern', '✓ Save'],
+        ['⚡ Server (.20:8001)', '⚡ Server (.20:8001)'],
+        ['🏠 Lokal (127.0.0.1:8001)', '🏠 Local (127.0.0.1:8001)'],
+        ['🖥️ Direkt UI', '🖥️ Direct UI'],
+        ['📝 Ohne AI', '📝 No AI'],
+        ['Aus (Regel)', 'Off (Rule)'],
+        ['Lokal UI', 'Local UI'],
+        ['Direkte lokale Antigravity-UI (ConnectRPC) wird verbunden...', 'Connecting to direct local Antigravity UI (ConnectRPC)...'],
+        ['Lokale AI analysiert Änderungen...', 'Local AI is analyzing changes...'],
+        ['Unleashed API nicht erreichbar – wechsle automatisch auf direkte lokale UI...', 'Unleashed API unreachable – automatically falling back to direct local UI...'],
+        ['Regelbasierte Commit-Message aus Git-Status erstellt.', 'Rule-based commit message generated from Git status.'],
     ];
 
     const AMS_DE_TO_EN = new Map();
@@ -640,15 +673,7 @@
     ];
 
     window.amsGetLang = function() {
-        try {
-            const stored = localStorage.getItem('ams_ui_lang');
-            if (stored === 'de' || stored === 'en') return stored;
-        } catch (_) {}
-        if (typeof nativeStorageItems === 'object' && nativeStorageItems) {
-            const nsLang = nativeStorageItems.antigravity_ui_lang;
-            if (nsLang === 'de' || nsLang === 'en') return nsLang;
-        }
-        return 'en'; // Default is English for open-source users
+        return 'en'; // Fixed to English for clean, consistent UI
     };
 
     window.amsTranslateString = function(str, targetLang) {

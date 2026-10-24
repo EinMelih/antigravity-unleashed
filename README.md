@@ -8,14 +8,14 @@
 
 [![Stars](https://img.shields.io/github/stars/EinMelih/antigravity-unleashed?style=flat-square&color=8B5CF6)](https://github.com/EinMelih/antigravity-unleashed/stargazers)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
-[![Target](https://img.shields.io/badge/Antigravity-v2.24.0-06B6D4?style=flat-square)](packages/desktop-ui-modifier/SUPPORTED_UPSTREAM_VERSION)
+[![Target](https://img.shields.io/badge/Antigravity-v2.26.0-06B6D4?style=flat-square)](packages/desktop-ui-modifier/SUPPORTED_UPSTREAM_VERSION)
 
 </div>
 
 ---
 
 > **Status: Open-Source Release / Community Handover**  
-> I built this setup for my own daily workflow with Google Antigravity (`v2.24.0`), but I'm no longer actively developing it. Between newer models needing less custom scaffolding, Google shipping the headless ACP server (`agy_acp_server.exe`), and tools like T3 Code handling multi-agent worktrees natively, I moved on.  
+> I built this setup for my own daily workflow with Google Antigravity (`v2.26.0`), but I'm no longer actively developing it. Between newer models needing less custom scaffolding, Google shipping the headless ACP server (`agy_acp_server.exe`), and tools like T3 Code handling multi-agent worktrees natively, I moved on.  
 > Several parts of this repo were vibe-coded and some features are unfinished. Feel free to fork it, fix rough edges, or open Pull Requests.
 
 > [!CAUTION]
@@ -35,7 +35,7 @@ This monorepo is cleanly split into **two independent operating modes**:
 antigravity-unleashed/
 ├── install.bat / install.ps1       # Windows setup: configures ~/.gemini/config & patches app.asar
 ├── packages/
-│   ├── desktop-ui-modifier/        # Clean Electron v2.24.0 app.asar UI mod (localhost autostart OFF by default)
+│   ├── desktop-ui-modifier/        # Clean Electron v2.26.0 app.asar UI mod (localhost autostart OFF by default)
 │   ├── web-hub/                    # Headless Linux Docker API (:8001) + pure API-Logs Monitor (:8000)
 │   └── ams-framework/              # Global agent rules, memory compiler (USER/MEMORY) & helper skills
 └── tests/                          # Privacy & portability verification suite
@@ -76,7 +76,7 @@ Designed to run 24/7 in a lightweight Linux Docker container (`python:3.12-slim`
 ## Quick Start
 
 ### A. Windows Desktop UI Modifier Only (`app.asar`)
-- **Windows 10/11** with **Google Antigravity IDE `v2.24.0`** installed in `%LOCALAPPDATA%\Programs\Antigravity`
+- **Windows 10/11** with **Google Antigravity IDE `v2.26.0`** installed in `%LOCALAPPDATA%\Programs\Antigravity`
 - **Python 3.11+** and **Node.js 20+** (`node` and `npx` on `PATH`)
 
 ```powershell
@@ -110,7 +110,7 @@ python packages/desktop-ui-modifier/scripts/repack_and_restart.py
 
 If you want to contribute or build on top of this, here is where things stand:
 
-- **Upstream Version Pinning (`v2.24.0`)**: The ASAR injector checks SHA-256 hashes of `dist/main.js`, `dist/ipcHandlers.js`, `dist/preload.js`, `dist/updater.js`, and `dist/utils.js`. When Google ships a new Antigravity version, `SUPPORTED_UPSTREAM_VERSION` and `UPSTREAM_COMPATIBILITY.json` need to be rebased.
+- **Upstream Version Pinning (`v2.26.0`)**: The ASAR injector checks SHA-256 hashes of `dist/main.js`, `dist/ipcHandlers.js`, `dist/preload.js`, `dist/updater.js`, and `dist/utils.js`. When Google ships a new Antigravity version, `SUPPORTED_UPSTREAM_VERSION` and `UPSTREAM_COMPATIBILITY.json` need to be rebased.
 - **Renderer Selectors**: Several UI hooks rely on DOM selectors (`button[aria-label="Add context"]`, `[data-testid="settings-button"]`) and CDP script evaluation that can break if upstream changes its React layout.
 - **Windows-Specific Process Management**: Process tree discovery, WMI/CIM queries, and PowerShell service launchers (`start_services.ps1`) are built for Windows and haven't been ported to macOS or Linux.
 - **Localization (`src/ui/i18n.js`)**: The injected UI defaults to **English (`en`)** out of the box and includes a 1-click **English ↔ Deutsch (`de`)** toggle inside the `Ctrl+Shift+B` Quick Menu (`🌐 Language`). Some backend error messages or legacy log strings may still appear in German.

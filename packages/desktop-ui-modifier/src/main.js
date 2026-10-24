@@ -58,6 +58,7 @@ const ideInstall_1 = require("./ideInstall");
 const provisionSplash_1 = require("./provisionSplash");
 const path = __importStar(require("path"));
 const wsl_1 = require("./wsl");
+const beyondcorpPac_1 = require("./beyondcorpPac");
 const amsMainBootstrap_1 = require("./amsMainBootstrap");
 (0, amsMainBootstrap_1.configureProfile)(paths_1);
 const gotTheLock = electron_1.app.requestSingleInstanceLock();
@@ -154,6 +155,12 @@ electron_1.app.on('open-url', (event, url) => {
     event.preventDefault();
     handleDeepLink(url);
 });
+electron_1.app.on('web-contents-created', (_event, contents) => {
+    if (contents.getType() !== 'webview') {
+        return;
+    }
+    void (0, beyondcorpPac_1.configureWebviewSessionProxy)(contents.session);
+});
 /**
  * App entry point. Runs once Electron has finished initializing.
  * Validates the LS binary, frees the port if needed, spawns the LS,
@@ -196,6 +203,10 @@ electron_1.app
     if (!HEADLESS) {
         await (0, ideInstall_1.maybeShowIdeInstallWizard)(storageManager);
     }
+    // Pre-configure the BeyondCorp PAC proxy on known <webview> partitions
+    // before any BrowserWindow or <webview> is created so the first shortlink
+    // navigation never races an in-flight setProxy call.
+    await (0, beyondcorpPac_1.preconfigureWebviewPartitionProxies)();
     if (DEV_URL) {
         console.log('Starting in dev mode with URL:', DEV_URL);
         (0, utils_1.createWindow)(DEV_URL, storageManager);
@@ -390,9 +401,6 @@ electron_1.app.on('window-all-closed', async () => {
     if (!runInBackground) {
         // Triggers 'before-quit' to run graceful cleanup without confirmation.
         electron_1.app.quit();
-    }
-    else {
-        electron_1.app.dock?.hide();
     }
 });
 /** Shuts down the host bridge server, if it was started. */

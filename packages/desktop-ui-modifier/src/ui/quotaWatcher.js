@@ -43,7 +43,12 @@
             const raw = localStorage.getItem('ams_ui_prefs_v1');
             if (!raw) return { ...DEFAULT_AMS_UI_PREFS };
             const parsed = JSON.parse(raw);
-            return { ...DEFAULT_AMS_UI_PREFS, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+            return {
+                ...DEFAULT_AMS_UI_PREFS,
+                ...(parsed && typeof parsed === 'object' ? parsed : {}),
+                showBrainIcon: false,
+                showPlanIcon: false,
+            };
         } catch (_) {
             return { ...DEFAULT_AMS_UI_PREFS };
         }
@@ -73,13 +78,7 @@
         repackInfo: { pending: false, repacking: false, title: '', details: '', runningChatsCount: 0 },
         liveOdometer: amsLiveOdometer,
         uiPrefs: loadAmsUiPrefs(),
-        soundEnabled: (() => {
-            try {
-                return localStorage.getItem('ams_cache_sound_enabled') !== '0';
-            } catch (_) {
-                return true;
-            }
-        })(),
+        soundEnabled: false,
     };
 
     window.amsTelemetryState = amsTelemetryState;

@@ -9,7 +9,7 @@ Dieses Skill-Paket patcht die lokal installierte Antigravity-Desktop-App. Es ist
 inoffizieller Windows-Workflow und macht weder Antigravity noch enthaltenen
 Google-Code automatisch zu Open Source.
 
-Der aktuelle Modifier ist ausschließlich für **Upstream v2.25.0** freigegeben. Die
+Der aktuelle Modifier ist ausschließlich für **Upstream v2.26.0** freigegeben. Die
 maschinenlesbare Quelle dafür ist `SUPPORTED_UPSTREAM_VERSION`. Eine andere
 installierte Version muss vor dem Repack hart abgewiesen werden.
 
@@ -98,7 +98,7 @@ python .\scripts\auto_repack_guard.py --status-json
    extrahieren und die Mindeststruktur validieren.
 6. `package.json` und die Hashes der überschriebenen Basisdateien gegen
    `SUPPORTED_UPSTREAM_VERSION` und `UPSTREAM_COMPATIBILITY.json` prüfen. Für
-   v2.25.0 muss exakt `2.25.0` mit dem freigegebenen Upstream-Build installiert sein.
+   v2.26.0 muss exakt `2.26.0` mit dem freigegebenen Upstream-Build installiert sein.
 7. Alle JavaScript-Quellen prüfen und das komplette Overlay in Staging kopieren.
    Ein einzelner `mkdir`-/`copy2`-/Pfadfehler beendet den Lauf mit Nonzero,
    bevor die App beendet oder ein Archiv gepackt wird.

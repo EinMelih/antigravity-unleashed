@@ -425,6 +425,9 @@ def get_repack_info(conv_dir: Path) -> dict:
     details = str(notice.get("details") or "").strip()
 
     try:
+        scripts_dir_str = str(Path(__file__).resolve().parent)
+        if scripts_dir_str not in sys.path:
+            sys.path.insert(0, scripts_dir_str)
         from auto_repack_guard import source_signature
         current_hash = source_signature()
         last_hash = ""

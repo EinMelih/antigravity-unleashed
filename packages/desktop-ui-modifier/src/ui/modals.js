@@ -608,8 +608,89 @@
 
         const actionsRow = document.createElement('div');
         actionsRow.style.display = 'flex';
-        actionsRow.style.justifyContent = 'flex-end';
+        actionsRow.style.alignItems = 'center';
+        actionsRow.style.justifyContent = 'space-between';
         actionsRow.style.gap = '10px';
+        actionsRow.style.flexWrap = 'wrap';
+
+        const aiQuickRow = document.createElement('div');
+        aiQuickRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+
+        const aiQuickLabel = document.createElement('span');
+        aiQuickLabel.style.cssText = 'font-size:11px;color:var(--muted-foreground, #a1a1aa);font-weight:500;';
+        aiQuickLabel.textContent = 'AI-Engine:';
+
+        const aiModalModeSelect = document.createElement('select');
+        aiModalModeSelect.setAttribute('aria-label', 'AI-Generator Modus');
+        aiModalModeSelect.style.cssText =
+            'padding:5px 8px;border-radius:6px;background:var(--background, #09090b);' +
+            'border:1px solid var(--border, #27272a);color:#e4e4e7;font-size:11px;outline:none;cursor:pointer;';
+        [
+            { value: 'auto', label: '⚡ Auto (Unleashed API → Lokal UI)' },
+            { value: 'unleashed_api', label: '🌐 Unleashed Server API (/v1)' },
+            { value: 'local_ui', label: '🖥️ Lokal (Antigravity UI direkt)' },
+            { value: 'off', label: '📝 Ohne AI (Regelbasiert)' },
+        ].forEach((opt) => {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            o.style.background = '#141417';
+            aiModalModeSelect.appendChild(o);
+        });
+
+        const openAiSettingsBtn = document.createElement('button');
+        openAiSettingsBtn.type = 'button';
+        openAiSettingsBtn.textContent = '⚙️ API & Modell';
+        openAiSettingsBtn.title = 'Unleashed API-URL, Token und AI-Modell konfigurieren';
+        openAiSettingsBtn.style.cssText =
+            'padding:5px 9px;border-radius:6px;background:rgba(56,189,248,0.1);' +
+            'border:1px solid rgba(56,189,248,0.3);color:#38bdf8;font-size:11px;font-weight:500;cursor:pointer;';
+        openAiSettingsBtn.addEventListener('click', () => {
+            window.__ams_open_ai_settings = true;
+            if (typeof window.toggleQuickMenu === 'function') {
+                const existingMenu = document.getElementById('antigravity-quick-menu-overlay');
+                if (existingMenu) existingMenu.remove();
+                window.toggleQuickMenu();
+            }
+        });
+
+        const syncAiButtonAppearance = (modeVal) => {
+            if (modeVal === 'off') {
+                aiBtn.innerHTML = '📝 Regelbasiert';
+                aiBtn.style.background = 'linear-gradient(135deg, #3f3f46 0%, #52525b 100%)';
+            } else {
+                aiBtn.innerHTML = '✨ AI Generieren';
+                aiBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)';
+            }
+        };
+
+        aiModalModeSelect.addEventListener('change', async () => {
+            const nextMode = aiModalModeSelect.value;
+            syncAiButtonAppearance(nextMode);
+            if (window.electronNative && window.electronNative.saveAiConfig) {
+                try {
+                    const res = await window.electronNative.saveAiConfig({ mode: nextMode });
+                    if (res && res.config) window.__ams_cached_ai_config = res.config;
+                } catch (_e) {}
+            }
+        });
+
+        if (window.electronNative && window.electronNative.getAiConfig) {
+            window.electronNative.getAiConfig().then((res) => {
+                if (res && res.config) {
+                    window.__ams_cached_ai_config = res.config;
+                    aiModalModeSelect.value = res.config.mode || 'auto';
+                    syncAiButtonAppearance(res.config.mode || 'auto');
+                }
+            }).catch(() => {});
+        }
+
+        aiQuickRow.appendChild(aiQuickLabel);
+        aiQuickRow.appendChild(aiModalModeSelect);
+        aiQuickRow.appendChild(openAiSettingsBtn);
+
+        const rightBtnsWrap = document.createElement('div');
+        rightBtnsWrap.style.cssText = 'display:flex;align-items:center;gap:10px;margin-left:auto;';
 
         const cancelBtn = document.createElement('button');
         cancelBtn.textContent = 'Abbrechen';
@@ -634,8 +715,10 @@
         syncSubmitBtn.style.cursor = 'pointer';
         syncSubmitBtn.style.outline = 'none';
 
-        actionsRow.appendChild(cancelBtn);
-        actionsRow.appendChild(syncSubmitBtn);
+        rightBtnsWrap.appendChild(cancelBtn);
+        rightBtnsWrap.appendChild(syncSubmitBtn);
+        actionsRow.appendChild(aiQuickRow);
+        actionsRow.appendChild(rightBtnsWrap);
 
         footer.appendChild(msgRow);
         footer.appendChild(thinkingLog);
@@ -1095,7 +1178,7 @@
             } finally {
                 aiBtn.disabled = false;
                 aiBtn.style.opacity = '1';
-                aiBtn.innerHTML = '✨ AI Generieren';
+                syncAiButtonAppearance(aiModalModeSelect.value);
                 if (progressHandler) {
                     window.electronNative.removeGenerateCommitProgressListener(progressHandler);
                     progressHandler = null;

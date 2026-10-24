@@ -1489,9 +1489,14 @@ function registerIpcHandlers(storageManager) {
                 return { status: 'success', totalInput: 0, totalOutput: 0, cacheRatio: 0 };
             }
 
-            const scriptPath = path.join(os.homedir(), '.gemini', 'config', 'skills', 'antigravity_desktop_ui_modifier', 'scripts', 'get_token_stats.py');
-            if (!fs_std.existsSync(scriptPath)) {
-                console.error('[AMS IPC] get_token_stats.py script not found at:', scriptPath);
+            const candidateScriptPaths = [
+                'Y:\\Projects\\antigravity-unleashed\\packages\\desktop-ui-modifier\\scripts\\get_token_stats.py',
+                'Y:\\Vault\\90_KI\\Skills\\antigravity_desktop_ui_modifier\\scripts\\get_token_stats.py',
+                path.join(os.homedir(), '.gemini', 'config', 'skills', 'antigravity_desktop_ui_modifier', 'scripts', 'get_token_stats.py'),
+            ];
+            const scriptPath = candidateScriptPaths.find((p) => fs_std.existsSync(p));
+            if (!scriptPath) {
+                console.error('[AMS IPC] get_token_stats.py script not found in candidates:', candidateScriptPaths);
                 return { status: 'error', message: 'Script not found' };
             }
 
@@ -1996,629 +2001,1078 @@ function registerIpcHandlers(storageManager) {
         }
     });
 
-    // Generate AI Commit Message using agentapi CLI
+    // =========================================================================
+    // Unleashed AI Engine & Configuration (Server API + Local UI + Rule-based)
+    // =========================================================================
+    const UNLEASHED_AI_MODES = new Set(['auto', 'unleashed_api', 'local_ui', 'off']);
+    const UNLEASHED_COMMIT_STYLES = new Set(['concise', 'detailed']);
+
+    function getUnleashedAiConfigPath() {
+        const os = require('os');
+        const path = require('path');
+        return path.join(os.homedir(), '.gemini', 'config', 'unleashed_ai_config.json');
+    }
+
+    function normalizeUnleashedBaseUrl(rawUrl) {
+        let url = String(rawUrl || '').trim().replace(/\/+$/, '');
+        if (!url) return process.env.UNLEASHED_API_URL || 'http://127.0.0.1:8001/v1';
+        if (url.endsWith('/chat/completions')) {
+            url = url.slice(0, -'/chat/completions'.length).replace(/\/+$/, '');
+        }
+        if (!url.endsWith('/v1') && !url.includes('/v1/')) {
+            url += '/v1';
+        }
+        return url;
+    }
+
+    function readDefaultHubToken() {
+        try {
+            const os = require('os');
+            const path = require('path');
+            const fs_std = require('fs');
+            const hubCfgPath = path.join(os.homedir(), '.gemini', 'config', 'antigravity-hub', 'config.json');
+            if (fs_std.existsSync(hubCfgPath)) {
+                const parsed = JSON.parse(fs_std.readFileSync(hubCfgPath, 'utf-8'));
+                if (parsed && typeof parsed.auth_token === 'string' && parsed.auth_token.trim()) {
+                    return parsed.auth_token.trim();
+                }
+            }
+        } catch (_e) {}
+        return 'ag-local-token';
+    }
+
+    function loadUnleashedAiConfig() {
+        const fs_std = require('fs');
+        const defaults = {
+            mode: 'auto',
+            apiUrl: process.env.UNLEASHED_API_URL || 'http://127.0.0.1:8001/v1',
+            apiKey: readDefaultHubToken(),
+            model: 'gemini-3.8-flash-medium',
+            commitStyle: 'concise',
+            revertEphemeral: true,
+        };
+        try {
+            const cfgPath = getUnleashedAiConfigPath();
+            if (!fs_std.existsSync(cfgPath)) {
+                return defaults;
+            }
+            const parsed = JSON.parse(fs_std.readFileSync(cfgPath, 'utf-8'));
+            if (!parsed || typeof parsed !== 'object') return defaults;
+            const mode = UNLEASHED_AI_MODES.has(parsed.mode) ? parsed.mode : defaults.mode;
+            const apiUrl = normalizeUnleashedBaseUrl(parsed.apiUrl || defaults.apiUrl);
+            const apiKey = typeof parsed.apiKey === 'string' ? parsed.apiKey.trim() : defaults.apiKey;
+            const model = (typeof parsed.model === 'string' && parsed.model.trim()) ? parsed.model.trim() : defaults.model;
+            const commitStyle = UNLEASHED_COMMIT_STYLES.has(parsed.commitStyle) ? parsed.commitStyle : defaults.commitStyle;
+            const revertEphemeral = parsed.revertEphemeral !== false;
+            return { mode, apiUrl, apiKey, model, commitStyle, revertEphemeral };
+        } catch (_e) {
+            return defaults;
+        }
+    }
+
+    function saveUnleashedAiConfig(patch) {
+        const fs_std = require('fs');
+        const path = require('path');
+        const current = loadUnleashedAiConfig();
+        const incoming = (patch && typeof patch === 'object') ? patch : {};
+        const updated = {
+            mode: UNLEASHED_AI_MODES.has(incoming.mode) ? incoming.mode : current.mode,
+            apiUrl: incoming.apiUrl !== undefined ? normalizeUnleashedBaseUrl(incoming.apiUrl) : current.apiUrl,
+            apiKey: typeof incoming.apiKey === 'string' ? incoming.apiKey.trim() : current.apiKey,
+            model: (typeof incoming.model === 'string' && incoming.model.trim()) ? incoming.model.trim() : current.model,
+            commitStyle: UNLEASHED_COMMIT_STYLES.has(incoming.commitStyle) ? incoming.commitStyle : current.commitStyle,
+            revertEphemeral: incoming.revertEphemeral !== undefined ? Boolean(incoming.revertEphemeral) : current.revertEphemeral,
+            updatedAt: new Date().toISOString(),
+        };
+        const cfgPath = getUnleashedAiConfigPath();
+        fs_std.mkdirSync(path.dirname(cfgPath), { recursive: true });
+        fs_std.writeFileSync(cfgPath, JSON.stringify(updated, null, 2), 'utf-8');
+        return updated;
+    }
+
+    function httpJsonRequest(urlString, options = {}) {
+        return new Promise((resolve, reject) => {
+            let parsedUrl;
+            try {
+                parsedUrl = new URL(urlString);
+            } catch (err) {
+                reject(new Error('Ungültige URL: ' + String(urlString)));
+                return;
+            }
+            const isHttps = parsedUrl.protocol === 'https:';
+            const client = isHttps ? require('https') : require('http');
+            const method = options.method || (options.body !== undefined ? 'POST' : 'GET');
+            const bodyString = options.body !== undefined
+                ? (typeof options.body === 'string' ? options.body : JSON.stringify(options.body))
+                : null;
+            const headers = Object.assign({
+                'Accept': 'application/json',
+            }, options.headers || {});
+            if (bodyString !== null) {
+                if (!headers['Content-Type'] && !headers['content-type']) {
+                    headers['Content-Type'] = 'application/json';
+                }
+                headers['Content-Length'] = String(Buffer.byteLength(bodyString, 'utf-8'));
+            }
+
+            const req = client.request({
+                protocol: parsedUrl.protocol,
+                hostname: parsedUrl.hostname,
+                port: parsedUrl.port || (isHttps ? 443 : 80),
+                path: parsedUrl.pathname + (parsedUrl.search || ''),
+                method,
+                headers,
+                rejectUnauthorized: options.rejectUnauthorized !== undefined ? options.rejectUnauthorized : !isHttps,
+            }, (res) => {
+                const chunks = [];
+                res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+                res.on('error', reject);
+                res.on('end', () => {
+                    const statusCode = Number(res.statusCode || 0);
+                    const rawText = Buffer.concat(chunks).toString('utf-8');
+                    let data = null;
+                    try {
+                        data = rawText ? JSON.parse(rawText) : {};
+                    } catch (_e) {
+                        data = { rawText };
+                    }
+                    if (statusCode < 200 || statusCode >= 300) {
+                        const detail = (data && (data.detail || (data.error && (data.error.message || data.error)))) || rawText.slice(0, 300) || `HTTP ${statusCode}`;
+                        const err = new Error(`HTTP ${statusCode}: ${detail}`);
+                        err.statusCode = statusCode;
+                        err.responseData = data;
+                        reject(err);
+                        return;
+                    }
+                    resolve({ statusCode, data, rawText, headers: res.headers });
+                });
+            });
+
+            const timeoutMs = Number(options.timeoutMs || 45000);
+            req.setTimeout(timeoutMs, () => {
+                req.destroy(new Error(`Zeitüberschreitung nach ${Math.round(timeoutMs / 1000)}s (${parsedUrl.host})`));
+            });
+            req.on('error', reject);
+            if (bodyString !== null) {
+                req.write(bodyString);
+            }
+            req.end();
+        });
+    }
+
+    async function deleteLocalCascadeTrajectory(cascadeId, csrfToken) {
+        const os = require('os');
+        const path = require('path');
+        const fs_std = require('fs');
+        if (!cascadeId) return { status: 'skipped' };
+
+        let lsPort = 0;
+        try {
+            const languageServer = require('./languageServer');
+            lsPort = Number(languageServer.getLsPort() || 0);
+        } catch (_e) {}
+
+        const finalCsrf = csrfToken || process.env.ANTIGRAVITY_CSRF_TOKEN || '';
+        let rpcDeleted = false;
+        let grpcStatus = 0;
+
+        if (lsPort && finalCsrf) {
+            // Try Connect JSON over HTTPS on lsPort first (Antigravity v2.24+)
+            try {
+                await httpJsonRequest(`https://127.0.0.1:${lsPort}/exa.language_server_pb.LanguageServerService/DeleteCascadeTrajectory`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Connect-Protocol-Version': '1',
+                        'x-codeium-csrf-token': finalCsrf,
+                    },
+                    body: { cascadeId },
+                    rejectUnauthorized: false,
+                    timeoutMs: 6000,
+                });
+                rpcDeleted = true;
+            } catch (_httpsErr) {
+                // Fallback to gRPC-Web binary frame on HTTPS lsPort or HTTP lsPort+1
+                const uuidBytes = Buffer.from(cascadeId, 'utf-8');
+                const body = Buffer.alloc(5 + 2 + uuidBytes.length);
+                body[0] = 0;
+                const length = 2 + uuidBytes.length;
+                body[1] = (length >> 24) & 0xff;
+                body[2] = (length >> 16) & 0xff;
+                body[3] = (length >> 8) & 0xff;
+                body[4] = length & 0xff;
+                body[5] = 0x0a;
+                body[6] = uuidBytes.length;
+                uuidBytes.copy(body, 7);
+
+                for (const candidate of [
+                    { proto: 'https', port: lsPort },
+                    { proto: 'http', port: lsPort + 1 },
+                ]) {
+                    try {
+                        const mod = candidate.proto === 'https' ? require('https') : require('http');
+                        await new Promise((resolve, reject) => {
+                            const req = mod.request({
+                                hostname: '127.0.0.1',
+                                port: candidate.port,
+                                path: '/exa.language_server_pb.LanguageServerService/DeleteCascadeTrajectory',
+                                method: 'POST',
+                                rejectUnauthorized: false,
+                                headers: {
+                                    'content-type': 'application/grpc-web+proto',
+                                    'x-grpc-web': '1',
+                                    'x-codeium-csrf-token': finalCsrf,
+                                    'content-length': String(body.length),
+                                },
+                            }, (res) => {
+                                const chunks = [];
+                                res.on('data', (c) => chunks.push(Buffer.from(c)));
+                                res.on('error', reject);
+                                res.on('end', () => {
+                                    const status = Number(res.statusCode || 0);
+                                    const buf = Buffer.concat(chunks);
+                                    if (status !== 200) {
+                                        reject(new Error(`HTTP ${status}`));
+                                        return;
+                                    }
+                                    const extracted = extractGrpcStatus(buf, res.headers, res.trailers);
+                                    if (extracted !== 0 && extracted !== null) {
+                                        reject(new Error(`gRPC ${extracted}`));
+                                        return;
+                                    }
+                                    grpcStatus = extracted || 0;
+                                    resolve();
+                                });
+                            });
+                            req.setTimeout(5000, () => req.destroy(new Error('timeout')));
+                            req.on('error', reject);
+                            req.write(body);
+                            req.end();
+                        });
+                        rpcDeleted = true;
+                        break;
+                    } catch (_e) {}
+                }
+            }
+        }
+
+        const conversationsRoot = profileDataPath('conversations');
+        const convoPbPath = path.join(conversationsRoot, cascadeId + '.pb');
+        const convoDbPath = path.join(conversationsRoot, cascadeId + '.db');
+        const cleanupErrors = [];
+        let quarantinedFiles = 0;
+
+        if (isPathInside(conversationsRoot, convoPbPath) && isPathInside(conversationsRoot, convoDbPath)) {
+            const localFiles = [
+                convoPbPath,
+                convoDbPath,
+                convoDbPath + '-shm',
+                convoDbPath + '-wal',
+            ].filter((candidate) => fs_std.existsSync(candidate));
+            if (localFiles.length) {
+                const quarantineRoot = profileDataPath('scratch', 'deleted-temp-conversations');
+                const quarantineDir = path.join(quarantineRoot, cascadeId + '-' + String(Date.now()));
+                if (isPathInside(quarantineRoot, quarantineDir)) {
+                    try {
+                        fs_std.mkdirSync(quarantineDir, { recursive: true });
+                        for (const localFile of localFiles) {
+                            const quarantineFile = path.join(quarantineDir, path.basename(localFile));
+                            try {
+                                fs_std.renameSync(localFile, quarantineFile);
+                                quarantinedFiles += 1;
+                            } catch (error) {
+                                try {
+                                    fs_std.unlinkSync(localFile);
+                                    quarantinedFiles += 1;
+                                } catch (_unlinkErr) {
+                                    cleanupErrors.push(path.basename(localFile) + ': ' + error.message);
+                                }
+                            }
+                        }
+                    } catch (_dirErr) {}
+                }
+            }
+        }
+
+        return {
+            status: cleanupErrors.length ? 'warning' : 'success',
+            rpcDeleted,
+            grpcStatus,
+            quarantinedFiles,
+            cleanupErrors,
+        };
+    }
+
+    async function callUnleashedServerApi({ baseUrl, apiKey, model, systemPrompt, userPrompt, revertEphemeral, onProgress }) {
+        const normalizedUrl = normalizeUnleashedBaseUrl(baseUrl);
+        if (typeof onProgress === 'function') {
+            onProgress(`Unleashed API (${normalizedUrl.replace(/^https?:\/\//, '')}) · Modell ${model}...`);
+        }
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-Source-Framework': 'unleashed-desktop',
+        };
+        if (apiKey) {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+            headers['X-Antigravity-Token'] = apiKey;
+        }
+        const messages = [];
+        if (systemPrompt) {
+            messages.push({ role: 'system', content: systemPrompt });
+        }
+        messages.push({ role: 'user', content: userPrompt });
+
+        const response = await httpJsonRequest(`${normalizedUrl}/chat/completions`, {
+            method: 'POST',
+            headers,
+            body: {
+                model: model || 'gemini-3.8-flash-medium',
+                messages,
+                stream: false,
+            },
+            timeoutMs: 45000,
+        });
+
+        const payload = response.data || {};
+        const choice = Array.isArray(payload.choices) && payload.choices.length > 0 ? payload.choices[0] : null;
+        const msgObj = (choice && choice.message) || {};
+        const text = String(msgObj.content || '').trim();
+        const reasoning = String(msgObj.reasoning_content || '').trim();
+        const conversationId = String(payload.conversation_id || '').trim();
+
+        if (reasoning && typeof onProgress === 'function') {
+            const firstReasoningLine = reasoning.split('\n').map(l => l.trim()).find(Boolean);
+            if (firstReasoningLine) {
+                onProgress('AI-Analyse: ' + firstReasoningLine.slice(0, 110));
+            }
+        }
+
+        if (!text) {
+            throw new Error('Unleashed API lieferte eine leere Antwort.');
+        }
+
+        if (conversationId && revertEphemeral !== false) {
+            httpJsonRequest(`${normalizedUrl}/chat/revert`, {
+                method: 'POST',
+                headers,
+                body: {
+                    conversation_id: conversationId,
+                    steps_back: 1,
+                    reason: 'ephemeral_desktop_helper',
+                },
+                timeoutMs: 8000,
+            }).catch(() => {});
+        }
+
+        return {
+            text,
+            provider: 'unleashed_api',
+            endpoint: normalizedUrl,
+            conversationId: '',
+        };
+    }
+
+    async function callLocalUiCompletion({ csrfToken, model, systemPrompt, userPrompt, onProgress }) {
+        let lsPort = 0;
+        try {
+            const languageServer = require('./languageServer');
+            lsPort = Number(languageServer.getLsPort() || 0);
+        } catch (_e) {}
+        if (!lsPort) {
+            throw new Error('Lokaler Antigravity LanguageServer-Port konnte nicht ermittelt werden.');
+        }
+        const finalCsrf = csrfToken || process.env.ANTIGRAVITY_CSRF_TOKEN || '';
+        if (!finalCsrf) {
+            throw new Error('Kein lokaler CSRF-Token für ConnectRPC verfügbar.');
+        }
+
+        const rpcHeaders = {
+            'Content-Type': 'application/json',
+            'Connect-Protocol-Version': '1',
+            'x-codeium-csrf-token': finalCsrf,
+        };
+        const rpcCall = async (methodName, bodyObj, timeoutMs = 15000) => {
+            const res = await httpJsonRequest(
+                `https://127.0.0.1:${lsPort}/exa.language_server_pb.LanguageServerService/${methodName}`,
+                {
+                    method: 'POST',
+                    headers: rpcHeaders,
+                    body: bodyObj || {},
+                    rejectUnauthorized: false,
+                    timeoutMs,
+                },
+            );
+            return res.data || {};
+        };
+
+        if (typeof onProgress === 'function') {
+            onProgress('Direkte lokale Antigravity-UI (ConnectRPC) wird verbunden...');
+        }
+
+        let modelEnum = 'MODEL_PLACEHOLDER_M319';
+        try {
+            const modelData = await rpcCall('GetCascadeModelConfigData', {}, 6000);
+            const configs = Array.isArray(modelData.clientModelConfigs) ? modelData.clientModelConfigs : [];
+            const needle = String(model || 'flash').toLowerCase();
+            let matched = configs.find((c) => {
+                const lbl = String(c.label || '').toLowerCase();
+                const mEnum = String((c.modelOrAlias && c.modelOrAlias.model) || '').toLowerCase();
+                return lbl.includes(needle) || mEnum === needle;
+            });
+            if (!matched) {
+                matched = configs.find((c) => String(c.label || '').toLowerCase().includes('flash'));
+            }
+            if (matched && matched.modelOrAlias && matched.modelOrAlias.model) {
+                modelEnum = matched.modelOrAlias.model;
+            }
+        } catch (_e) {}
+
+        const startRes = await rpcCall('StartCascade', {
+            metadata: {
+                ideName: 'antigravity',
+                apiKey: '',
+                locale: 'de',
+                ideVersion: '2.26.0',
+                extensionName: 'antigravity',
+            },
+            source: 'CORTEX_TRAJECTORY_SOURCE_CASCADE_CLIENT',
+            workspaceUris: [],
+            customAgent: {
+                name: 'Unleashed Helper',
+                systemPrompt: systemPrompt || '',
+                toolNames: [],
+                excludeDefaultComponents: true,
+                systemPromptConfig: { includeSections: [] },
+            },
+            knowledgeConfig: { enabled: false },
+            conversationHistoryConfig: { enabled: false },
+        }, 12000);
+
+        const cascadeId = String(startRes.cascadeId || '').trim();
+        if (!cascadeId) {
+            throw new Error('StartCascade hat keine cascadeId zurückgegeben.');
+        }
+
+        try {
+            temporaryConversationIds.register(cascadeId);
+        } catch (_e) {}
+
+        const combinedPrompt = systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt;
+        try {
+            if (typeof onProgress === 'function') {
+                onProgress('Lokale AI analysiert Änderungen...');
+            }
+            await rpcCall('SendUserCascadeMessage', {
+                cascadeId,
+                items: [{ text: combinedPrompt }],
+                metadata: {
+                    ideName: 'antigravity',
+                    apiKey: '',
+                    locale: 'de',
+                    ideVersion: '2.26.0',
+                    extensionName: 'antigravity',
+                },
+                cascadeConfig: {
+                    plannerConfig: {
+                        conversational: {
+                            plannerMode: 'CONVERSATIONAL_PLANNER_MODE_DEFAULT',
+                            agenticMode: false,
+                        },
+                        toolConfig: {},
+                        requestedModel: { model: modelEnum },
+                        ephemeralMessagesConfig: { enabled: false },
+                        knowledgeConfig: { enabled: false },
+                    },
+                    checkpointConfig: {},
+                    conversationHistoryConfig: { enabled: false },
+                },
+                blocking: false,
+                clientType: 1,
+                messageOrigin: 1,
+            }, 15000);
+
+            let finalResponseText = '';
+            let emittedThinking = false;
+            for (let attempt = 0; attempt < 75; attempt++) {
+                await new Promise((r) => setTimeout(r, 450));
+                try {
+                    const stepData = await rpcCall('GetCascadeTrajectorySteps', { cascadeId, stepOffset: 0 }, 8000);
+                    const steps = Array.isArray(stepData.steps) ? stepData.steps : [];
+                    for (let i = steps.length - 1; i >= 0; i--) {
+                        const st = steps[i];
+                        if (st && st.type === 'CORTEX_STEP_TYPE_PLANNER_RESPONSE') {
+                            const pr = st.plannerResponse || {};
+                            const thinking = String(pr.thinking || pr.Thinking || '').trim();
+                            if (thinking && !emittedThinking && typeof onProgress === 'function') {
+                                emittedThinking = true;
+                                const line = thinking.split('\n').map(l => l.trim()).find(Boolean);
+                                if (line) onProgress('AI denkt nach: ' + line.slice(0, 100));
+                            }
+                            const respText = String(pr.modifiedResponse || pr.response || pr.ModifiedResponse || pr.Response || '').trim();
+                            if (respText && (st.status === 'CORTEX_STEP_STATUS_DONE' || st.status === 3)) {
+                                finalResponseText = respText;
+                                break;
+                            }
+                        }
+                    }
+                    if (finalResponseText) break;
+                } catch (_pollErr) {}
+            }
+
+            if (!finalResponseText) {
+                throw new Error('Zeitüberschreitung beim Warten auf lokale Antigravity-Antwort.');
+            }
+
+            return {
+                text: finalResponseText,
+                provider: 'local_ui',
+                endpoint: `https://127.0.0.1:${lsPort}`,
+                conversationId: '',
+            };
+        } finally {
+            try {
+                await deleteLocalCascadeTrajectory(cascadeId, finalCsrf);
+                temporaryConversationIds.delete(cascadeId);
+            } catch (_cleanupErr) {}
+        }
+    }
+
+    async function runUnleashedAiCompletion({ systemPrompt, userPrompt, csrfToken, onProgress }) {
+        const cfg = loadUnleashedAiConfig();
+        if (cfg.mode === 'off') {
+            return { text: '', provider: 'off', config: cfg };
+        }
+
+        if (cfg.mode === 'unleashed_api') {
+            const res = await callUnleashedServerApi({
+                baseUrl: cfg.apiUrl,
+                apiKey: cfg.apiKey,
+                model: cfg.model,
+                systemPrompt,
+                userPrompt,
+                revertEphemeral: cfg.revertEphemeral,
+                onProgress,
+            });
+            return Object.assign(res, { config: cfg });
+        }
+
+        if (cfg.mode === 'local_ui') {
+            const res = await callLocalUiCompletion({
+                csrfToken,
+                model: cfg.model,
+                systemPrompt,
+                userPrompt,
+                onProgress,
+            });
+            return Object.assign(res, { config: cfg });
+        }
+
+        // Mode === 'auto': Try configured Unleashed API -> Localhost 8001 -> Local UI ConnectRPC
+        const candidateUrls = [cfg.apiUrl];
+        const localBridgeUrl = 'http://127.0.0.1:8001/v1';
+        if (normalizeUnleashedBaseUrl(cfg.apiUrl) !== localBridgeUrl) {
+            candidateUrls.push(localBridgeUrl);
+        }
+
+        let lastApiError = null;
+        for (const candidateUrl of candidateUrls) {
+            try {
+                const res = await callUnleashedServerApi({
+                    baseUrl: candidateUrl,
+                    apiKey: cfg.apiKey,
+                    model: cfg.model,
+                    systemPrompt,
+                    userPrompt,
+                    revertEphemeral: cfg.revertEphemeral,
+                    onProgress,
+                });
+                return Object.assign(res, { config: cfg });
+            } catch (apiErr) {
+                lastApiError = apiErr;
+            }
+        }
+
+        if (typeof onProgress === 'function') {
+            onProgress('Unleashed API nicht erreichbar – wechsle automatisch auf direkte lokale UI...');
+        }
+        try {
+            const res = await callLocalUiCompletion({
+                csrfToken,
+                model: cfg.model,
+                systemPrompt,
+                userPrompt,
+                onProgress,
+            });
+            return Object.assign(res, { config: cfg });
+        } catch (localErr) {
+            const combinedMsg = lastApiError
+                ? `Unleashed API (${lastApiError.message}) & Lokal UI (${localErr.message})`
+                : localErr.message;
+            throw new Error(combinedMsg);
+        }
+    }
+
+    function generateRuleBasedCommitMessage(workspaceChanges, configChanges, commitStyle = 'concise') {
+        const path = require('path');
+        const all = [
+            ...(Array.isArray(workspaceChanges) ? workspaceChanges : []),
+            ...(Array.isArray(configChanges) ? configChanges : []),
+        ];
+        if (all.length === 0) {
+            return 'chore: sync workspace updates';
+        }
+
+        const hasWorkspace = Array.isArray(workspaceChanges) && workspaceChanges.length > 0;
+        const hasConfig = Array.isArray(configChanges) && configChanges.length > 0;
+
+        const statuses = all.map(c => String(c.status || '').trim());
+        const addedCount = statuses.filter(s => s === 'A' || s === '??').length;
+        const deletedCount = statuses.filter(s => s === 'D').length;
+
+        let commitType = 'chore';
+        if (hasWorkspace) {
+            const files = workspaceChanges.map(c => String(c.file || '').toLowerCase());
+            if (files.every(f => f.endsWith('.md'))) {
+                commitType = 'docs';
+            } else if (files.every(f => f.includes('test'))) {
+                commitType = 'test';
+            } else if (addedCount > workspaceChanges.length / 2) {
+                commitType = 'feat';
+            } else if (deletedCount === workspaceChanges.length) {
+                commitType = 'chore';
+            } else {
+                commitType = 'fix';
+            }
+        } else if (hasConfig) {
+            commitType = 'chore';
+        }
+
+        let scope = 'sync';
+        const primaryList = hasWorkspace ? workspaceChanges : configChanges;
+        if (!hasWorkspace && hasConfig) {
+            scope = 'config';
+        } else if (primaryList.length > 0) {
+            const firstFile = String(primaryList[0].file || '').replace(/\\/g, '/');
+            const parts = firstFile.split('/').filter(Boolean);
+            const base = path.basename(firstFile, path.extname(firstFile));
+            if (parts.includes('ui')) scope = 'ui';
+            else if (parts.includes('web-hub')) scope = 'hub';
+            else if (parts.includes('desktop-ui-modifier')) scope = 'desktop';
+            else if (parts.includes('skills')) scope = 'skills';
+            else if (base && base.length <= 16) scope = base.toLowerCase().replace(/[^a-z0-9-_]/g, '');
+        }
+
+        const uniqueNames = [];
+        for (const item of primaryList) {
+            const base = path.basename(String(item.file || '').replace(/\\/g, '/'), path.extname(String(item.file || '')));
+            if (base && !uniqueNames.includes(base)) {
+                uniqueNames.push(base);
+            }
+            if (uniqueNames.length >= 2) break;
+        }
+
+        let actionVerb = 'update';
+        if (addedCount === primaryList.length) actionVerb = 'add';
+        else if (deletedCount === primaryList.length) actionVerb = 'remove';
+
+        const targetDesc = uniqueNames.length > 0
+            ? uniqueNames.join(' and ')
+            : `${primaryList.length} files`;
+        const extraSuffix = primaryList.length > 2 ? ` (+${primaryList.length - 2} more)` : '';
+        const headerLine = `${commitType}(${scope}): ${actionVerb} ${targetDesc}${extraSuffix}`.slice(0, 72);
+
+        if (commitStyle !== 'detailed') {
+            return headerLine;
+        }
+
+        const bullets = all.slice(0, 4).map((item) => {
+            const st = item.status === '??' || item.status === 'A' ? 'add' : (item.status === 'D' ? 'remove' : 'update');
+            return `- ${st} ${String(item.file || '').replace(/\\/g, '/')}`;
+        });
+        return `${headerLine}\n\n${bullets.join('\n')}`;
+    }
+
+    electron_1.ipcMain.handle('ai:get-config', async (event) => {
+        try {
+            validateOrigin(event);
+            const config = loadUnleashedAiConfig();
+            return {
+                status: 'success',
+                config,
+                presets: [
+                    { id: 'server_lan', label: 'Auto (Unleashed API -> Local UI)', mode: 'auto', apiUrl: config.apiUrl },
+                    { id: 'local_bridge', label: 'Lokaler API-Server (127.0.0.1:8001)', mode: 'unleashed_api', apiUrl: 'http://127.0.0.1:8001/v1' },
+                    { id: 'local_ui', label: 'Direkt über Antigravity UI (Ohne API-Server)', mode: 'local_ui', apiUrl: config.apiUrl },
+                    { id: 'off', label: 'Ohne AI (Regelbasiert)', mode: 'off', apiUrl: config.apiUrl },
+                ],
+            };
+        } catch (err) {
+            return { status: 'error', message: err.message };
+        }
+    });
+
+    electron_1.ipcMain.handle('ai:save-config', async (event, patch) => {
+        try {
+            validateOrigin(event);
+            const config = saveUnleashedAiConfig(patch);
+            return { status: 'success', config };
+        } catch (err) {
+            return { status: 'error', message: err.message };
+        }
+    });
+
+    electron_1.ipcMain.handle('ai:test-connection', async (event, overrideCfg, csrfToken) => {
+        try {
+            validateOrigin(event);
+            const current = loadUnleashedAiConfig();
+            const cfg = Object.assign({}, current, (overrideCfg && typeof overrideCfg === 'object') ? overrideCfg : {});
+            const startedAt = Date.now();
+
+            if (cfg.mode === 'off') {
+                return {
+                    status: 'success',
+                    provider: 'off',
+                    latencyMs: 0,
+                    models: [],
+                    message: 'AI deaktiviert – Regelbasierter Commit-Generator ist aktiv.',
+                };
+            }
+
+            const testUnleashedUrl = async (rawUrl) => {
+                const baseUrl = normalizeUnleashedBaseUrl(rawUrl);
+                const headers = {};
+                if (cfg.apiKey) {
+                    headers['Authorization'] = `Bearer ${cfg.apiKey}`;
+                    headers['X-Antigravity-Token'] = cfg.apiKey;
+                }
+                const t0 = Date.now();
+                const res = await httpJsonRequest(`${baseUrl}/models`, {
+                    method: 'GET',
+                    headers,
+                    timeoutMs: 6000,
+                });
+                const latencyMs = Date.now() - t0;
+                const list = Array.isArray(res.data && res.data.data) ? res.data.data : [];
+                const models = list.map(m => String(m.id || '')).filter(Boolean);
+                return {
+                    status: 'success',
+                    provider: 'unleashed_api',
+                    endpoint: baseUrl,
+                    latencyMs,
+                    models,
+                    message: `Unleashed API online (${latencyMs} ms · ${models.length} Modelle)`,
+                };
+            };
+
+            const testLocalUi = async () => {
+                let lsPort = 0;
+                try {
+                    const languageServer = require('./languageServer');
+                    lsPort = Number(languageServer.getLsPort() || 0);
+                } catch (_e) {}
+                if (!lsPort) {
+                    throw new Error('LanguageServer-Port nicht gefunden.');
+                }
+                const finalCsrf = csrfToken || process.env.ANTIGRAVITY_CSRF_TOKEN || '';
+                const t0 = Date.now();
+                const res = await httpJsonRequest(
+                    `https://127.0.0.1:${lsPort}/exa.language_server_pb.LanguageServerService/GetCascadeModelConfigData`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Connect-Protocol-Version': '1',
+                            'x-codeium-csrf-token': finalCsrf,
+                        },
+                        body: {},
+                        rejectUnauthorized: false,
+                        timeoutMs: 6000,
+                    },
+                );
+                const latencyMs = Date.now() - t0;
+                const configs = Array.isArray(res.data && res.data.clientModelConfigs) ? res.data.clientModelConfigs : [];
+                const models = configs.map(c => String(c.label || (c.modelOrAlias && c.modelOrAlias.model) || '')).filter(Boolean);
+                return {
+                    status: 'success',
+                    provider: 'local_ui',
+                    endpoint: `https://127.0.0.1:${lsPort}`,
+                    latencyMs,
+                    models,
+                    message: `Lokale Antigravity UI bereit (${latencyMs} ms · Port ${lsPort})`,
+                };
+            };
+
+            if (cfg.mode === 'unleashed_api') {
+                return await testUnleashedUrl(cfg.apiUrl);
+            }
+            if (cfg.mode === 'local_ui') {
+                return await testLocalUi();
+            }
+
+            // mode === 'auto'
+            try {
+                return await testUnleashedUrl(cfg.apiUrl);
+            } catch (primaryErr) {
+                const localUrl = 'http://127.0.0.1:8001/v1';
+                if (normalizeUnleashedBaseUrl(cfg.apiUrl) !== localUrl) {
+                    try {
+                        return await testUnleashedUrl(localUrl);
+                    } catch (_e) {}
+                }
+                const localRes = await testLocalUi();
+                localRes.message = `Auto-Fallback → ${localRes.message} (API offline: ${primaryErr.message})`;
+                return localRes;
+            }
+        } catch (err) {
+            return { status: 'error', message: err.message };
+        }
+    });
+
+    // Generate AI Commit Message via Unleashed API / Local UI / Rule-based fallback
     electron_1.ipcMain.handle('git:generate-commit-msg', async (event, conversationId, csrfToken) => {
         console.log('[AMS IPC Git] git:generate-commit-msg CALLED with convoId:', conversationId);
         try {
             validateOrigin(event);
-            console.log('[AMS IPC Git] validateOrigin passed');
             const os = require('os');
             const path = require('path');
             const fs_std = require('fs');
+            const sender = event.sender;
+            const sendProgress = (msg) => {
+                try {
+                    if (sender && (!sender.isDestroyed || !sender.isDestroyed())) {
+                        sender.send('git:generate-commit-progress', String(msg || ''));
+                    }
+                } catch (_e) {}
+            };
 
+            const configRepoPath = path.join(os.homedir(), '.gemini', 'config');
             const workspaceRepoPath = await resolveWorkspacePath(conversationId);
-            console.log('[AMS IPC Git] resolveWorkspacePath:', workspaceRepoPath);
-            if (!workspaceRepoPath || !fs_std.existsSync(path.join(workspaceRepoPath, '.git'))) {
+            const hasWorkspaceGit = Boolean(workspaceRepoPath && fs_std.existsSync(path.join(workspaceRepoPath, '.git')));
+            const hasConfigGit = Boolean(configRepoPath && fs_std.existsSync(path.join(configRepoPath, '.git')));
+
+            if (!hasWorkspaceGit && !hasConfigGit) {
                 return { status: 'error', message: 'Kein aktiver Workspace oder Git-Repository vorhanden.' };
             }
 
-            let diffText = '';
-            try {
-                const { stdout } = await execFilePromise('git', ['diff', 'HEAD'], { cwd: workspaceRepoPath });
-                diffText = stdout;
-                if (!diffText.trim()) {
-                    const unstaged = await execFilePromise('git', ['diff'], { cwd: workspaceRepoPath });
-                    diffText = unstaged.stdout;
-                }
-                if (!diffText.trim()) {
-                    const statusCheck = await execFilePromise('git', ['status', '--porcelain'], { cwd: workspaceRepoPath });
-                    diffText = "Geänderte Dateien:\n" + statusCheck.stdout;
-                }
-            } catch (e) {
-                diffText = 'Konnte Diff nicht lesen.';
+            let workspaceChanges = [];
+            let configChanges = [];
+            const diffSections = [];
+
+            const collectRepoDiff = async (repoPath, label, repoTag) => {
+                const changes = [];
+                try {
+                    const { stdout } = await execFilePromise('git', ['status', '--porcelain'], { cwd: repoPath });
+                    const lines = stdout.split('\n').map(l => l.trim()).filter(Boolean);
+                    for (const line of lines) {
+                        changes.push({
+                            status: line.substring(0, 2).trim(),
+                            file: line.substring(2).trim(),
+                            repo: repoTag,
+                        });
+                    }
+                    if (changes.length > 0) {
+                        let repoDiff = '';
+                        try {
+                            const dHead = await execFilePromise('git', ['diff', 'HEAD'], { cwd: repoPath });
+                            repoDiff = dHead.stdout || '';
+                        } catch (_e) {}
+                        if (!repoDiff.trim()) {
+                            try {
+                                const dUnstaged = await execFilePromise('git', ['diff'], { cwd: repoPath });
+                                repoDiff = dUnstaged.stdout || '';
+                            } catch (_e) {}
+                        }
+                        const statusSummary = changes.map(c => `${c.status} ${c.file}`).join('\n');
+                        const truncatedDiff = repoDiff.length > 4500 ? repoDiff.substring(0, 4500) + '\n... (Diff gekürzt)' : repoDiff;
+                        diffSections.push(
+                            `=== ${label} (${path.basename(repoPath)}) ===\nGeänderte Dateien:\n${statusSummary}\n\nDiff:\n${truncatedDiff || '(Neue/ungetrackte Dateien)'}`
+                        );
+                    }
+                } catch (_e) {}
+                return changes;
+            };
+
+            if (hasWorkspaceGit) {
+                workspaceChanges = await collectRepoDiff(workspaceRepoPath, 'Workspace Repository', 'workspace');
+            }
+            if (hasConfigGit) {
+                configChanges = await collectRepoDiff(configRepoPath, 'Config Repository (~/.gemini/config)', 'config');
             }
 
-            if (diffText.length > 6000) {
-                diffText = diffText.substring(0, 6000) + '\n... (Diff gekürzt)';
+            if (workspaceChanges.length === 0 && configChanges.length === 0) {
+                return { status: 'error', message: 'Keine Änderungen gefunden' };
             }
 
-            const agentapiPath = profileDataPath('bin', 'agentapi.bat');
-            if (!fs_std.existsSync(agentapiPath)) {
-                return { status: 'error', message: 'agentapi.bat wurde nicht gefunden.' };
+            const aiCfg = loadUnleashedAiConfig();
+            sendProgress(
+                `${workspaceChanges.length + configChanges.length} geänderte Datei(en) analysiert · Modus: ${
+                    aiCfg.mode === 'auto' ? 'Auto (Unleashed API → Lokal UI)' :
+                    aiCfg.mode === 'unleashed_api' ? 'Unleashed Server API' :
+                    aiCfg.mode === 'local_ui' ? 'Lokal (Antigravity UI)' : 'Regelbasiert (Ohne AI)'
+                }`
+            );
+
+            if (aiCfg.mode === 'off') {
+                const ruleMsg = generateRuleBasedCommitMessage(workspaceChanges, configChanges, aiCfg.commitStyle);
+                sendProgress('Regelbasierte Commit-Message aus Git-Status erstellt.');
+                return { status: 'success', commitMessage: ruleMsg, provider: 'off', convoId: '' };
             }
 
-            const prompt = "Schreibe eine detaillierte, aber präzise Git-Commit-Message in englischer Sprache für das folgende Git-Diff. Der Aufbau MUSS dem Conventional-Commits-Standard entsprechen:\n" +
-                           "1. Eine kurze, aussagekräftige Titelzeile im Imperativ (z. B. 'feat(tracker): add diff viewer', maximal 72 Zeichen).\n" +
-                           "2. Eine Leerzeile.\n" +
-                           "3. Ein detaillierter Body mit kurzen, stichpunktartigen Erklärungen der konkreten Code-Änderungen (jeweils mit einem Spiegelstrich '- ' eingeleitet). Beschreibe knapp, was geändert wurde und warum, aber fasse dich kurz und übertreibe nicht (maximal 2 bis 4 Spiegelstriche).\n\n" +
-                           "Antworte AUSSCHLIESSLICH mit der fertigen Git-Commit-Message und absolut nichts anderem (keine Markdown-Backticks, kein einleitender Text, direkt der reine Text):\n\n" + diffText;
+            const diffPayload = diffSections.join('\n\n').slice(0, 7500);
+            const isDetailed = aiCfg.commitStyle === 'detailed';
+            const systemPrompt = isDetailed
+                ? 'You are a senior developer assistant that writes clean, accurate Conventional Commit messages in English. Reply ONLY with the raw commit message (no markdown code blocks, no intro text).'
+                : 'You are a senior developer assistant that writes ultra-concise, accurate one-line Conventional Commit messages in English (3 to 8 words, max 72 characters). Never output markdown backticks, quotes, or multi-line explanations.';
 
-            const tempScriptPath = path.join(os.tmpdir(), `gen_commit_${Date.now()}.py`);
-            const escapedPrompt = prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
-            const pythonCode =
-                "import subprocess\n" +
-                "import json\n" +
-                "import time\n" +
-                "import os\n" +
-                "import sqlite3\n" +
-                "import sys\n" +
-                "import re\n\n" +
-                "sys.stdout.reconfigure(encoding='utf-8')\n" +
-                "print('PROGRESS: Workspace-Status und Git-Projekt ermitteln...', flush=True)\n" +
-                "def decode_varint(data, pos):\n" +
-                "    res = 0\n" +
-                "    shift = 0\n" +
-                "    while True:\n" +
-                "        if pos >= len(data): return None, pos\n" +
-                "        b = data[pos]\n" +
-                "        res |= (b & 0x7f) << shift\n" +
-                "        pos += 1\n" +
-                "        if not (b & 0x80): break\n" +
-                "        shift += 7\n" +
-                "    return res, pos\n\n" +
-                "def parse_protobuf(data):\n" +
-                "    pos = 0\n" +
-                "    fields = []\n" +
-                "    while pos < len(data):\n" +
-                "        key, pos = decode_varint(data, pos)\n" +
-                "        if key is None: break\n" +
-                "        wire_type = key & 0x07\n" +
-                "        field_number = key >> 3\n" +
-                "        if wire_type == 0:\n" +
-                "            val, pos = decode_varint(data, pos)\n" +
-                "            if val is None: break\n" +
-                "            fields.append((field_number, wire_type, val))\n" +
-                "        elif wire_type == 1:\n" +
-                "            if pos + 8 > len(data): break\n" +
-                "            val = data[pos:pos+8]\n" +
-                "            pos += 8\n" +
-                "            fields.append((field_number, wire_type, val))\n" +
-                "        elif wire_type == 2:\n" +
-                "            length, pos = decode_varint(data, pos)\n" +
-                "            if length is None or pos + length > len(data): break\n" +
-                "            val = data[pos:pos+length]\n" +
-                "            pos += length\n" +
-                "            fields.append((field_number, wire_type, val))\n" +
-                "        elif wire_type == 5:\n" +
-                "            if pos + 4 > len(data): break\n" +
-                "            val = data[pos:pos+4]\n" +
-                "            pos += 4\n" +
-                "            fields.append((field_number, wire_type, val))\n" +
-                "        else: break\n" +
-                "    return fields\n\n" +
-                "def get_text(payload):\n" +
-                "    outer_fields = parse_protobuf(payload)\n" +
-                "    for fn, wt, val in outer_fields:\n" +
-                "        if fn == 20 and wt == 2:\n" +
-                "            inner_fields = parse_protobuf(val)\n" +
-                "            for inner_fn, inner_wt, inner_val in inner_fields:\n" +
-                "                if inner_fn == 1 and inner_wt == 2:\n" +
-                "                    try: return inner_val.decode('utf-8')\n" +
-                "                    except Exception: pass\n" +
-                "    return None\n\n" +
-                "prompt = \"\"\"" + escapedPrompt + "\"\"\"\n" +
-                "for k in list(os.environ.keys()):\n" +
-                "    if any(x in k.upper() for x in ['GEMINI', 'WORKSPACE', 'PROJECT', 'CODEIUM']):\n" +
-                "        if k not in ('ANTIGRAVITY_LS_ADDRESS', 'ANTIGRAVITY_CSRF_TOKEN', 'ANTIGRAVITY_DATA_DIR'):\n" +
-                "            del os.environ[k]\n" +
-                "active_convo_id = \"" + conversationId + "\"\n" +
-                "db_path = os.path.join(os.environ.get('ANTIGRAVITY_DATA_DIR', os.path.expanduser('~/.gemini/antigravity')), 'conversations', f'{active_convo_id}.db')\n" +
-                "project_id = ''\n" +
-                "workspace_id = ''\n" +
-                "if os.path.exists(db_path):\n" +
-                "    try:\n" +
-                "        db_uri = db_path.replace('\\\\\\\\', '/').replace('\\\\', '/')\n" +
-                "        conn = sqlite3.connect(f'file:{db_uri}?mode=ro', uri=True, timeout=1.0)\n" +
-                "        row = conn.execute(\"SELECT data FROM trajectory_metadata_blob WHERE id = 'main'\").fetchone()\n" +
-                "        conn.close()\n" +
-                "        if row:\n" +
-                "            blob = row[0]\n" +
-                "            ascii_text = ''.join(chr(b) if 32 <= b <= 126 else '\\x00' for b in blob)\n" +
-                "            uuids = re.findall(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', ascii_text, re.IGNORECASE)\n" +
-                "            if len(uuids) >= 2:\n" +
-                "                workspace_id = uuids[0]\n" +
-                "                project_id = uuids[1]\n" +
-                "            elif len(uuids) == 1:\n" +
-                "                workspace_id = uuids[0]\n" +
-                "                project_id = uuids[0]\n" +
-                "    except Exception: pass\n" +
-                "if project_id: os.environ['ANTIGRAVITY_PROJECT_ID'] = project_id\n" +
-                "if workspace_id: os.environ['ANTIGRAVITY_WORKSPACE_ID'] = workspace_id\n" +
-                "print('PROGRESS: Projekt- und Workspace-IDs aufgelöst.', flush=True)\n" +
-                "print('PROGRESS: Neue AI-Konversation wird initiiert...', flush=True)\n" +
-                "ls_exe = os.path.join(os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), 'AppData', 'Local'), 'Programs', 'Antigravity', 'resources', 'bin', 'language_server.exe')\n" +
-                "cmd = [ls_exe, 'agentapi', 'new-conversation', '--model=flash', prompt]\n" +
-                "res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', cwd=os.path.expanduser('~'))\n" +
-                "try:\n" +
-                "    out = json.loads(res.stdout)\n" +
-                "    convo_id = out['response']['newConversation']['conversationId']\n" +
-                "except Exception as e:\n" +
-                "    print('ERROR: Failed to start conversation:', res.stderr, res.stdout)\n" +
-                "    sys.exit(1)\n\n" +
-                "print('PROGRESS: Konversation gestartet. Warte auf AI-Denkvorgänge...', flush=True)\n" +
-                "db_path = os.path.join(os.environ.get('ANTIGRAVITY_DATA_DIR', os.path.expanduser('~/.gemini/antigravity')), 'conversations', f'{convo_id}.db')\n" +
-                "txt = None\n" +
-                "seen_steps = set()\n" +
-                "for _ in range(80):\n" +
-                "    if os.path.exists(db_path):\n" +
-                "        try:\n" +
-                "            db_uri = db_path.replace('\\\\\\\\', '/').replace('\\\\', '/')\n" +
-                "            conn = sqlite3.connect(f'file:{db_uri}?mode=ro', uri=True, timeout=1.0)\n" +
-                "            rows = conn.execute('SELECT idx, step_type, status, step_payload FROM steps ORDER BY idx ASC').fetchall()\n" +
-                "            for idx, step_type, status, payload in rows:\n" +
-                "                if idx in seen_steps:\n" +
-                "                    continue\n" +
-                "                seen_steps.add(idx)\n" +
-                "                if step_type == 17:\n" +
-                "                    strings = []\n" +
-                "                    for match in re.finditer(rb'[\\\\x20-\\\\x7E]{4,}', payload):\n" +
-                "                        try: strings.append(match.group(0).decode('ascii'))\n" +
-                "                        except: pass\n" +
-                "                    tool_name = None\n" +
-                "                    args_json = None\n" +
-                "                    known_tools = ['view_file', 'write_to_file', 'replace_file_content', 'multi_replace_file_content', 'run_command', 'grep_search', 'list_dir', 'read_file']\n" +
-                "                    for s in strings:\n" +
-                "                        if s in known_tools:\n" +
-                "                            tool_name = s\n" +
-                "                        elif s.startswith('{') and s.endswith('}'):\n" +
-                "                            args_json = s\n" +
-                "                    if tool_name:\n" +
-                "                        target_info = ''\n" +
-                "                        if args_json:\n" +
-                "                            try:\n" +
-                "                                args = json.loads(args_json)\n" +
-                "                                target_path = args.get('TargetFile') or args.get('AbsolutePath') or args.get('CommandLine') or args.get('SearchPath') or args.get('DirectoryPath')\n" +
-                "                                if target_path:\n" +
-                "                                    if tool_name == 'run_command':\n" +
-                "                                        target_info = f' ({target_path[:40]}...)'\n" +
-                "                                    else:\n" +
-                "                                        target_info = f' ({os.path.basename(target_path)})'\n" +
-                "                            except: pass\n" +
-                "                        print(f'PROGRESS: AI führt Tool aus: {tool_name}{target_info}', flush=True)\n" +
-                "                elif step_type == 15 and status == 5:\n" +
-                "                    print('PROGRESS: AI analysiert Änderungen und denkt nach...', flush=True)\n" +
-                "            rows_final = conn.execute('SELECT idx, step_payload FROM steps WHERE step_type=15 AND status=3').fetchall()\n" +
-                "            if rows_final:\n" +
-                "                payload = rows_final[-1][1]\n" +
-                "                txt = get_text(payload)\n" +
-                "                if txt:\n" +
-                "                    conn.close()\n" +
-                "                    break\n" +
-                "            conn.close()\n" +
-                "        except Exception: pass\n" +
-                "    time.sleep(0.5)\n\n" +
-                "if txt:\n" +
-                "    print('PROGRESS: Commit-Message empfangen, schließe Chat...', flush=True)\n" +
-                "    convo_pb_path = os.path.join(os.environ.get('ANTIGRAVITY_DATA_DIR', os.path.expanduser('~/.gemini/antigravity')), 'conversations', f'{convo_id}.pb')\n" +
-                "    try:\n" +
-                "        with open(convo_pb_path, 'wb') as f: f.write(b'')\n" +
-                "    except: pass\n" +
-                "    ls_address = os.environ.get('ANTIGRAVITY_LS_ADDRESS', '')\n" +
-                "    csrf_token = os.environ.get('ANTIGRAVITY_CSRF_TOKEN', '')\n" +
-                "    if ls_address:\n" +
-                "        try:\n" +
-                "            import urllib.request\n" +
-                "            uuidBytes = convo_id.encode('utf-8')\n" +
-                "            body = bytearray(5 + 2 + len(uuidBytes))\n" +
-                "            body[0] = 0\n" +
-                "            length = 2 + len(uuidBytes)\n" +
-                "            body[1] = (length >> 24) & 0xff\n" +
-                "            body[2] = (length >> 16) & 0xff\n" +
-                "            body[3] = (length >> 8) & 0xff\n" +
-                "            body[4] = length & 0xff\n" +
-                "            body[5] = 0x0a\n" +
-                "            body[6] = len(uuidBytes)\n" +
-                "            body[7:] = uuidBytes\n" +
-                "            req = urllib.request.Request(\n" +
-                "                f'http://{ls_address}/exa.language_server_pb.LanguageServerService/DeleteCascadeTrajectory',\n" +
-                "                data=bytes(body),\n" +
-                "                headers={\n" +
-                "                    'content-type': 'application/grpc-web+proto',\n" +
-                "                    'x-grpc-web': '1',\n" +
-                "                    'x-codeium-csrf-token': csrf_token\n" +
-                "                },\n" +
-                "                method='POST'\n" +
-                "            )\n" +
-                "            with urllib.request.urlopen(req) as response: pass\n" +
-                "        except: pass\n" +
-                "    time.sleep(1.5)\n" +
-                "    for suffix in ['', '-shm', '-wal']:\n" +
-                "        fpath = db_path + suffix\n" +
-                "        if os.path.exists(fpath):\n" +
-                "            try: os.remove(fpath)\n" +
-                "            except: pass\n" +
-                "    if os.path.exists(convo_pb_path):\n" +
-                "        try: os.remove(convo_pb_path)\n" +
-                "        except: pass\n" +
-                "    print('PROGRESS: Bereinigung abgeschlossen.', flush=True)\n" +
-                "    out_data = {'commitMessage': txt.strip(), 'convoId': convo_id}\n" +
-                "    print(json.dumps(out_data))\n" +
-                "    sys.exit(0)\n" +
-                "for suffix in ['', '-shm', '-wal']:\n" +
-                "    fpath = db_path + suffix\n" +
-                "    if os.path.exists(fpath):\n" +
-                "        try: os.remove(fpath)\n" +
-                "        except: pass\n" +
-                "print('ERROR: Timeout waiting for response')\n" +
-                "sys.exit(1)\n";
-
-            fs_std.writeFileSync(tempScriptPath, pythonCode, 'utf-8');
+            const userPrompt = isDetailed
+                ? (
+                    'Write a Conventional Commit message in English for the following Git changes:\n' +
+                    '1. A concise imperative title line (e.g. "feat(ui): add unleashed ai api selector", max 72 chars).\n' +
+                    '2. A blank line.\n' +
+                    '3. 2 to 4 brief bullet points ("- ") summarizing the key changes.\n\n' +
+                    'Output ONLY the raw commit message:\n\n' + diffPayload
+                )
+                : (
+                    'Write ONE single, concise Conventional Commit line in English (3 to 8 words, max 72 chars, e.g. "feat(git): use unleashed api for commit messages" or "fix(ipc): support local ui fallback").\n' +
+                    'Output ONLY the single line without quotes or backticks:\n\n' + diffPayload
+                );
 
             let commitMessage = '';
-            let convoId = '';
-
-            let lsAddress = '';
+            let providerUsed = aiCfg.mode;
             try {
-                const languageServer = require('./languageServer');
-                const lsPort = languageServer.getLsPort();
-                if (lsPort) {
-                    lsAddress = `127.0.0.1:${lsPort + 1}`;
+                const aiRes = await runUnleashedAiCompletion({
+                    systemPrompt,
+                    userPrompt,
+                    csrfToken,
+                    onProgress: sendProgress,
+                });
+                commitMessage = String(aiRes.text || '').trim();
+                providerUsed = aiRes.provider || aiCfg.mode;
+            } catch (aiErr) {
+                if (aiCfg.mode === 'auto') {
+                    sendProgress(`AI-Endpunkte nicht erreichbar (${aiErr.message}) – nutze regelbasierten Fallback...`);
+                    commitMessage = generateRuleBasedCommitMessage(workspaceChanges, configChanges, aiCfg.commitStyle);
+                    providerUsed = 'rule_fallback';
+                } else {
+                    throw aiErr;
                 }
-            } catch (e) {
-                console.error('[AMS IPC Git] Failed to determine LS Port:', e);
             }
 
-            const envCopy = Object.assign({}, process.env);
-            envCopy.ANTIGRAVITY_DATA_DIR = profileDataPath();
-            if (lsAddress) {
-                envCopy.ANTIGRAVITY_LS_ADDRESS = lsAddress;
-            }
-            const finalCsrf = csrfToken || process.env.ANTIGRAVITY_CSRF_TOKEN;
-            if (finalCsrf) {
-                envCopy.ANTIGRAVITY_CSRF_TOKEN = finalCsrf;
-            }
+            commitMessage = commitMessage
+                .replace(/^```[a-z]*\n?/i, '')
+                .replace(/\n?```$/i, '')
+                .replace(/^['"`]+|['"`]+$/g, '')
+                .replace(/^conventional commit:\s*/i, '')
+                .trim();
 
-            try {
-                const { spawn } = require('child_process');
-                console.log('[AMS IPC Git] Spawning Python:', getPythonPath(), tempScriptPath);
-                const child = spawn(getPythonPath(), [tempScriptPath], { env: envCopy });
-                console.log('[AMS IPC Git] Child PID:', child.pid);
-
-                let stdoutData = '';
-                let stderrData = '';
-                const sender = event.sender;
-
-                child.stdout.on('data', (data) => {
-                    const lines = data.toString().split('\n');
-                    lines.forEach(line => {
-                        const trimmed = line.trim();
-                        if (trimmed.startsWith('PROGRESS:')) {
-                            const progressMsg = trimmed.replace('PROGRESS:', '').trim();
-                            try {
-                                sender.send('git:generate-commit-progress', progressMsg);
-                            } catch (e) {
-                                console.error('[AMS IPC Git] Failed to send progress:', e);
-                            }
-                        } else if (trimmed) {
-                            stdoutData += line + '\n';
-                        }
-                    });
-                });
-
-                child.stderr.on('data', (data) => {
-                    stderrData += data.toString();
-                });
-
-                const exitCode = await new Promise((resolve, reject) => {
-                    const killTimer = setTimeout(() => {
-                        try { child.kill('SIGTERM'); } catch(e) {}
-                        setTimeout(() => { try { child.kill('SIGKILL'); } catch(e) {} }, 2000);
-                        reject(new Error('Python script timed out after 120 seconds'));
-                    }, 120000);
-                    child.on('close', (code) => {
-                        clearTimeout(killTimer);
-                        resolve(code);
-                    });
-                    child.on('error', (err) => {
-                        clearTimeout(killTimer);
-                        reject(err);
-                    });
-                });
-
-                if (exitCode !== 0 || stdoutData.trim().startsWith('ERROR:')) {
-                    throw new Error(stdoutData + '\n' + stderrData);
-                }
-
-                const parsedResult = JSON.parse(stdoutData.trim());
-                commitMessage = parsedResult.commitMessage || '';
-                convoId = parsedResult.convoId ? temporaryConversationIds.register(parsedResult.convoId) : '';
-            } finally {
-                try {
-                    fs_std.unlinkSync(tempScriptPath);
-                } catch (e) {}
+            if (!isDetailed && commitMessage.includes('\n')) {
+                commitMessage = commitMessage.split('\n').map(l => l.trim()).find(Boolean) || commitMessage;
             }
 
-            commitMessage = commitMessage.replace(/^['"`]+|['"`]+$/g, '').trim();
-            commitMessage = commitMessage.replace(/^conventional commit:\s*/i, '').trim();
-
-            return { status: 'success', commitMessage, convoId };
+            sendProgress('Bereinigung abgeschlossen.');
+            return { status: 'success', commitMessage, provider: providerUsed, convoId: '' };
         } catch (err) {
             console.error('[AMS IPC Git] git:generate-commit-msg failed:', err);
-            const detailedMessage = err.message + '\nStdout: ' + (err.stdout || '') + '\nStderr: ' + (err.stderr || '');
-            return { status: 'error', message: detailedMessage };
+            return { status: 'error', message: err.message };
         }
     });
 
     electron_1.ipcMain.handle('git:consolidate-memory', async (event, conversationId, csrfToken) => {
         try {
             validateOrigin(event);
-            const os = require('os');
             const path = require('path');
             const fs_std = require('fs');
 
-            const agentapiPath = profileDataPath('bin', 'agentapi.bat');
-            if (!fs_std.existsSync(agentapiPath)) {
-                return { status: 'error', message: 'agentapi.bat wurde nicht gefunden.' };
+            const aiCfg = loadUnleashedAiConfig();
+            if (aiCfg.mode === 'off') {
+                return { found: false };
             }
 
-            const tempScriptPath = path.join(os.tmpdir(), `consolidate_${Date.now()}.py`);
-            const pythonCode =
-                "import subprocess\n" +
-                "import json\n" +
-                "import time\n" +
-                "import os\n" +
-                "import sqlite3\n" +
-                "import sys\n" +
-                "import re\n\n" +
-                "sys.stdout.reconfigure(encoding='utf-8')\n" +
-                "def decode_varint(data, pos):\n" +
-                "    res = 0\n" +
-                "    shift = 0\n" +
-                "    while True:\n" +
-                "        if pos >= len(data): return None, pos\n" +
-                "        b = data[pos]\n" +
-                "        res |= (b & 0x7f) << shift\n" +
-                "        pos += 1\n" +
-                "        if not (b & 0x80): break\n" +
-                "        shift += 7\n" +
-                "    return res, pos\n\n" +
-                "def parse_protobuf(data):\n" +
-                "    pos = 0\n" +
-                "    fields = []\n" +
-                "    while pos < len(data):\n" +
-                "        key, pos = decode_varint(data, pos)\n" +
-                "        if key is None: break\n" +
-                "        wire_type = key & 0x07\n" +
-                "        field_number = key >> 3\n" +
-                "        if wire_type == 0:\n" +
-                "            val, pos = decode_varint(data, pos)\n" +
-                "            if val is None: break\n" +
-                "            fields.append((field_number, wire_type, val))\n" +
-                "        elif wire_type == 1:\n" +
-                "            if pos + 8 > len(data): break\n" +
-                "            val = data[pos:pos+8]\n" +
-                "            pos += 8\n" +
-                "            fields.append((field_number, wire_type, val))\n" +
-                "        elif wire_type == 2:\n" +
-                "            length, pos = decode_varint(data, pos)\n" +
-                "            if length is None or pos + length > len(data): break\n" +
-                "            val = data[pos:pos+length]\n" +
-                "            pos += length\n" +
-                "            fields.append((field_number, wire_type, val))\n" +
-                "        elif wire_type == 5:\n" +
-                "            if pos + 4 > len(data): break\n" +
-                "            val = data[pos:pos+4]\n" +
-                "            pos += 4\n" +
-                "            fields.append((field_number, wire_type, val))\n" +
-                "        else: break\n" +
-                "    return fields\n\n" +
-                "def get_text_from_payload(payload, step_type):\n" +
-                "    outer_fields = parse_protobuf(payload)\n" +
-                "    if not outer_fields: return None\n" +
-                "    if step_type == 15:\n" +
-                "        for fn, wt, val in outer_fields:\n" +
-                "            if fn == 20 and wt == 2:\n" +
-                "                inner_fields = parse_protobuf(val)\n" +
-                "                if inner_fields:\n" +
-                "                    for inner_fn, inner_wt, inner_val in inner_fields:\n" +
-                "                        if inner_fn == 1 and inner_wt == 2:\n" +
-                "                            try: return inner_val.decode('utf-8')\n" +
-                "                            except: pass\n" +
-                "    elif step_type == 14:\n" +
-                "        for fn, wt, val in outer_fields:\n" +
-                "            if fn == 19 and wt == 2:\n" +
-                "                inner_fields = parse_protobuf(val)\n" +
-                "                if inner_fields:\n" +
-                "                    for inner_fn, inner_wt, inner_val in inner_fields:\n" +
-                "                        if inner_fn == 2 and inner_wt == 2:\n" +
-                "                            try: return inner_val.decode('utf-8')\n" +
-                "                            except: pass\n" +
-                "    for fn, wt, val in outer_fields:\n" +
-                "        if wt == 2 and len(val) > 2:\n" +
-                "            try:\n" +
-                "                decoded = val.decode('utf-8')\n" +
-                "                if any(c.isalnum() for c in decoded) and len(decoded) < 5000:\n" +
-                "                    if not decoded.startswith('file://') and not re.match(r'^[a-f0-9-]{36}$', decoded):\n" +
-                "                        return decoded\n" +
-                "            except: pass\n" +
-                "    return None\n\n" +
-                "convo_id = \"" + conversationId + "\"\n" +
-                "db_path = os.path.join(os.environ.get('ANTIGRAVITY_DATA_DIR', os.path.expanduser('~/.gemini/antigravity')), 'conversations', f'{convo_id}.db')\n" +
-                "if not os.path.exists(db_path):\n" +
-                "    db_path = os.path.join(os.environ.get('ANTIGRAVITY_DATA_DIR', os.path.expanduser('~/.gemini/antigravity')), 'conversations', f'{convo_id}.db')\n\n" +
-                "history_entries = []\n" +
-                "project_id = ''\n" +
-                "workspace_id = ''\n\n" +
-                "if os.path.exists(db_path):\n" +
-                "    try:\n" +
-                "        conn = sqlite3.connect(db_path)\n" +
-                "        row = conn.execute(\"SELECT data FROM trajectory_metadata_blob WHERE id = 'main'\").fetchone()\n" +
-                "        if row:\n" +
-                "            blob = row[0]\n" +
-                "            ascii_text = ''.join(chr(b) if 32 <= b <= 126 else '\\\\x00' for b in blob)\n" +
-                "            uuids = re.findall(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', ascii_text, re.IGNORECASE)\n" +
-                "            if len(uuids) >= 2:\n" +
-                "                workspace_id = uuids[0]\n" +
-                "                project_id = uuids[1]\n" +
-                "            elif len(uuids) == 1:\n" +
-                "                workspace_id = uuids[0]\n" +
-                "                project_id = uuids[0]\n" +
-                "        rows = conn.execute(\"SELECT step_type, step_payload FROM steps WHERE step_type IN (14, 15) AND status = 3 ORDER BY idx DESC LIMIT 10\").fetchall()\n" +
-                "        rows.reverse()\n" +
-                "        for step_type, payload in rows:\n" +
-                "            txt = get_text_from_payload(payload, step_type)\n" +
-                "            if txt:\n" +
-                "                role = 'User' if step_type == 14 else 'Assistant'\n" +
-                "                history_entries.append(f'{role}: {txt}')\n" +
-                "        conn.close()\n" +
-                "    except Exception as e: pass\n\n" +
-                "if project_id: os.environ['ANTIGRAVITY_PROJECT_ID'] = project_id\n" +
-                "if workspace_id: os.environ['ANTIGRAVITY_WORKSPACE_ID'] = workspace_id\n\n" +
-                "convo_text = '\\n\\n'.join(history_entries)\n" +
-                "prompt = ( \n" +
-                "    'Du bist ein Programmier-Assistent, der das Langzeitgedächtnis eines Entwicklers pflegt.\\n' \n" +
-                "    'Analysiere den folgenden Verlauf der Konversation. Bestimme, ob darin wichtige technische Erkenntnisse (z.B. Fehlerbehebungen, Escaping-Tricks, CSS-Verhalten, spezielle Parameter) oder neue Benutzerpräferenzen erarbeitet wurden.\\n' \n" +
-                "    'Falls ja, formuliere einen kurzen, prägnanten Bulletpoint im Markdown-Format (max. 150 Zeichen), der diese Erkenntnis beschreibt.\\n' \n" +
-                "    'Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt. Verwende keine Backticks oder Markdown-Formatting um das JSON herum. Das JSON muss exakt dieses Schema haben:\\n' \n" +
-                "    '{\\n' \n" +
-                "    '  \\\"found\\\": true,\\n' \n" +
-                "    '  \\\"type\\\": \\\"lesson_learned\\\" oder \\\"preference\\\",\\n' \n" +
-                "    '  \\\"proposed_text\\\": \\\"Der Bulletpoint-Text\\\"\\n' \n" +
-                "    '}\\n' \n" +
-                "    'Wenn keine nennenswerten Erkenntnisse oder Präferenzen erarbeitet wurden, antworte exakt mit:\\n' \n" +
-                "    '{\\n' \n" +
-                "    '  \\\"found\\\": false\\n' \n" +
-                "    '}\\n\\n' \n" +
-                "    'Verlauf der Konversation:\\n' \n" +
-                "    ) + convo_text\n\n" +
-                "ls_exe = os.path.join(os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), 'AppData', 'Local'), 'Programs', 'Antigravity', 'resources', 'bin', 'language_server.exe')\n" +
-                "cmd = [ls_exe, 'agentapi', 'new-conversation', '--model=flash', prompt]\n" +
-                "res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', cwd=os.path.expanduser('~'))\n" +
-                "try:\n" +
-                "    out = json.loads(res.stdout)\n" +
-                "    new_convo_id = out['response']['newConversation']['conversationId']\n" +
-                "except Exception as e:\n" +
-                "    print(json.dumps({'found': False, 'error': 'Failed to start conversation'}))\n" +
-                "    sys.exit(0)\n\n" +
-                "new_db_path = os.path.join(os.environ.get('ANTIGRAVITY_DATA_DIR', os.path.expanduser('~/.gemini/antigravity')), 'conversations', f'{new_convo_id}.db')\n" +
-                "txt = None\n" +
-                "for _ in range(40):\n" +
-                "    if os.path.exists(new_db_path):\n" +
-                "        try:\n" +
-                "            conn = sqlite3.connect(new_db_path)\n" +
-                "            rows = conn.execute('SELECT idx, step_payload FROM steps WHERE step_type=15 AND status=3').fetchall()\n" +
-                "            if rows:\n" +
-                "                payload = rows[-1][1]\n" +
-                "                txt = get_text_from_payload(payload, 15)\n" +
-                "                if txt:\n" +
-                "                    conn.close()\n" +
-                "                    break\n" +
-                "        except Exception: pass\n" +
-                "    time.sleep(0.5)\n\n" +
-                "if txt:\n" +
-                "    convo_pb_path = os.path.join(os.environ.get('ANTIGRAVITY_DATA_DIR', os.path.expanduser('~/.gemini/antigravity')), 'conversations', f'{new_convo_id}.pb')\n" +
-                "    try:\n" +
-                "        with open(convo_pb_path, 'wb') as f: f.write(b'')\n" +
-                "    except: pass\n" +
-                "    ls_address = os.environ.get('ANTIGRAVITY_LS_ADDRESS', '')\n" +
-                "    csrf_token = os.environ.get('ANTIGRAVITY_CSRF_TOKEN', '')\n" +
-                "    if ls_address:\n" +
-                "        try:\n" +
-                "            import urllib.request\n" +
-                "            uuidBytes = new_convo_id.encode('utf-8')\n" +
-                "            body = bytearray(5 + 2 + len(uuidBytes))\n" +
-                "            body[0] = 0\n" +
-                "            length = 2 + len(uuidBytes)\n" +
-                "            body[1] = (length >> 24) & 0xff\n" +
-                "            body[2] = (length >> 16) & 0xff\n" +
-                "            body[3] = (length >> 8) & 0xff\n" +
-                "            body[4] = length & 0xff\n" +
-                "            body[5] = 0x0a\n" +
-                "            body[6] = len(uuidBytes)\n" +
-                "            body[7:] = uuidBytes\n" +
-                "            req = urllib.request.Request(\n" +
-                "                f'http://{ls_address}/exa.language_server_pb.LanguageServerService/DeleteCascadeTrajectory',\n" +
-                "                data=bytes(body),\n" +
-                "                headers={\n" +
-                "                    'content-type': 'application/grpc-web+proto',\n" +
-                "                    'x-grpc-web': '1',\n" +
-                "                    'x-codeium-csrf-token': csrf_token\n" +
-                "                },\n" +
-                "                method='POST'\n" +
-                "            )\n" +
-                "            with urllib.request.urlopen(req) as response: pass\n" +
-                "        except: pass\n" +
-                "    time.sleep(1.5)\n" +
-                "    for suffix in ['', '-shm', '-wal']:\n" +
-                "        fpath = new_db_path + suffix\n" +
-                "        if os.path.exists(fpath):\n" +
-                "            try: os.remove(fpath)\n" +
-                "            except: pass\n" +
-                "    if os.path.exists(convo_pb_path):\n" +
-                "        try: os.remove(convo_pb_path)\n" +
-                "        except: pass\n" +
-                "    txt_clean = txt.strip()\n" +
-                "    if txt_clean.startswith('```json'):\n" +
-                "        txt_clean = txt_clean.split('```json')[1].split('```')[0].strip()\n" +
-                "    elif txt_clean.startswith('```'):\n" +
-                "        txt_clean = txt_clean.split('```')[1].split('```')[0].strip()\n" +
-                "    try:\n" +
-                "        parsed = json.loads(txt_clean)\n" +
-                "        parsed['convoId'] = new_convo_id\n" +
-                "        print(json.dumps(parsed))\n" +
-                "    except Exception as parse_err:\n" +
-                "        print(json.dumps({'found': True, 'type': 'lesson_learned', 'proposed_text': txt_clean, 'convoId': new_convo_id}))\n" +
-                "    sys.exit(0)\n" +
-                "for suffix in ['', '-shm', '-wal']:\n" +
-                "    fpath = new_db_path + suffix\n" +
-                "    if os.path.exists(fpath):\n" +
-                "        try: os.remove(fpath)\n" +
-                "        except: pass\n" +
-                "print(json.dumps({'found': False, 'error': 'Timeout waiting for response'}))\n" +
-                "sys.exit(0)\n";
-
-            fs_std.writeFileSync(tempScriptPath, pythonCode, 'utf-8');
-
-            let lsAddress = '';
+            // Collect last conversation messages either via local ConnectRPC or SQLite .db fallback
+            const historyEntries = [];
+            let lsPort = 0;
             try {
                 const languageServer = require('./languageServer');
-                const lsPort = languageServer.getLsPort();
-                if (lsPort) {
-                    lsAddress = `127.0.0.1:${lsPort + 1}`;
-                }
-            } catch (e) {}
+                lsPort = Number(languageServer.getLsPort() || 0);
+            } catch (_e) {}
+            const finalCsrf = csrfToken || process.env.ANTIGRAVITY_CSRF_TOKEN || '';
 
-            const envCopy = Object.assign({}, process.env);
-            envCopy.ANTIGRAVITY_DATA_DIR = profileDataPath();
-            if (lsAddress) {
-                envCopy.ANTIGRAVITY_LS_ADDRESS = lsAddress;
-            }
-            const finalCsrf = csrfToken || process.env.ANTIGRAVITY_CSRF_TOKEN;
-            if (finalCsrf) {
-                envCopy.ANTIGRAVITY_CSRF_TOKEN = finalCsrf;
-            }
-
-            let result = { found: false };
-            try {
-                const { stdout, stderr } = await execFilePromise(
-                    getPythonPath(),
-                    [tempScriptPath],
-                    { env: envCopy, windowsHide: true, timeout: 30000, maxBuffer: 10 * 1024 * 1024 },
-                );
-                result = JSON.parse(stdout.trim());
-            } catch (err) {
-                console.error('[AMS IPC Memory] Memory consolidation failed:', err);
-                result = { found: false, error: err.message };
-            } finally {
+            if (lsPort && finalCsrf && conversationId) {
                 try {
-                    fs_std.unlinkSync(tempScriptPath);
-                } catch (e) {}
+                    const stepRes = await httpJsonRequest(
+                        `https://127.0.0.1:${lsPort}/exa.language_server_pb.LanguageServerService/GetCascadeTrajectorySteps`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Connect-Protocol-Version': '1',
+                                'x-codeium-csrf-token': finalCsrf,
+                            },
+                            body: { cascadeId: conversationId, stepOffset: 0 },
+                            rejectUnauthorized: false,
+                            timeoutMs: 8000,
+                        },
+                    );
+                    const steps = Array.isArray(stepRes.data && stepRes.data.steps) ? stepRes.data.steps : [];
+                    for (const st of steps.slice(-14)) {
+                        if (!st) continue;
+                        if (st.type === 'CORTEX_STEP_TYPE_USER_INPUT' && st.userInput) {
+                            const items = Array.isArray(st.userInput.items) ? st.userInput.items : [];
+                            const txt = items.map(it => it.text || '').join(' ').trim();
+                            if (txt) historyEntries.push(`User: ${txt.slice(0, 1200)}`);
+                        } else if (st.type === 'CORTEX_STEP_TYPE_PLANNER_RESPONSE' && st.plannerResponse) {
+                            const txt = String(st.plannerResponse.modifiedResponse || st.plannerResponse.response || '').trim();
+                            if (txt) historyEntries.push(`Assistant: ${txt.slice(0, 1200)}`);
+                        }
+                    }
+                } catch (_rpcErr) {}
             }
 
-            if (result && result.convoId) {
-                result.convoId = temporaryConversationIds.register(result.convoId);
+            if (historyEntries.length === 0) {
+                return { found: false };
             }
-            return result;
+
+            const convoText = historyEntries.slice(-10).join('\n\n');
+            const systemPrompt =
+                'Du bist ein Programmier-Assistent, der das Langzeitgedächtnis eines Entwicklers pflegt. Antworte AUSSCHLIESSLICH mit validem JSON ohne Markdown-Backticks.';
+            const userPrompt =
+                'Analysiere den folgenden Verlauf der Konversation. Bestimme, ob darin wichtige technische Erkenntnisse (z.B. Fehlerbehebungen, Escaping-Tricks, CSS-Verhalten, spezielle Parameter) oder neue Benutzerpräferenzen erarbeitet wurden.\n' +
+                'Falls ja, formuliere einen kurzen, prägnanten Bulletpoint im Markdown-Format (max. 150 Zeichen), der diese Erkenntnis beschreibt.\n' +
+                'Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt:\n' +
+                '{\n' +
+                '  "found": true,\n' +
+                '  "type": "lesson_learned" oder "preference",\n' +
+                '  "proposed_text": "Der Bulletpoint-Text"\n' +
+                '}\n' +
+                'Wenn keine nennenswerten Erkenntnisse oder Präferenzen erarbeitet wurden, antworte exakt mit:\n' +
+                '{\n' +
+                '  "found": false\n' +
+                '}\n\n' +
+                'Verlauf der Konversation:\n' + convoText;
+
+            const aiRes = await runUnleashedAiCompletion({
+                systemPrompt,
+                userPrompt,
+                csrfToken: finalCsrf,
+            });
+
+            let txtClean = String(aiRes.text || '').trim();
+            if (txtClean.startsWith('```json')) {
+                txtClean = txtClean.split('```json')[1].split('```')[0].trim();
+            } else if (txtClean.startsWith('```')) {
+                txtClean = txtClean.split('```')[1].split('```')[0].trim();
+            }
+
+            try {
+                const parsed = JSON.parse(txtClean);
+                return {
+                    found: Boolean(parsed.found),
+                    type: parsed.type || 'lesson_learned',
+                    proposed_text: parsed.proposed_text || '',
+                };
+            } catch (_parseErr) {
+                return { found: false };
+            }
         } catch (err) {
             console.error('[AMS IPC Memory] Outer handle failed:', err);
             return { found: false, error: err.message };
@@ -2696,124 +3150,13 @@ function registerIpcHandlers(storageManager) {
     electron_1.ipcMain.handle('git:delete-temp-conversation', async (event, convoId, csrfToken) => {
         try {
             validateOrigin(event);
-            const os = require('os');
-            const path = require('path');
-            const fs_std = require('fs');
-
             const safeConvoId = temporaryConversationIds.require(convoId);
             if (typeof csrfToken !== 'string' || csrfToken.length === 0 || csrfToken.length > 512) {
                 throw new Error('Invalid CSRF token.');
             }
-            const conversationsRoot = profileDataPath('conversations');
-            const convoPbPath = path.join(conversationsRoot, safeConvoId + '.pb');
-            const convoDbPath = path.join(conversationsRoot, safeConvoId + '.db');
-            if (!isPathInside(conversationsRoot, convoPbPath) || !isPathInside(conversationsRoot, convoDbPath)) {
-                throw new Error('Conversation path escapes the conversation store.');
-            }
-
-            let lsAddress = '';
-            try {
-                const languageServer = require('./languageServer');
-                const lsPort = languageServer.getLsPort();
-                if (lsPort) {
-                    lsAddress = '127.0.0.1:' + String(lsPort + 1);
-                }
-            } catch (e) {
-                console.error('[AMS IPC Git] Failed to determine LS Port:', e);
-            }
-
-            if (!lsAddress) {
-                return { status: 'error', message: 'Failed to determine LS Port.' };
-            }
-
-            const uuidBytes = Buffer.from(safeConvoId, 'utf-8');
-            const body = Buffer.alloc(5 + 2 + uuidBytes.length);
-            body[0] = 0;
-            const length = 2 + uuidBytes.length;
-            body[1] = (length >> 24) & 0xff;
-            body[2] = (length >> 16) & 0xff;
-            body[3] = (length >> 8) & 0xff;
-            body[4] = length & 0xff;
-            body[5] = 0x0a;
-            body[6] = uuidBytes.length;
-            uuidBytes.copy(body, 7);
-
-            const http = require('http');
-            const deletePromise = () => new Promise((resolve, reject) => {
-                const req = http.request({
-                    hostname: '127.0.0.1',
-                    port: parseInt(lsAddress.split(':')[1]),
-                    path: '/exa.language_server_pb.LanguageServerService/DeleteCascadeTrajectory',
-                    method: 'POST',
-                    headers: {
-                        'content-type': 'application/grpc-web+proto',
-                        'x-grpc-web': '1',
-                        'x-codeium-csrf-token': csrfToken,
-                        'content-length': String(body.length),
-                    }
-                }, (res) => {
-                    const responseChunks = [];
-                    res.on('data', (chunk) => responseChunks.push(Buffer.from(chunk)));
-                    res.on('error', reject);
-                    res.on('end', () => {
-                        const httpStatus = Number(res.statusCode || 0);
-                        const responseBody = Buffer.concat(responseChunks);
-                        if (httpStatus !== 200) {
-                            reject(new Error('Temporary conversation deletion returned HTTP ' + String(httpStatus) + '.'));
-                            return;
-                        }
-                        const grpcStatus = extractGrpcStatus(responseBody, res.headers, res.trailers);
-                        if (grpcStatus !== 0) {
-                            reject(new Error('Temporary conversation deletion returned gRPC status ' + String(grpcStatus) + '.'));
-                            return;
-                        }
-                        resolve({ httpStatus, grpcStatus });
-                    });
-                });
-                req.setTimeout(10000, () => req.destroy(new Error('Temporary conversation deletion timed out.')));
-                req.on('error', reject);
-                req.write(body);
-                req.end();
-            });
-
-            const deleteResult = await deletePromise();
+            const res = await deleteLocalCascadeTrajectory(safeConvoId, csrfToken);
             temporaryConversationIds.delete(safeConvoId);
-
-            const localFiles = [
-                convoPbPath,
-                convoDbPath,
-                convoDbPath + '-shm',
-                convoDbPath + '-wal',
-            ].filter((candidate) => fs_std.existsSync(candidate));
-            const cleanupErrors = [];
-            let quarantinedFiles = 0;
-            if (localFiles.length) {
-                const quarantineRoot = profileDataPath('scratch',
-                    'deleted-temp-conversations',
-                );
-                const quarantineDir = path.join(quarantineRoot, safeConvoId + '-' + String(Date.now()));
-                if (!isPathInside(quarantineRoot, quarantineDir)) {
-                    throw new Error('Temporary conversation quarantine path escaped its root.');
-                }
-                fs_std.mkdirSync(quarantineDir, { recursive: true });
-                for (const localFile of localFiles) {
-                    const quarantineFile = path.join(quarantineDir, path.basename(localFile));
-                    try {
-                        fs_std.renameSync(localFile, quarantineFile);
-                        quarantinedFiles += 1;
-                    } catch (error) {
-                        cleanupErrors.push(path.basename(localFile) + ': ' + error.message);
-                    }
-                }
-            }
-
-            console.log('[AMS IPC Git] Deleted registered temporary conversation ' + safeConvoId + ' via confirmed gRPC status 0.');
-            return {
-                status: cleanupErrors.length ? 'warning' : 'success',
-                grpcStatus: deleteResult.grpcStatus,
-                quarantinedFiles,
-                cleanupErrors,
-            };
+            return res;
         } catch (err) {
             console.error('[AMS IPC Git] Failed to delete temp conversation:', err);
             return { status: 'error', message: err.message };
@@ -2841,6 +3184,40 @@ function registerIpcHandlers(storageManager) {
     electron_1.ipcMain.handle('wsl:connect', (event, distro) => {
         validateOrigin(event);
         (0, menu_1.relaunchWithWslDistro)(distro || '');
+    });
+    // Execute JavaScript inside an Electron <webview> guest's isolated world.
+    // Only the renderer that hosts the <webview> may target it, and worldId is
+    // bounded to [MIN, MAX] so it can never hit the main (0) or preload worlds
+    // and stays well below Chromium's fatal ISOLATED_WORLD_ID_MAX CHECK.
+    const MIN_ISOLATED_WORLD_ID = 1000;
+    const MAX_ISOLATED_WORLD_ID = 100000;
+    electron_1.ipcMain.handle('webview:execute-js-isolated-world', async (event, webContentsId, worldId, code) => {
+        validateOrigin(event);
+        if (typeof webContentsId !== 'number' ||
+            !Number.isInteger(webContentsId) ||
+            webContentsId <= 0) {
+            throw new Error(`Invalid webContentsId: ${String(webContentsId)}`);
+        }
+        if (typeof worldId !== 'number' ||
+            !Number.isInteger(worldId) ||
+            worldId < MIN_ISOLATED_WORLD_ID ||
+            worldId > MAX_ISOLATED_WORLD_ID) {
+            throw new Error(`Invalid isolated worldId: ${String(worldId)} (must be in [${MIN_ISOLATED_WORLD_ID}, ${MAX_ISOLATED_WORLD_ID}])`);
+        }
+        if (typeof code !== 'string') {
+            throw new Error('code must be a string');
+        }
+        const wc = electron_1.webContents.fromId(webContentsId);
+        if (!wc || wc.isDestroyed() || wc.getType() !== 'webview') {
+            throw new Error(`Invalid or non-webview webContents id: ${webContentsId}`);
+        }
+        const sender = event?.sender;
+        if (!sender ||
+            sender.isDestroyed() ||
+            wc.hostWebContents?.id !== sender.id) {
+            throw new Error(`WebContents ${webContentsId} is not owned by the calling renderer`);
+        }
+        return wc.executeJavaScriptInIsolatedWorld(worldId, [{ code }], false);
     });
 
     electron_1.ipcMain.handle('reviews:get-runs', async (event) => {

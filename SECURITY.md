@@ -9,7 +9,7 @@ The Antigravity Unleashed maintainers and community take security, local privacy
 | Component | Version / Scope | Security Support Status |
 | :--- | :--- | :--- |
 | **Antigravity Unleashed Monorepo** | Latest commit on `main` branch | :white_check_mark: Actively Supported |
-| **Target Upstream Antigravity** | v2.24.0 (Electron Desktop) | :white_check_mark: Verified Baseline |
+| **Target Upstream Antigravity** | v2.26.0 (Electron Desktop) | :white_check_mark: Verified Baseline |
 | **Web Hub (`packages/web-hub`)** | Python 3.10+ / React 19 / FastMCP | :white_check_mark: Actively Supported |
 | **Desktop Modifier (`packages/desktop-ui-modifier`)** | ASAR patcher & UI overlays | :white_check_mark: Actively Supported |
 | **Legacy Releases / Forks** | Untracked forks or unreleased tags | :x: Not Supported |

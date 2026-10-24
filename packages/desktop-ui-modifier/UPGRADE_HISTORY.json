@@ -1,5 +1,143 @@
 [
   {
+    "version": "2.26.0",
+    "upstream_status": "compatible",
+    "diff_summary": {
+      "package.json": "Version auf 2.26.0 angehoben; Dependencies unverändert.",
+      "dist/main.js": "Importiert beyondcorpPac.js; konfiguriert Webview-Session-Proxy bei web-contents-created und preconfigureWebviewPartitionProxies() vor Fenstererstellung.",
+      "dist/ipcHandlers.js": "Ergänzt IPC-Handler webview:execute-js-isolated-world (worldId in [1000, 100000], Webview-Typ- und Host-Ownership-Prüfung).",
+      "dist/preload.js": "Ergänzt executeJavaScriptInIsolatedWorld(wcId, worldId, code) auf electronNative.",
+      "dist/utils.js": "Importiert debugConsole.js und nutzt debugConsole.isDebugConsoleEnabled() für webPreferences.devTools.",
+      "dist/menu.js": "Lagert hideDevTools in debugConsole.configureDebugConsoleMenu(menu) aus.",
+      "dist/updater.js": "Unverändert gegenüber v2.25.0 (SHA-256 identisch).",
+      "dist/beyondcorpPac.js": "Neues Modul für BeyondCorp PAC-Proxy-Konfiguration auf Webview-Session-Partitionen (persist:hub-browser-*).",
+      "dist/debugConsole.js": "Neues Hilfsmodul für isDebugConsoleEnabled() und configureDebugConsoleMenu()."
+    },
+    "findings": [
+      "Zwischen v2.25.0 und v2.26.0 wurden 2 neue produktive dist-Module (beyondcorpPac.js, debugConsole.js) ergänzt und 5 dist-Dateien (main.js, ipcHandlers.js, preload.js, utils.js, menu.js) aktualisiert; updater.js ist unverändert.",
+      "Neue Upstream-APIs in v2.26.0: Webview-Isolated-World-JS-Execution (webview:execute-js-isolated-world / electronNative.executeJavaScriptInIsolatedWorld), BeyondCorp-PAC-Proxy-Preconfiguration für Webview-Partitionen und debugConsole-Refactoring.",
+      "Injector-Quellen (main.js, ipcHandlers.js, utils.js, preload_header.txt) sowie SUPPORTED_UPSTREAM_VERSION und UPSTREAM_COMPATIBILITY.json auf v2.26.0 gehoben und preload.js neu gebaut.",
+      "Alle 9 Node.js-Vertragstests (inkl. webview:execute-js-isolated-world), 58 Python-Unit-Tests sowie Python- und JS-Syntax-Checks fehlerfrei bestanden."
+    ],
+    "from_version": "2.25.0",
+    "date": "2026-10-23",
+    "time": "21:45",
+    "result": "success",
+    "attempts": 1,
+    "duration_s": 387.6,
+    "steps": [
+      {
+        "id": "detected",
+        "label": "Update erkannt",
+        "status": "done",
+        "duration_s": 0.0
+      },
+      {
+        "id": "analysis",
+        "label": "Agent analysiert die Änderungen",
+        "status": "done",
+        "duration_s": 179.0
+      },
+      {
+        "id": "adapt",
+        "label": "Agent passt den Injector an",
+        "status": "done",
+        "duration_s": 136.3
+      },
+      {
+        "id": "tests",
+        "label": "Tests & Kompatibilitätsprüfung",
+        "status": "done",
+        "duration_s": 6.6
+      },
+      {
+        "id": "repack",
+        "label": "Backup, Packen & Installieren",
+        "status": "done",
+        "duration_s": 16.2
+      },
+      {
+        "id": "restart",
+        "label": "Neustart & Live-Verifikation",
+        "status": "done",
+        "duration_s": 4.9
+      },
+      {
+        "id": "restore",
+        "label": "Chat wiederherstellen",
+        "status": "done",
+        "duration_s": 0.1
+      }
+    ]
+  },
+  {
+    "version": "2.25.0",
+    "upstream_status": "compatible",
+    "diff_summary": {
+      "dist/main.js": "Entfernt den else-Zweig electron_1.app.dock?.hide() im window-all-closed Handler (Zeilen 410-412).",
+      "dist/ipcHandlers.js": "Unverändert gegenüber v2.24.0 (SHA-256 identisch).",
+      "dist/preload.js": "Unverändert gegenüber v2.24.0 (SHA-256 identisch).",
+      "dist/updater.js": "Unverändert gegenüber v2.24.0 (SHA-256 identisch).",
+      "dist/utils.js": "Unverändert gegenüber v2.24.0 (SHA-256 identisch).",
+      "package.json": "Version auf 2.25.0 angehoben; @connectrpc/connect-node von ^2.1.2 auf ^2.2.0 aktualisiert."
+    },
+    "findings": [
+      "In dist/ hat sich zwischen v2.24.0 und v2.25.0 ausschließlich dist/main.js geändert (Entfernung von app.dock?.hide() bei window-all-closed).",
+      "Alle übrigen 25 produktiven dist-Dateien (inkl. ipcHandlers.js, preload.js, updater.js, utils.js) sind byte-identisch mit v2.24.0.",
+      "Mock in tests/test_native_preload_contract.js um hardenStorageManager() ergänzt; alle 58 Python- und 9 JS-Tests sowie Syntax-Checks erfolgreich."
+    ],
+    "from_version": "2.24.0",
+    "date": "2026-10-21",
+    "time": "22:15",
+    "result": "success",
+    "attempts": 1,
+    "duration_s": 577.2,
+    "steps": [
+      {
+        "id": "detected",
+        "label": "Update erkannt",
+        "status": "done",
+        "duration_s": 0.0
+      },
+      {
+        "id": "analysis",
+        "label": "Agent analysiert die Änderungen",
+        "status": "done",
+        "duration_s": 199.5
+      },
+      {
+        "id": "adapt",
+        "label": "Agent passt den Injector an",
+        "status": "done",
+        "duration_s": 140.4
+      },
+      {
+        "id": "tests",
+        "label": "Tests & Kompatibilitätsprüfung",
+        "status": "done",
+        "duration_s": 18.0
+      },
+      {
+        "id": "repack",
+        "label": "Backup, Packen & Installieren",
+        "status": "done",
+        "duration_s": 15.6
+      },
+      {
+        "id": "restart",
+        "label": "Neustart & Live-Verifikation",
+        "status": "done",
+        "duration_s": 18.3
+      },
+      {
+        "id": "restore",
+        "label": "Chat wiederherstellen",
+        "status": "done",
+        "duration_s": 0.1
+      }
+    ]
+  },
+  {
     "version": "2.24.0",
     "upstream_status": "compatible",
     "diff_summary": {
