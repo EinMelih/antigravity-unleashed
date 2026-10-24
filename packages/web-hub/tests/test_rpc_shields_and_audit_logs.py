@@ -504,6 +504,51 @@ class RpcShieldsAndAuditLogsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Hermes", row_hm["system_prompt"])
         self.assertNotIn("SOUL.md", row_hm["system_prompt"])
 
+        # 5. Shared API key "openclaw-hermes" must NEVER blindly force "openclaw" on Hermes chat or title-generation calls!
+        shared_hermes_req = _MockReq(
+            {
+                "model": "gemini-4-argon-high",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are Hermes Agent, built by Nous Research. Be direct.",
+                    },
+                    {"role": "user", "content": "wer bin ich"},
+                ],
+            },
+            app={"rpc_pool": pool},
+            headers={"User-Agent": "OpenAI/Python 2.24.0"},
+        )
+        shared_hermes_req["api_key_name"] = "openclaw-hermes"
+        r5 = await api_handlers.chat_completions_handler(shared_hermes_req)
+        self.assertEqual(200, r5.status)
+
+        shared_title_req = _MockReq(
+            {
+                "model": "gemini-3.8-flash-low",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You name chat sessions. Given the user's opening message, "
+                            "write a title that lets them find this conversation again in a list."
+                        ),
+                    },
+                    {"role": "user", "content": "test"},
+                ],
+            },
+            app={"rpc_pool": pool},
+            headers={"User-Agent": "OpenAI/Python 2.24.0"},
+        )
+        shared_title_req["api_key_name"] = "openclaw-hermes"
+        r6 = await api_handlers.chat_completions_handler(shared_title_req)
+        self.assertEqual(200, r6.status)
+
+        logs_shared = self.test_db.list_api_request_logs(limit=10)
+        by_prompt_shared = {row["user_prompt_preview"]: row for row in logs_shared}
+        self.assertEqual("hermes", by_prompt_shared["wer bin ich"]["source_framework"])
+        self.assertEqual("hermes", by_prompt_shared["test"]["source_framework"])
+
     async def test_five_layer_multi_app_and_greeting_collision_isolation(self) -> None:
         fake_rpc = FakeRPCClient()
         pool = DirectRPCPool(

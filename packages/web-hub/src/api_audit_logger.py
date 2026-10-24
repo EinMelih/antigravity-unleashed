@@ -80,23 +80,43 @@ def _extract_tool_names(tools: Optional[List[Dict[str, Any]]]) -> Set[str]:
     return names
 
 
-def _normalize_source_slug(raw: str) -> Optional[str]:
+def _normalize_source_slug(raw: str, *, strict_known: bool = False) -> Optional[str]:
     low = (raw or "").strip().lower()
-    if not low or low == "auto":
+    if not low or low in (
+        "auto",
+        "default",
+        "shared",
+        "common",
+        "bridge",
+        "antigravity",
+        "api",
+        "all",
+    ):
         return None
     if low in ("ich", "me", "user", "local", "lokal", "pc", "melih", "self"):
         return "user"
-    if "openclaw" in low or "claw" in low or "moltbot" in low:
-        return "openclaw"
-    if "hermes" in low:
-        return "hermes"
-    if "openwebui" in low or "open-webui" in low:
-        return "openwebui"
-    if "dokploy" in low:
-        return "dokploy"
+    has_openclaw = any(tok in low for tok in ("openclaw", "claw", "moltbot"))
+    has_hermes = "hermes" in low
+    has_openwebui = "openwebui" in low or "open-webui" in low
+    has_dokploy = "dokploy" in low
+    matched = [
+        slug
+        for slug, flag in (
+            ("openclaw", has_openclaw),
+            ("hermes", has_hermes),
+            ("openwebui", has_openwebui),
+            ("dokploy", has_dokploy),
+        )
+        if flag
+    ]
+    if len(matched) > 1:
+        # Combined/shared key name (e.g. "openclaw-hermes") is ambiguous -> let payload/tool detection decide
+        return None
+    if len(matched) == 1:
+        return matched[0]
     if "openai" in low:
         return "openai"
-    return low
+    return None if strict_known else low
 
 
 def _match_configured_ip_rule(client_ip: str) -> Optional[Tuple[str, str]]:
@@ -166,12 +186,7 @@ def detect_source_framework_detailed(
     if explicit_slug:
         return explicit_slug, f"header:{explicit.lower()[:24]}"
 
-    # 3. API-Key name mapping
-    key_slug = _normalize_source_slug(api_key_name) if api_key_name and api_key_name != "default" else None
-    if key_slug:
-        return key_slug, f"api-key:{api_key_name}"
-
-    # 4. User-Agent header check
+    # 3. User-Agent header check
     ua = (user_agent or "").lower()
     if "hermes" in ua:
         return "hermes", "auto:user-agent"
@@ -182,7 +197,7 @@ def detect_source_framework_detailed(
     if "dokploy" in ua:
         return "dokploy", "auto:user-agent"
 
-    # 5. Deep Tool-Schema Fingerprinting (detects OpenClaw & Hermes even with neutral prompts!)
+    # 4. Deep Tool-Schema Fingerprinting (detects OpenClaw & Hermes even with neutral prompts!)
     tool_names = _extract_tool_names(tools)
     if tool_names:
         oc_hits = tool_names & _OPENCLAW_SIGNATURE_TOOLS
@@ -198,8 +213,9 @@ def detect_source_framework_detailed(
         if {"terminal", "read_file", "write_file"}.issubset(tool_names):
             return "hermes", "auto:tools(terminal+read_file)"
 
-    # 6. Raw Message & System-Prompt Fingerprinting (runs BEFORE Shield 2 strips keywords)
+    # 5. Raw Message & System-Prompt Fingerprinting (runs BEFORE Shield 2 strips keywords)
     combined_chunks: List[str] = []
+    history_tool_names: Set[str] = set()
     for msg in raw_messages or []:
         if not isinstance(msg, dict):
             continue
@@ -212,16 +228,28 @@ def detect_source_framework_detailed(
         else:
             content = str(raw_content)
         combined_chunks.append(content)
+        for tc in msg.get("tool_calls") or []:
+            if isinstance(tc, dict):
+                fn = tc.get("function") if isinstance(tc.get("function"), dict) else tc
+                t_name = str((fn or {}).get("name") or "").strip().lower()
+                if t_name:
+                    history_tool_names.add(t_name)
 
     low_all = "\n".join(combined_chunks).lower()
     if low_all:
-        # 6a. Exclusive Hermes Agent upstream markers (NousResearch/hermes-agent prompt_builder.py)
+        # 5a. Exclusive Hermes Agent upstream markers (NousResearch/hermes-agent prompt_builder.py & session title generator)
         for hm_marker in (
             "you are hermes agent",
+            "you are hermes,",
+            "du bist hermes",
+            "ich bin hermes",
             "created by nous research",
+            "built by nous research",
             "nous research",
             "hermes-agent",
             "hermes agent",
+            "you name chat sessions. given the user's opening message",
+            "/.hermes/",
             "delegate_task",
             "skill_view",
             "skills_list",
@@ -231,7 +259,7 @@ def detect_source_framework_detailed(
             if hm_marker in low_all:
                 return "hermes", f"auto:system-prompt({hm_marker})"
 
-        # 6b. Exclusive OpenClaw upstream markers (openclaw/src/agents/system-prompt.ts)
+        # 5b. Exclusive OpenClaw upstream markers (openclaw/src/agents/system-prompt.ts)
         for oc_marker in (
             "openclaw",
             "clawdbot",
@@ -260,6 +288,23 @@ def detect_source_framework_detailed(
             return "openwebui", "auto:system-prompt"
         if "dockercompose" in low_all or '"suggestions"' in low_all or "dokploy" in low_all:
             return "dokploy", "auto:system-prompt"
+
+    if history_tool_names:
+        oc_hist = history_tool_names & _OPENCLAW_SIGNATURE_TOOLS
+        hm_hist = history_tool_names & _HERMES_SIGNATURE_TOOLS
+        if oc_hist and len(oc_hist) >= len(hm_hist):
+            return "openclaw", f"auto:tools({sorted(oc_hist)[0]})"
+        if hm_hist:
+            return "hermes", f"auto:tools({sorted(hm_hist)[0]})"
+
+    # 6. Unambiguous single-framework API-Key name mapping (ignores shared keys like "openclaw-hermes")
+    key_slug = (
+        _normalize_source_slug(api_key_name, strict_known=True)
+        if api_key_name and api_key_name != "default"
+        else None
+    )
+    if key_slug:
+        return key_slug, f"api-key:{api_key_name}"
 
     # 7. User-configured Custom IP Mapping (`source_ip_map`)
     ip_match = _match_configured_ip_rule(client_ip)

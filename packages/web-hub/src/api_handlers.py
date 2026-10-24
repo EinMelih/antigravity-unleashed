@@ -1111,8 +1111,16 @@ async def _handle_streaming(
         messages=messages,
         system_prompt=system_instructions,
         user_prompt_preview=user_message,
-        response_text=total_content or (json.dumps(stream_tool_calls, ensure_ascii=False) if stream_tool_calls else ""),
-        shield_metadata=rpc_state.get("shield_metadata") or {},
+        response_text=(
+            total_content
+            or (json.dumps(stream_tool_calls, ensure_ascii=False) if stream_tool_calls else "")
+        ),
+        shield_metadata={
+            "detection_reason": request.get("source_detection_reason", "auto")
+            if hasattr(request, "get")
+            else "auto",
+            **(rpc_state.get("shield_metadata") or {}),
+        },
         error_text=str(request.get("operation_error") or ""),
     )
     log_interaction(
